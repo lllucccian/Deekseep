@@ -5,6 +5,8 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 
 /** Pure-JVM regression coverage for hidden heartbeat tool framing and strict JSON parsing. */
 public final class HeartbeatToolProtocolRegressionTest {
@@ -89,17 +91,29 @@ public final class HeartbeatToolProtocolRegressionTest {
         require("all_once".equals(parsed.calls.get(4).mode),
                 "heartbeat cancellation mode was not parsed");
 
-        HeartbeatToolProtocol.Result presented =
-                HeartbeatToolProtocol.parseForConversation(
-                        "已经替你安排好了。\n" + payload + "\n晚点见。");
-        require(presented.visibleText.contains(HeartbeatToolProtocol.TOOL_STATUS_ICON),
-                "conversation response omitted the heartbeat tool icon");
-        require(presented.visibleText.contains("**")
-                        && (presented.visibleText.contains("\u5de5\u5177")
-                        || presented.visibleText.contains("tool")),
-                "conversation response omitted the agent-style tool label");
-        require(presented.visibleText.contains("90"),
-                "heartbeat interval detail was not shown in the tool activity row");
+        Locale previousLocale = Locale.getDefault();
+        TimeZone previousTimeZone = TimeZone.getDefault();
+        HeartbeatToolProtocol.Result presented;
+        try {
+            Locale.setDefault(Locale.CHINA);
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
+            presented = HeartbeatToolProtocol.parseForConversation(
+                    "已经替你安排好了。\n" + payload + "\n晚点见。");
+        } finally {
+            Locale.setDefault(previousLocale);
+            TimeZone.setDefault(previousTimeZone);
+        }
+        require(presented.visibleText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a8\u67082\u65e5 18:37"),
+                "one-time heartbeat did not use the compact time status");
+        require(presented.visibleText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a\u6bcf90\u5206\u949f"),
+                "heartbeat interval did not use the compact status");
+        require(presented.visibleText.contains(
+                        "> \u53d6\u6d88\u5fc3\u8df3\uff1a\u5168\u90e8\u4e00\u6b21\u6027\u4efb\u52a1"),
+                "heartbeat cancellation did not use the compact status");
+        require(!presented.visibleText.contains("\u25cc")
+                        && !presented.visibleText.contains("\u8c03\u7528\u4e86")
+                        && !presented.visibleText.contains("**"),
+                "removed icon or agent-style wording remained in the status row");
         require(!presented.visibleText.contains("schedule_once")
                         && !presented.visibleText.contains("DEEKSEEP_LOCAL_TOOLS")
                         && !presented.visibleText.contains("conversation-1234"),
@@ -118,7 +132,7 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(streaming.calls.isEmpty(),
                 "incomplete JSON produced a tool call");
         require(!HeartbeatToolProtocol.parseForConversation(incomplete).visibleText
-                        .contains(HeartbeatToolProtocol.TOOL_STATUS_ICON),
+                        .contains("\u8bbe\u7f6e\u5fc3\u8df3"),
                 "incomplete streamed tool call displayed a premature activity row");
 
         String partialMarker = "先等等\n[[DEEKSEEP_LOC";
@@ -134,7 +148,7 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(bad.calls.isEmpty(),
                 "malformed control payload was executed");
         require(!HeartbeatToolProtocol.renderConversationToolRows(malformed)
-                        .contains(HeartbeatToolProtocol.TOOL_STATUS_ICON),
+                        .contains("\u8bbe\u7f6e\u5fc3\u8df3"),
                 "malformed control payload displayed a tool activity row");
 
         String globalCall = HeartbeatToolProtocol.CONTROL_START
