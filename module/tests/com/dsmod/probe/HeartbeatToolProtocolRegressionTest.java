@@ -63,6 +63,21 @@ public final class HeartbeatToolProtocolRegressionTest {
         return count;
     }
 
+    private static int timestampedToolRows(String value) {
+        int count = 0;
+        if (value == null) return count;
+        for (String line : value.split("\n")) {
+            if (line.matches("> \\d{2}:\\d{2}:\\d{2}  .+")) count++;
+        }
+        return count;
+    }
+
+    private static String singleCallBlock(String jsonObject) {
+        return HeartbeatToolProtocol.CONTROL_START + "\n"
+                + "{\"call\":" + jsonObject + "}\n"
+                + HeartbeatToolProtocol.CONTROL_END;
+    }
+
     public static void main(String[] args) {
         String ordinary = "普通回答，不含任何本地控制块。";
         HeartbeatToolProtocol.Result plain = HeartbeatToolProtocol.parse(ordinary);
@@ -121,7 +136,7 @@ public final class HeartbeatToolProtocolRegressionTest {
                 "mixed assistant response was mistaken for an isolated tool status");
         String isolatedStatus = null;
         for (String line : presented.visibleText.split("\n")) {
-            if (line.startsWith("> ") && line.contains("\u8bbe\u7f6e\u5fc3\u8df3\uff1a")) {
+            if (line.startsWith("> ") && line.contains("\u8bbe\u7f6e\u5fc3\u8df3 to ")) {
                 isolatedStatus = line.substring(2);
                 break;
             }
@@ -135,13 +150,15 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(!HeartbeatToolProtocol.isRegisteredToolStatusText(
                         "\u6a21\u578b\u8bf4\u6211\u53ef\u4ee5\u8bbe\u7f6e\u5fc3\u8df3\uff0c\u4f46\u8fd9\u4e0d\u662f\u5de5\u5177\u72b6\u6001\u3002"),
                 "ordinary model prose was mistaken for a registered tool status");
-        require(presentedText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a8\u67082\u65e5 18:37:00"),
-                "one-time heartbeat did not use the compact time status");
-        require(presentedText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a\u6bcf90\u5206\u949f"),
-                "heartbeat interval did not use the compact status");
+        require(presentedText.contains("\u8bbe\u7f6e\u5fc3\u8df3 to 8\u67082\u65e5 18:37:00"),
+                "one-time heartbeat did not clearly label its trigger time");
+        require(presentedText.contains("\u8bbe\u7f6e\u5fc3\u8df3 to \u6bcf90\u5206\u949f"),
+                "heartbeat interval did not use the requested to format");
         require(presentedText.contains(
-                        "> \u53d6\u6d88\u5fc3\u8df3\uff1a\u5168\u90e8\u4e00\u6b21\u6027\u4efb\u52a1"),
+                        "\u53d6\u6d88\u5fc3\u8df3\uff1a\u5168\u90e8\u4e00\u6b21\u6027\u4efb\u52a1"),
                 "heartbeat cancellation did not use the compact status");
+        require(timestampedToolRows(presentedText) == 5,
+                "not every heartbeat tool row starts with its invocation time");
         require(!presentedText.contains("\u25cc")
                         && !presentedText.contains("\u8c03\u7528\u4e86")
                         && !presentedText.contains("**"),
@@ -241,6 +258,64 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && occurrences(finalStreamingFrame.visibleText, "> ") == 3,
                 "independent call rows were not retained after the stream completed");
 
+        String agentPayload =
+                singleCallBlock("{\"id\":\"time_001\",\"tool\":\"get_current_time\","
+                        + "\"scope\":\"conversation-1234\"}") + "\n"
+                + singleCallBlock("{\"id\":\"screen_001\",\"tool\":\"capture_screen\","
+                        + "\"scope\":\"conversation-1234\"}") + "\n"
+                + singleCallBlock("{\"id\":\"tap_001\",\"tool\":\"tap_screen\","
+                        + "\"scope\":\"conversation-1234\",\"x\":250,\"y\":750}") + "\n"
+                + singleCallBlock("{\"id\":\"swipe_001\",\"tool\":\"swipe_screen\","
+                        + "\"scope\":\"conversation-1234\",\"x\":500,\"y\":800,"
+                        + "\"to_x\":500,\"to_y\":200,\"duration_ms\":420}") + "\n"
+                + singleCallBlock("{\"id\":\"back_001\",\"tool\":\"press_back\","
+                        + "\"scope\":\"conversation-1234\"}");
+        HeartbeatToolProtocol.Result agentPresented;
+        previousLocale = Locale.getDefault();
+        previousTimeZone = TimeZone.getDefault();
+        try {
+            Locale.setDefault(Locale.CHINA);
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
+            agentPresented = HeartbeatToolProtocol.parseForConversation(agentPayload);
+        } finally {
+            Locale.setDefault(previousLocale);
+            TimeZone.setDefault(previousTimeZone);
+        }
+        require(agentPresented.calls.size() == 5,
+                "valid basic Agent calls were not parsed");
+        require(agentPresented.calls.get(2).x == 250
+                        && agentPresented.calls.get(2).y == 750,
+                "tap coordinates were not retained");
+        require(agentPresented.calls.get(3).toX == 500
+                        && agentPresented.calls.get(3).toY == 200
+                        && agentPresented.calls.get(3).durationMs == 420,
+                "swipe geometry or duration was not retained");
+        String agentText = HeartbeatToolProtocol.stripToolStatusStyleMarkers(
+                agentPresented.visibleText);
+        require(agentText.contains("\u83b7\u53d6\u5f53\u524d\u65f6\u95f4\uff1a")
+                        && agentText.contains("\u83b7\u53d6\u622a\u56fe")
+                        && agentText.contains("\u70b9\u51fb\u5c4f\u5e55\uff1ax=250, y=750")
+                        && agentText.contains("\u6ed1\u52a8\u5c4f\u5e55\uff1a(500,800)")
+                        && agentText.contains("\u8fd4\u56de\u4e0a\u4e00\u5c42"),
+                "basic Agent calls did not receive compact activity rows");
+        require(timestampedToolRows(agentText) == 5,
+                "basic Agent activity rows do not all start with invocation times");
+        String screenshotStatus = null;
+        for (String line : agentPresented.visibleText.split("\n")) {
+            if (line.startsWith("> ") && line.contains("\u83b7\u53d6\u622a\u56fe")) {
+                screenshotStatus = line.substring(2);
+                break;
+            }
+        }
+        require(HeartbeatToolProtocol.isRegisteredToolStatusText(screenshotStatus),
+                "non-heartbeat Agent status was not registered for gray small-text styling");
+
+        String invalidTap = singleCallBlock(
+                "{\"id\":\"tap_bad\",\"tool\":\"tap_screen\","
+                        + "\"scope\":\"conversation-1234\",\"x\":1001,\"y\":500}");
+        require(HeartbeatToolProtocol.parse(invalidTap).calls.isEmpty(),
+                "out-of-range normalized tap coordinates were accepted");
+
         String partialMarker = "先等等\n[[DEEKSEEP_LOC";
         require("先等等\n".equals(
                         HeartbeatToolProtocol.stripControlBlocks(partialMarker)),
@@ -286,6 +361,11 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && prompt.contains("schedule_once")
                         && prompt.contains("bind_chat")
                         && prompt.contains("cancel_heartbeat")
+                        && prompt.contains("get_current_time")
+                        && prompt.contains("capture_screen")
+                        && prompt.contains("tap_screen")
+                        && prompt.contains("swipe_screen")
+                        && prompt.contains("press_back")
                         && prompt.contains("180 分钟")
                         && prompt.contains("\"scope\":\"conversation-1234\""),
                 "default heartbeat system prompt omitted the local tool contract");
@@ -294,6 +374,10 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && prompt.contains("写完一个 call 后立刻写结束标记")
                         && !prompt.contains("{\"calls\":["),
                 "default heartbeat prompt still permits delayed multi-call batches");
+        require(prompt.contains("坐标统一为 0 到 1000")
+                        && prompt.contains("不会在同一轮把像素返回给你")
+                        && prompt.contains("不得假装已经看见截图内容"),
+                "basic Agent prompt omitted coordinate or screenshot-result boundaries");
 
         try {
             FoldMessage visibleUser = new FoldMessage(
