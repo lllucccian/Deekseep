@@ -29,6 +29,7 @@ public class SettingsActivity extends Activity {
 
     public static final String VERSION = BuildInfo.MODULE_VERSION;
     private static final int REQ_STORAGE = 0xD540;
+    private static final int REQ_NOTIFICATIONS = 0xD541;
     private static final String TARGET_PACKAGE = "com.deepseek.chat";
     private static final int BLACK = 0xFF000000;
     private static final int WHITE = 0xFFF5F5F5;
@@ -52,6 +53,7 @@ public class SettingsActivity extends Activity {
         UiLanguage.refreshSystem(this);
         renderUi();
         ensureStoragePermission();
+        ensureNotificationPermission();
         XposedActivationProvider.setStateListener(activationStateChanged);
         handler.postDelayed(activationStateChanged, 300L);
         handler.postDelayed(activationStateChanged, 1200L);
@@ -66,6 +68,7 @@ public class SettingsActivity extends Activity {
         XposedActivationProvider.setStateListener(activationStateChanged);
         handler.post(activationStateChanged);
         handler.postDelayed(activationStateChanged, 500L);
+        ensureNotificationPermission();
     }
 
     @Override
@@ -150,11 +153,14 @@ public class SettingsActivity extends Activity {
         if (activationTitle == null || isFinishing()) return;
         boolean framework = XposedActivationProvider.isFrameworkConnected();
         boolean target = XposedActivationProvider.isTargetRecentlyActive(this);
-        if (target) {
+        if (framework || target) {
             activationTitle.setText(UiLanguage.text(this, "已激活", "Activated"));
-            activationDetail.setText(apiDisplayName() + "  ·  DeepSeek " + deepSeekVersion());
+            activationDetail.setText(target
+                    ? apiDisplayName() + "  ·  DeepSeek " + deepSeekVersion()
+                    : apiDisplayName() + "  ·  " + UiLanguage.text(this,
+                            "启动 DeepSeek 生效", "Ready — launch DeepSeek"));
             activationMark.setText("✓");
-        } else if (framework || isLegacyBuild()) {
+        } else if (isLegacyBuild()) {
             activationTitle.setText(UiLanguage.text(this, "待验证", "Waiting for verification"));
             activationDetail.setText(apiDisplayName() + "  ·  " + UiLanguage.text(this,
                     "启动 DeepSeek 后确认", "Launch DeepSeek to confirm"));
@@ -185,7 +191,9 @@ public class SettingsActivity extends Activity {
     }
 
     private static boolean isLegacyBuild() {
-        return BuildInfo.API_VERSION != null && BuildInfo.API_VERSION.contains("legacy");
+        if (BuildInfo.API_VERSION == null) return false;
+        return BuildInfo.API_VERSION.contains("legacy")
+                || BuildInfo.API_VERSION.contains("universal");
     }
 
     private void configureBlackWindow() {
@@ -230,6 +238,14 @@ public class SettingsActivity extends Activity {
                 }
             }
         } catch (Throwable ignored) {}
+    }
+
+    private void ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) return;
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                REQ_NOTIFICATIONS);
     }
 
     @Override

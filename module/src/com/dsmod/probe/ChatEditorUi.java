@@ -362,6 +362,40 @@ public final class ChatEditorUi {
         return null;
     }
 
+    /** Best-effort fallback for a background heartbeat before the native tp list is hydrated. */
+    static Integer conversationHeadFromAllDbs(String sid) {
+        if (sid == null || !sid.matches("[A-Za-z0-9_.:-]{4,160}")) return null;
+        Integer best = null;
+        for (File file : allDbs()) {
+            SQLiteDatabase db = null;
+            Cursor cursor = null;
+            try {
+                db = SQLiteDatabase.openDatabase(
+                        file.getAbsolutePath(), null, SQLiteDatabase.OPEN_READONLY);
+                Long current = currentMessageId(db, sid);
+                if (current != null && current.longValue() > 0L
+                        && current.longValue() <= Integer.MAX_VALUE) {
+                    int value = current.intValue();
+                    if (best == null || value > best.intValue()) best = value;
+                }
+                String table = "chat_session_messages_" + sid;
+                cursor = db.rawQuery("SELECT MAX(message_id) FROM '" + table + "'", null);
+                if (cursor.moveToFirst() && !cursor.isNull(0)) {
+                    long max = cursor.getLong(0);
+                    if (max > 0L && max <= Integer.MAX_VALUE
+                            && (best == null || max > best.intValue())) {
+                        best = Integer.valueOf((int) max);
+                    }
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                if (cursor != null) cursor.close();
+                if (db != null) try { db.close(); } catch (Throwable ignored) {}
+            }
+        }
+        return best;
+    }
+
     static List<Msg> loadThread(SQLiteDatabase db, String sid) {
         String t = "chat_session_messages_" + sid;
         Map<Long, Msg> map = new HashMap<>();
@@ -1792,13 +1826,13 @@ public final class ChatEditorUi {
             TextView button = new TextView(act);
             button.setText(UiLanguage.dynamic(act, label));
             button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            button.setTypeface(Typeface.DEFAULT_BOLD);
+            button.setTypeface(Typeface.DEFAULT);
             button.setGravity(Gravity.CENTER);
             button.setPadding(dp(16), dp(9), dp(16), dp(9));
             button.setTextColor(primary ? 0xFFFFFFFF : text);
             GradientDrawable background = new GradientDrawable();
             background.setColor(primary ? DeekseepUi.BRAND : (dark ? 0xFF303034 : 0xFFF0F1F4));
-            background.setCornerRadius(dp(18));
+            background.setCornerRadius(dp(6));
             button.setBackground(background);
             button.setClickable(true);
             button.setOnClickListener(new View.OnClickListener() {
@@ -2436,11 +2470,11 @@ public final class ChatEditorUi {
             save.setText("保存");
             save.setTextColor(0xFFFFFFFF);
             save.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            save.setTypeface(Typeface.DEFAULT_BOLD);
+            save.setTypeface(Typeface.DEFAULT);
             save.setGravity(Gravity.CENTER);
             save.setPadding(dp(18), dp(7), dp(18), dp(7));
             GradientDrawable sg = new GradientDrawable();
-            sg.setColor(DeekseepUi.BRAND); sg.setCornerRadius(dp(18));
+            sg.setColor(DeekseepUi.BRAND); sg.setCornerRadius(dp(6));
             save.setBackground(sg);
             save.setClickable(true);
             save.setOnClickListener(new View.OnClickListener() { public void onClick(View v) { saveAll(); } });
@@ -2504,15 +2538,14 @@ public final class ChatEditorUi {
             TextView button = new TextView(act);
             button.setText(UiLanguage.dynamic(act, label));
             button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-            button.setTypeface(Typeface.DEFAULT_BOLD);
+            button.setTypeface(Typeface.DEFAULT);
             button.setGravity(Gravity.CENTER);
-            button.setTextColor(primary ? 0xFFFFFFFF : DeekseepUi.BRAND);
+            button.setTextColor(primary ? 0xFFFFFFFF : text);
             button.setClickable(true);
             GradientDrawable background = new GradientDrawable();
             background.setColor(primary ? DeekseepUi.BRAND
-                    : (dark ? 0xFF293044 : 0xFFEAF0FF));
-            background.setCornerRadius(dp(21));
-            if (!primary) background.setStroke(dp(1), DeekseepUi.BRAND);
+                    : (dark ? 0xFF303034 : 0xFFF0F1F4));
+            background.setCornerRadius(dp(6));
             button.setBackground(background);
             return button;
         }

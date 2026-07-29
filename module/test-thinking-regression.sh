@@ -54,10 +54,20 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     tests/com/dsmod/probe/LocalApiCoroutineCancellationRegressionTest.java \
     tests/com/dsmod/probe/NativeApiPatchDecoderRegressionTest.java \
     tests/com/dsmod/probe/UiLanguagePolicyRegressionTest.java \
+    tests/com/dsmod/probe/ChatAppearanceConfigRegressionTest.java \
+    tests/com/dsmod/probe/ImageCutoutRegressionTest.java \
+    tests/com/dsmod/probe/HeartbeatToolProtocolRegressionTest.java \
+    tests/com/dsmod/probe/GooglePlayAppearanceMappingRegressionTest.java \
     src/com/dsmod/probe/LocalApiGateway.java \
     src/com/dsmod/probe/OpenAiToolBridge.java \
     src/com/dsmod/probe/OmniRouteToolBridge.java \
     src/com/dsmod/probe/NativeApiPatchDecoder.java \
+    src/com/dsmod/probe/SpatialMotionController.java \
+    src/com/dsmod/probe/SpatialLayerCache.java \
+    src/com/dsmod/probe/ChatAppearance.java \
+    src/com/dsmod/probe/ImageCutoutUi.java \
+    src/com/dsmod/probe/HeartbeatToolProtocol.java \
+    src/com/dsmod/probe/ProactiveHeartbeatReceiver.java \
     src/com/dsmod/probe/AccountCredentialCodec.java \
     src/com/dsmod/probe/AccountManager.java \
     src/com/dsmod/probe/GoogleLoginUnlock.java \
@@ -70,7 +80,8 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     tests/x94.java \
     tests/n02.java \
     tests/p64.java \
-    tests/c74.java
+    tests/c74.java \
+    tests/vo2.java
 
 # Main is large and already compiled by build.sh. Recompile it only when this regression targets
 # reflected private helpers added after the last APK build.
@@ -123,5 +134,17 @@ java -cp "$TEST_CP" \
 
 java -cp "$TEST_CP" \
     com.dsmod.probe.UiLanguagePolicyRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.ChatAppearanceConfigRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.ImageCutoutRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.GooglePlayAppearanceMappingRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.HeartbeatToolProtocolRegressionTest
 
 ./test-language-catalog.sh

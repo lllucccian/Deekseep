@@ -2,6 +2,7 @@
 set -e
 cd "$(dirname "$0")"
 
+JSCH_JAR="../third_party/jsch/jsch-2.28.2.jar"
 API_JAR="libs/api.jar"
 source ../scripts/android-tools.sh
 
@@ -18,22 +19,23 @@ public final class BuildInfo {
     public static final String API_VERSION = "${API_VER:-102}";
     public static final String MODULE_VERSION = "${MODULE_VER:-unknown}";
     public static final String BUILD_DATE = "$(date '+%Y-%m-%d %H:%M')";
+    public static final boolean GOOGLE_PLAY = true;
     private BuildInfo() {}
 }
 EOF
 
-echo "[1/6] javac (module against libxposed api, compileOnly)"
+echo "[1/6] javac (libxposed API 102 + bundled JSch)"
 find src -name "*.java" > $OUT/sources.txt
-if ! javac -source 8 -target 8 -cp "$ANDROID_JAR:$API_JAR" -d $OUT/classes @$OUT/sources.txt 2> $OUT/javac.err; then
+if ! javac -source 8 -target 8 -cp "$ANDROID_JAR:$API_JAR:$JSCH_JAR" \
+        -d $OUT/classes @$OUT/sources.txt 2> $OUT/javac.err; then
   cat $OUT/javac.err
   exit 1
 fi
 grep -v "warning:" $OUT/javac.err || true
 
-echo "[2/6] d8 (only module classes -> dex; api provided by framework)"
-# Package only module classes; the framework provides libxposed at runtime.
+echo "[2/6] d8 (module classes + JSch; libxposed API provided by framework)"
 MODCLASSES=$(find $OUT/classes/com/dsmod -name "*.class")
-$D8 --min-api 24 --output $OUT/dex $MODCLASSES --lib "$ANDROID_JAR"
+$D8 --min-api 24 --output $OUT/dex $MODCLASSES "$JSCH_JAR" --lib "$ANDROID_JAR"
 
 echo "[3/6] aapt2 link (manifest + res -> base.apk)"
 $AAPT2 compile --dir res -o $OUT/res.zip
@@ -49,7 +51,19 @@ mkdir -p $OUT/xstage/META-INF/xposed
 cp xposed/java_init.list $OUT/xstage/META-INF/xposed/java_init.list
 cp xposed/module.prop    $OUT/xstage/META-INF/xposed/module.prop
 cp xposed/scope.list     $OUT/xstage/META-INF/xposed/scope.list
-( cd $OUT/xstage && zip -q -r ../unsigned.apk META-INF )
+CLOUDFLARED_NATIVE=../third_party/cloudflared/android
+# The Google Play 236 target under test is arm64. Do not package the three unrelated
+# cloudflared ABIs: they are never loaded on this device and account for most APK bloat.
+for ABI in arm64-v8a; do
+  SOURCE="$CLOUDFLARED_NATIVE/$ABI/libcloudflared.so"
+  if [ ! -f "$SOURCE" ]; then
+    echo "Missing bundled cloudflared for $ABI: $SOURCE" >&2
+    exit 1
+  fi
+  mkdir -p "$OUT/xstage/lib/$ABI"
+  cp "$SOURCE" "$OUT/xstage/lib/$ABI/libcloudflared.so"
+done
+( cd $OUT/xstage && zip -q -9 -r ../unsigned.apk META-INF lib )
 
 echo "[5/6] zipalign"
 $ZIPALIGN -f -p 4 $OUT/unsigned.apk $OUT/aligned.apk
@@ -61,14 +75,16 @@ if [ ! -f debug.keystore ]; then
     -keyalg RSA -keysize 2048 -validity 10000
 fi
 $APKSIGNER sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android \
-    --out ds-probe.apk $OUT/aligned.apk
+    --out ds-probe-google-play.apk $OUT/aligned.apk
 
-echo "DONE -> $(pwd)/ds-probe.apk"
+echo "DONE -> $(pwd)/ds-probe-google-play.apk"
 
 # Make a best-effort shared-storage copy for direct installation on a device.
 for PUB in /storage/emulated/0 /sdcard; do
-  if [ -d "$PUB" ] && cp -f ds-probe.apk "$PUB/ds-probe.apk" 2>/dev/null; then
-    echo "COPIED -> $PUB/ds-probe.apk"
+  if [ -d "$PUB" ] \
+      && cp -f ds-probe-google-play.apk \
+          "$PUB/ds-probe-google-play.apk" 2>/dev/null; then
+    echo "COPIED -> $PUB/ds-probe-google-play.apk"
     break
   fi
 done

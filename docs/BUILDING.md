@@ -28,7 +28,7 @@ the current `PATH`, Android command-line tools, and Android Build Tools.
 ## Clone and Build the Stable Release
 
 ```bash
-git clone https://github.com/haoyangtu09-art/Deekseep.git
+git clone https://github.com/lllucccian/Deekseep.git
 cd Deekseep
 bash scripts/build-all.sh
 ```

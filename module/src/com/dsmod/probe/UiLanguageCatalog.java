@@ -25,6 +25,280 @@ final class UiLanguageCatalog {
         add("解锁微信与手机号登录", "Unlock WeChat and phone sign-in");
         add("记录服务器返回（诊断）", "Log server responses (diagnostics)");
         add("编辑聊天记录", "Edit chat history");
+        add("聊天外观", "Chat appearance");
+        add("全局液态玻璃", "Global liquid glass");
+        add("启用全局液态玻璃", "Enable global liquid glass");
+        add("已开启其他功能，请先关闭后再使用", "Another feature is enabled; turn it off before importing");
+        add("此功能尚未完善", "This feature is not finished yet");
+        add("聊天气泡、输入区、侧栏和交互控件共用一张背板纹理；不会给每个按键重复截图和模糊。",
+                "Chat bubbles, the input area, sidebar, and interactive controls share one backdrop texture; screenshots and blur are not repeated for every control.");
+        add("自动模式按 Android 版本、分辨率、内存、节电与温度动态选择实时折射、共享模糊或静态磨砂，不绑定具体机型。",
+                "Auto mode dynamically selects real-time refraction, shared blur, or static frosting from the Android version, resolution, memory, power-saving state, and temperature instead of a device model.");
+        add("液态玻璃画质", "Liquid glass quality");
+        add("渲染画质：", "Rendering quality: ");
+        add("当前设备将使用：", "This device will use: ");
+        add("自动（推荐）", "Auto (recommended)");
+        add("高画质", "High quality");
+        add("均衡", "Balanced");
+        add("省电", "Battery saver");
+        add("自动", "Auto");
+        add("抠出透明贴纸", "Cut out transparent sticker");
+        add("贴纸抠图", "Sticker cutout");
+        add("一键抠图", "Automatic cutout");
+        add("一键抠图失败，可继续手动擦除",
+                "Automatic cutout failed; manual erase is still available");
+        add("擦除", "Erase");
+        add("恢复", "Restore");
+        add("还原", "Restore");
+        add("撤销", "Undo");
+        add("最终结果", "Final result");
+        add("仅涂抹区", "Painted only");
+        add("仅未涂抹区", "Unpainted only");
+        add("显示范围", "Display area");
+        add("显示：", "View: ");
+        add("画笔粗细：", "Brush size: ");
+        add("画笔：", "Brush: ");
+        add("画笔", "Brush");
+        add("画笔 ▾", "Brush ▾");
+        add("全屏", "Full screen");
+        add("退出全屏", "Exit full screen");
+        add("保存透明贴纸", "Save transparent sticker");
+        add("正在识别背景…", "Detecting background…");
+        add("正在保存…", "Saving…");
+        add("没有可保存的结果", "There is no result to save");
+        add("没有可保存的抠图结果", "There is no cutout result to save");
+        add("找不到要编辑的贴纸", "The sticker to edit could not be found");
+        add("请先导入气泡贴纸", "Import a bubble decoration first");
+        add("尚未导入气泡贴纸", "No bubble decoration has been imported");
+        add("无法读取贴纸图片", "Could not read the sticker image");
+        add("抠图编辑器打开失败", "Could not open the cutout editor");
+        add("抠图结果保存失败", "Could not save the cutout result");
+        add("抠图设置保存失败", "Could not save the cutout settings");
+        add("贴纸抠图已保存", "Sticker cutout saved");
+        add("用户气泡贴纸抠图已保存",
+                "User bubble decoration cutout saved");
+        add("DeepSeek 气泡贴纸抠图已保存",
+                "DeepSeek bubble decoration cutout saved");
+        add("取景与旋转（横向 / 纵向 / 旋转） ▾",
+                "Focus and rotation (horizontal / vertical / rotation) ▾");
+        add("收起取景与旋转 ▴", "Hide focus and rotation ▴");
+        add("展开取景与旋转", "Show focus and rotation");
+        add("收起取景与旋转", "Hide focus and rotation");
+        add("展开背景选项", "Show wallpaper options");
+        add("收起背景选项", "Hide wallpaper options");
+        add("更多背景详细参数 ▾", "More wallpaper details ▾");
+        add("收起背景详细参数 ▴", "Hide wallpaper details ▴");
+        add("大小、透明度与旋转 ▾", "Size, opacity, and rotation ▾");
+        add("收起大小、透明度与旋转 ▴",
+                "Hide size, opacity, and rotation ▴");
+        add("气泡样式与贴纸参数 ▾",
+                "Bubble and decoration details ▾");
+        add("收起气泡样式与贴纸参数 ▴",
+                "Hide bubble and decoration details ▴");
+        add("导入图片作为背景或贴纸；支持取景、旋转、景深、界面绑定、曲线位移和完整贴纸布局。",
+                "Import an image as wallpaper or a sticker, with crop focus, rotation, depth, screen binding, curved motion, and full sticker layout controls.");
+        add("定制背景、页面贴纸和用户/DeepSeek 气泡；支持取景、旋转、景深、曲线位移及气泡顶部贴纸。",
+                "Customize wallpaper, page stickers, and user/DeepSeek bubbles, with crop focus, rotation, depth, curved motion, and bubble-top decorations.");
+        add("启用聊天背景与贴纸", "Enable chat wallpaper and stickers");
+        add("只在 DeepSeek 聊天页显示；覆盖层不会拦截输入、滚动或消息操作。",
+                "Shown only on DeepSeek chat pages. The overlay does not block typing, scrolling, or message actions.");
+        add("背景可在高级选项中绑定界面；贴纸会保留在聊天与设置页。覆盖层不会拦截输入、滚动或操作。",
+                "Advanced options bind the wallpaper to selected screens; stickers remain on chats and settings. The overlay does not block typing, scrolling, or actions.");
+        add("聊天气泡", "Chat bubbles");
+        add("启用气泡定制", "Enable bubble customization");
+        add("分别修改用户与 DeepSeek 消息；样式和贴纸绑定到真实消息节点，会随聊天内容一起滚动。",
+                "Customize user and DeepSeek messages separately. Styles and decorations attach to real message nodes and scroll with the conversation.");
+        add("用户消息", "User messages");
+        add("DeepSeek 消息", "DeepSeek messages");
+        add("用户消息风格：", "User message style: ");
+        add("DeepSeek 消息风格：", "DeepSeek message style: ");
+        add("选择气泡风格", "Choose bubble style");
+        add("跟随原版", "Original");
+        add("柔和纯色", "Soft color");
+        add("轻描边", "Outline");
+        add("磨砂玻璃", "Frosted glass");
+        add("液态玻璃", "Liquid glass");
+        add("填充不透明度：", "Fill opacity: ");
+        add("圆角：", "Corner radius: ");
+        add("描边宽度：", "Border width: ");
+        add("用户气泡顶部贴纸", "User bubble top decoration");
+        add("DeepSeek 气泡顶部贴纸", "DeepSeek bubble top decoration");
+        add("横向位置：", "Horizontal position: ");
+        add("（已导入）", " (imported)");
+        add("（未设置）", " (not set)");
+        add("可以分别给两边的消息换风格。",
+                "Each side can use its own style.");
+        add("贴纸也会跟着每条气泡移动。",
+                "Decorations follow every bubble.");
+        add("导入顶部贴纸", "Import top decoration");
+        add("移除", "Remove");
+        add("移除气泡贴纸？", "Remove bubble decoration?");
+        add("导入的贴纸副本会从 DeepSeek 私有目录删除。",
+                "The imported decoration copy will be deleted from DeepSeek's private directory.");
+        add("移除气泡贴纸失败", "Could not remove bubble decoration");
+        add("布局预览", "Layout preview");
+        add("点按选中贴纸，直接拖动调整位置；下面可以继续调整大小、旋转和不透明度。",
+                "Tap a sticker to select it, then drag to position it. Use the controls below for size, rotation, and opacity.");
+        add("导入图片", "Import image");
+        add("从系统相册选择一次，然后决定设为背景图还是添加为贴纸。",
+                "Choose an image from the system gallery, then use it as wallpaper or add it as a sticker.");
+        add("模块会保存私有副本，删除相册原图后仍可显示。",
+                "The module keeps a private copy, so it remains available if the gallery original is deleted.");
+        add("选择图片", "Select image");
+        add("背景图", "Wallpaper");
+        add("背景图旋转：", "Wallpaper rotation: ");
+        add("取景决定缩放或裁剪后保留哪一块；横图可重点保留左侧、中央或右侧。",
+                "Focus chooses the area kept after zooming or cropping; landscape images can prioritize the left, center, or right.");
+        add("显示范围：", "Display area: ");
+        add("背景显示范围", "Wallpaper display area");
+        add("先选择背景显示范围", "First choose the wallpaper display area");
+        add("上半屏", "Top half");
+        add("中间半屏", "Center half");
+        add("下半屏", "Bottom half");
+        add("边界处理：", "Edge handling: ");
+        add("背景边界处理", "Wallpaper edge handling");
+        add("截断：范围外透明", "Clip: transparent outside");
+        add("镜像：反射延展边缘", "Mirror: reflect image edges");
+        add("边缘延展：沿用最外圈像素",
+                "Edge extend: repeat outermost pixels");
+        add("截断", "Clip");
+        add("镜像延展", "Mirrored extension");
+        add("边缘像素延展", "Outermost-pixel extension");
+        add("连续缩放：", "Continuous zoom: ");
+        add("（滑动后回中，可反复缩放）",
+                " (recenters after release; repeat as needed)");
+        add("精确倍率：", "Exact multiplier: ");
+        add("（点按输入，无固定上限）",
+                " (tap to enter; no fixed maximum)");
+        add("输入缩放倍率（无固定上限）",
+                "Enter zoom multiplier (no fixed maximum)");
+        add("1 为原始适配大小；小于 1 会缩小，大于 1 会放大。",
+                "1 is the fitted size; values below 1 zoom out and values above 1 zoom in.");
+        add("例如 0.5、1、3、20", "For example 0.5, 1, 3, or 20");
+        add("重置为 1", "Reset to 1");
+        add("请输入大于 0 的缩放倍率",
+                "Enter a zoom multiplier greater than zero");
+        add("横向取景：", "Horizontal focus: ");
+        add("纵向取景：", "Vertical focus: ");
+        add("选择背景取景区域", "Choose wallpaper focus");
+        add("左上", "Top left");
+        add("上方", "Top");
+        add("右上", "Top right");
+        add("左侧", "Left");
+        add("中央", "Center");
+        add("右侧", "Right");
+        add("左下", "Bottom left");
+        add("下方", "Bottom");
+        add("右下", "Bottom right");
+        add("稍后调整", "Adjust later");
+        add("背景景深", "Wallpaper depth");
+        add("只轻微虚化、降对比并放大背景，让原生聊天框看起来悬浮在图片上方；不会修改 DeepSeek UI。",
+                "Slightly blur, soften, and enlarge only the wallpaper so native chat cards appear to float above it; the DeepSeek UI is unchanged.");
+        add("动态背景位移", "Dynamic wallpaper motion");
+        add("打开侧栏时背景随主界面向右，进入设置时向左；画布会预留边缘，避免露白。",
+                "The wallpaper follows the main screen right when the sidebar opens and moves left in settings; overscan prevents blank edges.");
+        add("位移强度：", "Motion amount: ");
+        add("分别设置各界面位移", "Set offsets per screen");
+        add("关闭时只显示统一强度；打开后分别设置聊天、侧栏和设置界面的水平位移。",
+                "When off, only unified strength is shown. Turn it on to set horizontal offsets for chat, sidebar, and settings separately.");
+        add("统一位移强度：", "Unified motion: ");
+        add("聊天界面位移：", "Chat offset: ");
+        add("侧栏界面位移：", "Sidebar offset: ");
+        add("设置界面位移：", "Settings offset: ");
+        add("动态效果预览（侧栏向右 / 设置向左）",
+                "Motion preview (sidebar right / settings left)");
+        add("侧栏", "Sidebar");
+        add("聊天", "Chat");
+        add("设置", "Settings");
+        add("选择背景图在哪些界面显示；未选中的界面仍会保留贴纸。",
+                "Choose which screens show the wallpaper; unselected screens still keep stickers.");
+        add("高级选项：", "Advanced: ");
+        add("背景图绑定界面", "Wallpaper screen binding");
+        add("聊天界面", "Chat screen");
+        add("会话侧栏", "Conversation sidebar");
+        add("设置界面", "Settings screen");
+        add("未绑定", "None");
+        add("、", ", ");
+        add("清除背景图", "Remove wallpaper");
+        add("清除背景图？", "Remove wallpaper?");
+        add("已导入的背景副本会从 DeepSeek 私有目录删除。",
+                "The imported wallpaper copy will be deleted from DeepSeek's private directory.");
+        add("清除背景图失败", "Could not remove wallpaper");
+        add("贴纸", "Sticker");
+        add("大小", "Size");
+        add("大小：", "Size: ");
+        add("旋转", "Rotation");
+        add("旋转：", "Rotation: ");
+        add("贴纸不透明度", "Sticker opacity");
+        add("贴纸不透明度：", "Sticker opacity: ");
+        add("移到最上层", "Bring to front");
+        add("删除贴纸", "Delete sticker");
+        add("删除这张贴纸？", "Delete this sticker?");
+        add("已导入的贴纸副本会从 DeepSeek 私有目录删除。",
+                "The imported sticker copy will be deleted from DeepSeek's private directory.");
+        add("删除贴纸失败", "Could not delete sticker");
+        add("重置全部聊天外观", "Reset all chat appearance");
+        add("重置全部聊天外观？", "Reset all chat appearance?");
+        add("背景图、全部贴纸和布局设置都会清除；聊天记录不会受到影响。",
+                "The wallpaper, every sticker, and layout settings will be cleared. Chat history is not affected.");
+        add("背景图、全部贴纸、气泡样式和布局设置都会清除；聊天记录不会受到影响。",
+                "The wallpaper, every sticker, bubble styles, and layout settings will be cleared. Chat history is not affected.");
+        add("重置聊天外观失败", "Could not reset chat appearance");
+        add("设为背景图", "Use as wallpaper");
+        add("添加为贴纸", "Add as sticker");
+        add("添加为页面贴纸", "Add as page sticker");
+        add("设为用户气泡顶部贴纸", "Use as user bubble decoration");
+        add("设为 DeepSeek 气泡顶部贴纸", "Use as DeepSeek bubble decoration");
+        add("这张图片怎么使用？", "How should this image be used?");
+        add("正在导入图片…", "Importing image…");
+        add("裁剪填充", "Crop to fill");
+        add("完整显示", "Fit entire image");
+        add("拉伸填满", "Stretch to fill");
+        add("背景图显示方式", "Wallpaper display mode");
+        add("尚未添加贴纸", "No stickers added");
+        add("尚未设置背景图", "No wallpaper selected");
+        add("背景图不透明度：", "Wallpaper opacity: ");
+        add("显示方式：", "Display mode: ");
+        add("已选贴纸 ", "Selected sticker ");
+        add("聊天外观设置保存失败", "Could not save chat appearance");
+        add("背景图预览", "Wallpaper preview");
+        add("导入一张图片开始设置", "Import an image to begin");
+        add("返回", "Back");
+        add("没有选择图片", "No image was selected");
+        add("最多只能添加 ", "You can add at most ");
+        add(" 张贴纸", " stickers");
+        add("无法创建外观图片目录", "Could not create the appearance image directory");
+        add("外观设置保存失败", "Could not save appearance settings");
+        add("背景图已导入", "Wallpaper imported");
+        add("贴纸已添加", "Sticker added");
+        add("用户气泡贴纸已导入", "User bubble decoration imported");
+        add("DeepSeek 气泡贴纸已导入", "DeepSeek bubble decoration imported");
+        add("无法读取所选图片", "Could not read the selected image");
+        add("图片不能超过 32 MB", "Images cannot exceed 32 MB");
+        add("所选图片为空", "The selected image is empty");
+        add("复制图片失败", "Could not copy the image");
+        add("所选文件不是可识别的图片", "The selected file is not a recognized image");
+        add("图片尺寸过大，请选择较小的图片",
+                "The image dimensions are too large. Choose a smaller image.");
+        add("【功能】聊天背景与贴纸", "[Feature] Chat wallpaper and stickers");
+        add("【功能】聊天背景、贴纸与气泡",
+                "[Feature] Chat wallpaper, stickers, and bubbles");
+        add("从“聊天外观”导入图片后，可选择设为背景图或添加为贴纸。背景支持九宫格/横纵取景、裁剪、完整显示、拉伸、旋转、不透明度和景深；",
+                "After importing an image from Chat appearance, use it as wallpaper or add it as a sticker. Wallpaper supports 3x3 or horizontal/vertical crop focus, crop, fit, stretch, rotation, opacity, and depth; ");
+        add("动态位移采用先快后慢的曲线，侧栏展开时背景随主界面向右且关闭后完整返回，设置路由向左并在返回时平滑复位。统一强度可切换为聊天、侧栏、设置三个独立位移。",
+                "Motion uses a fast-starting ease-out curve: the wallpaper follows the main screen right as the sidebar opens and fully returns when it closes, while settings move it left and smoothly restore it on return. Unified strength can switch to independent chat, sidebar, and settings offsets. ");
+        add("图片复制到 DeepSeek 私有目录；高级选项决定背景出现在哪些界面；景深只处理背景图片，不修改 DeepSeek UI。贴纸支持拖动、大小、旋转、不透明度和层级，并保留在聊天与设置路由，覆盖层不会拦截触摸。",
+                "Images are copied to DeepSeek's private directory; advanced options choose wallpaper screens, and depth processes only the wallpaper without modifying the DeepSeek UI. Stickers support dragging, size, rotation, opacity, and layering, remain on chat and settings routes, and never intercept touch.");
+        add("图片复制到 DeepSeek 私有目录；高级选项决定背景出现在哪些界面；景深只处理背景图片，不修改 DeepSeek UI。页面贴纸支持拖动、大小、旋转、不透明度和层级，并保留在聊天与设置路由，覆盖层不会拦截触摸。",
+                "Images are copied to DeepSeek's private directory; advanced options choose wallpaper screens, and depth processes only the wallpaper without modifying DeepSeek UI. Page stickers support dragging, size, rotation, opacity, and layering, remain on chat and settings routes, and never intercept touch.");
+        add("聊天气泡可分别设置用户与 DeepSeek 风格、填充不透明度、圆角和描边，也可为每条气泡绑定顶部贴纸并调整大小、横向位置、不透明度与旋转；气泡贴纸属于真实消息节点，会随消息滚动。",
+                "User and DeepSeek bubbles can use separate styles, fill opacity, corner radius, and borders. Each bubble can also have a top decoration with adjustable size, horizontal position, opacity, and rotation; decorations belong to real message nodes and scroll with them.");
+        add("【问题】为什么背景图或贴纸没有显示，或者看起来遮住界面？",
+                "[Question] Why is the wallpaper or sticker missing, or why does it appear to cover the interface?");
+        add("解决办法：确认总开关已打开，并在背景图“高级选项”中勾选当前界面；贴纸会在聊天与设置页保留，登录页等其他路由会自动隐藏。",
+                "Solution: enable the master switch and select the current screen under the wallpaper's Advanced options. Stickers remain on chats and settings; sign-in and other routes hide them. ");
+        add("背景层位于宿主 Compose 界面上方，建议把背景不透明度调低以保留文字可读性；贴纸即使覆盖按钮也不会拦截点击。",
+                "The wallpaper layer sits above the host Compose UI, so use a lower opacity to keep text readable. Stickers never intercept taps, even when they visually cover a button.");
         add("多账号管理", "Multiple accounts");
         add("导出会话为 Markdown", "Export chats as Markdown");
         add("全局搜索聊天记录", "Search all chats");
@@ -32,6 +306,8 @@ final class UiLanguageCatalog {
         add("立即备份聊天数据库", "Back up chat database now");
         add("自动备份聊天数据库", "Automatic chat database backup");
         add("实验性功能", "Experimental Features");
+        add("功能可能随时失败、产生不完整结果或导致数据丢失。继续表示你已理解上述风险并自行承担后果。",
+                "Features may fail, produce incomplete results, or cause data loss. Continuing means you understand and accept these risks.");
         add("帮助与问题", "Help & Questions");
         add("语言", "Language");
         add("选择 Deekseep 语言", "Choose Deekseep language");
@@ -96,6 +372,7 @@ final class UiLanguageCatalog {
         add("未安装", "Not installed");
         add("待验证", "Waiting for verification");
         add("启动 DeepSeek 后确认", "Launch DeepSeek to confirm");
+        add("启动 DeepSeek 生效", "Ready — launch DeepSeek");
         add("已禁用", "Disabled");
 
         // Main settings page and Experimental Features.
@@ -141,38 +418,124 @@ final class UiLanguageCatalog {
                 "When enabled, each DeepSeek start copies databases when the last backup is over 24 hours old to the ");
         add("应用内部目录（仅保留最近 5 份）。",
                 "app's internal directory (keeping only the latest five backups).");
-        add("专家模式图片中继、本地 API 服务及其独立帮助；首次进入需确认风险说明。",
-                "Expert image relay, the local API service, and dedicated help. First entry requires risk acknowledgement.");
-        add("实验性功能免责声明", "Experimental Features Disclaimer");
-        add("以下功能会深度修改 DeepSeek 的模型能力、网络请求和后台运行方式，属于高风险的大工程，不保证稳定，也不保证在宿主升级后继续可用。\n\n",
-                "The following features deeply modify DeepSeek model capabilities, network requests, and background behavior. They are high-risk, may be unstable, and may stop working after a host update.\n\n");
-        add("• 账号风险：修改客户端能力和以当前账号提供 API 可能触发服务条款或风控，严重时可能导致账号限制或封禁。\n",
-                "• Account risk: changing client capabilities or exposing an API through the current account may trigger terms enforcement or risk controls, including account restriction or suspension.\n");
-        add("• 数据风险：实验性 Hook、图片中继、隐藏 API 会话和工具循环出现异常时，可能造成聊天记录、缓存或工作区文件损坏、覆盖或丢失。\n",
-                "• Data risk: failures in experimental hooks, image relay, hidden API sessions, or tool loops may corrupt, overwrite, or lose chats, caches, or workspace files.\n");
-        add("• 隐私与执行风险：专家模式图片可能先交给视觉模型生成描述；本地 API 密钥一旦泄露，其他程序可使用当前账号发起请求。Agent 工具还可能创建、修改文件或执行命令。\n",
-                "• Privacy and execution risk: expert images may first be sent to a vision model for description. A leaked local API key lets other programs make requests with the current account. Agent tools may also create or modify files and run commands.\n");
-        add("• 使用限制：不要在重要账号上启用，也不要在保存有重要聊天记录或唯一数据副本的设备上测试。请先备份数据库和重要文件，并保留客户端的沙箱、确认和权限隔离。\n\n",
-                "• Usage limits: do not enable these features on an important account or test on a device holding important chats or the only copy of data. Back up databases and files first, and keep client sandboxing, confirmations, and permission isolation enabled.\n\n");
-        add("功能可能随时失败、产生不完整结果或导致数据丢失。继续表示你已理解上述风险并自行承担后果。",
-                "Features may fail at any time, return incomplete results, or cause data loss. Continuing means you understand and accept these risks.");
+        add("专家模式图片中继、本地 API 服务及其独立帮助；功能默认关闭，可按需开启。",
+                "Expert image relay, the local API service, and dedicated help. Features are off by default and can be enabled as needed.");
+        add("实验性功能使用提示", "About experimental features");
+        add("这些功能默认关闭，按需开启即可。使用前请留意：\n\n",
+                "These features are off by default and can be enabled only when needed. Before using them:\n\n");
+        add("• 聊天外观只修改本机显示层；若宿主更新后出现错位，关闭对应外观开关即可。\n",
+                "• Chat appearance changes only the local display layer. Turn off the related appearance option if a host update causes misalignment.\n");
+        add("• 专家图片中继会先通过视觉模型生成图片描述，结果和可用性取决于 DeepSeek 服务。\n",
+                "• Expert image relay first creates an image description with a vision model; results and availability depend on the DeepSeek service.\n");
+        add("• 本地 API 可监听本机或可信局域网；请妥善保存 API Key，不要公开分享。\n",
+                "• The local API can listen on this device or a trusted LAN. Keep its API key private.\n");
+        add("• 涉及聊天、文件或 Agent 工具时，建议先备份重要内容，并保留客户端的确认和权限设置。\n\n",
+                "• For chat, file, or Agent tools, back up important content and keep client confirmation and permission controls enabled.\n\n");
+        add("如果 DeepSeek 更新后出现异常，关闭对应开关即可。",
+                "If a DeepSeek update causes a problem, simply turn off the related option.");
         add("退出", "Exit");
-        add("确认（5）", "Confirm (5)");
-        add("确认（", "Confirm (");
-        add("确认并进入", "Confirm and enter");
+        add("了解并进入", "Continue");
         add("无法保存确认状态", "Could not save acknowledgement");
         add("DeepSeek 私有目录暂时不可写，因此没有进入实验性功能。请完整重启应用后重试。",
                 "DeepSeek's private directory is temporarily unavailable, so Experimental Features was not opened. Fully restart the app and try again.");
-        add("这些功能可能触发账号风控、造成聊天或文件数据丢失，也可能在 DeepSeek 更新后失效。请勿用于重要账号或保存重要聊天记录的设备。",
-                "These features may trigger account controls, cause chat or file loss, or stop working after a DeepSeek update. Do not use them with important accounts or on devices holding important chats.");
+        add("功能默认关闭。建议一次只开启需要的选项；操作重要数据前先备份，DeepSeek 更新后如有异常可随时关闭。",
+                "Features are off by default. Enable only what you need, back up before important changes, and turn an option off if a DeepSeek update causes an issue.");
         add("解锁专家模式与图片上传", "Unlock expert mode and image upload");
         add("点亮专家模式的思考、搜索和文件能力；图片会先由视觉模型识别，再把描述中继给专家模型。切换后需重进应用或重选模型。",
                 "Enable expert reasoning, search, and file capabilities. Images are recognized by the vision model first, then their descriptions are relayed to the expert model. Reopen the app or reselect the model after changing this.");
+        add("AI 主动消息", "AI proactive messages");
+        add("陀螺仪背景", "Gyroscope wallpaper");
+        add("晃动手机时背景轻微漂移并回弹；需先设置背景图",
+                "The wallpaper drifts slightly and springs back as the phone moves; set a wallpaper first");
+        add("陀螺仪背景设置保存失败", "Could not save gyroscope-wallpaper settings");
+        add("空间动效（实验）", "Spatial motion (experimental)");
+        add("空间动效", "Spatial motion");
+        add("已开启 · 点按进入专属设置",
+                "Enabled · tap to open dedicated settings");
+        add("已关闭 · 点按进入专属设置",
+                "Disabled · tap to open dedicated settings");
+        add("启用空间动效", "Enable spatial motion");
+        add("姿态视差直接跟手；侧边栏仍沿用原有平滑延迟",
+                "Pose parallax tracks directly; the sidebar keeps its original smooth lag");
+        add("半球相机直接跟手：背景 5、中景人物 1.5，文字与界面反向 0.5",
+                "Direct hemispherical-camera tracking: background 5, midground subject 1.5, text and UI 0.5 in the opposite direction");
+        add("空间动效设置保存失败",
+                "Could not save spatial-motion settings");
+        add("外沿颜色无限延伸", "Unlimited outer-edge color extension");
+        add("沿用图片最外圈颜色填满移动范围，防止尺寸不足时露白",
+                "Repeat the image's outermost colors across all motion to prevent white gaps");
+        add("外沿延伸设置保存失败",
+                "Could not save outer-edge extension");
+        add("关闭传感器视差，保留静态分层和背景边缘处理",
+                "Disable sensor parallax while retaining static layers and edge handling");
+        add("稳定约 650ms 后只修正极小的传感器零点误差",
+                "After about 650ms of stability, correct only tiny sensor-zero errors");
+        add("将当前持机姿态设为视觉中心",
+                "Use the current device pose as the visual center");
+        add("已请求重新校准", "Recenter requested");
+        add("动效强度", "Motion strength");
+        add("弱", "Weak");
+        add("标准", "Standard");
+        add("稍强", "Slightly stronger");
+        add("弱（0.55×）", "Weak (0.55×)");
+        add("标准（1.0×）", "Standard (1.0×)");
+        add("稍强（1.25×）", "Slightly stronger (1.25×)");
+        add("动效强度设置保存失败",
+                "Could not save motion strength");
+        add("减少动态效果", "Reduce motion");
+        add("关闭传感器视差，保留背景防露边处理",
+                "Disable sensor parallax while retaining wallpaper edge protection");
+        add("减少动态效果设置保存失败",
+                "Could not save reduced-motion settings");
+        add("自动重新校准", "Automatic recentering");
+        add("稳定约 650ms 后缓慢修正小范围零点误差",
+                "Slowly correct small neutral-point errors after about 650ms of stability");
+        add("自动重新校准设置保存失败",
+                "Could not save automatic-recentering settings");
+        add("反转动效方向", "Reverse motion direction");
+        add("统一反转背景图的上下左右视差方向",
+                "Reverse the wallpaper parallax direction on both axes");
+        add("动效方向设置保存失败",
+                "Could not save motion direction");
+        add("立即重新校准", "Recenter now");
+        add("将当前持机姿态设为视觉中心",
+                "Use the current device pose as the visual center");
+        add("已请求重新校准", "Recentering requested");
+        add("修改主动消息间隔", "Change proactive-message interval");
+        add("当前间隔：%d 分钟。点按此处修改；模型主动消息会写入绑定对话，并在前后台都发送系统通知。",
+                "Current interval: %d minutes. Tap here to change it. Proactive model messages are added to the bound chat and always produce a system notification.");
+        add("聊天中可直接约定每次心跳要做什么，也可让 AI 安排或取消指定时间的一次性心跳。",
+                "In chat, you can agree on what each heartbeat should do or ask the AI to schedule or cancel a one-time heartbeat for a specific time.");
+        add("当前间隔：%d 分钟。点按此处修改；模型主动消息会写入绑定对话，",
+                "Current interval: %d minutes. Tap here to change it. Proactive model messages are added to the bound chat, ");
+        add("并在前后台都发送系统通知。聊天中可直接约定每次心跳要做什么，",
+                "and always produce a system notification. In chat, you can agree on what each heartbeat should do, ");
+        add("也可让 AI 安排或取消指定时间的一次性心跳。",
+                "or ask the AI to schedule or cancel a one-time heartbeat for a specific time.");
+        add("尚未绑定；请在目标对话中告诉 AI 心跳要做什么。",
+                "Not bound yet; tell the AI what heartbeats should do in the target chat.");
+        add("已绑定当前对话。", "Bound to the current chat.");
+        add("已绑定一个对话；在目标对话中重新约定即可切换。",
+                "Bound to a chat; make a new heartbeat agreement in the target chat to switch.");
+        add("例如 30、180、1440", "For example 30, 180, or 1440");
+        add("设置主动消息间隔", "Set proactive-message interval");
+        add("请输入 15 到 10080 分钟（最长 7 天）。从保存时重新计时；",
+                "Enter 15 to 10080 minutes (up to 7 days). Timing restarts when you save;");
+        add("系统省电策略可能让实际触发略有延迟。",
+                "Android battery policies may delay delivery slightly.");
+        add("主动消息间隔已保存", "Proactive-message interval saved");
+        add("请输入 15 到 10080 之间的整数分钟",
+                "Enter a whole number from 15 to 10080 minutes");
+        add("主动消息设置保存失败", "Could not save proactive-message settings");
+        add("心跳已绑定当前对话", "Heartbeat bound to this chat");
+        add("心跳绑定失败", "Could not bind heartbeat to this chat");
         add("本地 API 服务", "Local API service");
         add("配置 OpenAI / Anthropic 格式、后台保活、API Key、监听地址与请求统计。",
                 "Configure OpenAI/Anthropic formats, background keepalive, API key, listening address, and request statistics.");
-        add("仅包含专家模式图片中继和本地 API 的说明、风险与排障。",
-                "Help, risks, and troubleshooting for expert image relay and the local API only.");
+        add("包含聊天外观、专家模式图片中继和本地 API 的完整说明、注意事项与排障。",
+                "Complete usage notes and troubleshooting for Chat appearance, expert image relay, and the local API.");
+        add("包含专家模式图片中继和本地 API 的使用说明、注意事项与排障。",
+                "Usage notes and troubleshooting for expert image relay and the local API.");
 
         // Local API control page.
         add("本地 API 运行在 DeepSeek 进程内。若系统限制后台活动，Termux、",
@@ -220,6 +583,9 @@ final class UiLanguageCatalog {
         add("模型使用 deepseek-reasoner 时会自动开启；不附加且使用 deepseek-chat 时保持关闭。",
                 "It is enabled automatically for deepseek-reasoner and remains off for deepseek-chat when no parameter is supplied.");
         add("实时监听与请求统计", "Live listener and request statistics");
+        add("高级设置", "Advanced settings");
+        add("Cloudflare 自有域名、公网 IP、固定端口与连接诊断",
+                "Cloudflare custom domains, public IP, fixed port, and diagnostics");
         add("后台运行校验未通过，监听未启动", "Background check failed; listener not started");
         add("正在启动监听…", "Starting listener…");
         add("服务已关闭，正在清理复用会话…", "Service disabled; cleaning reusable sessions…");
@@ -301,12 +667,29 @@ final class UiLanguageCatalog {
                 "You can also lock the module to Chinese or English from Language on the Deekseep page. Select Follow DeepSeek (Auto) to resume automatic detection.");
 
         // Experimental help.
+        add("【功能】聊天背景、贴纸与气泡",
+                "[Feature] Chat wallpaper, stickers, and bubbles");
+        add("从“实验性功能 → 聊天外观”导入图片后，可设为背景、页面贴纸或两侧气泡顶部贴纸。背景可选全屏、上/中/下半屏，裁剪、完整显示或拉伸，并支持取景、旋转、不透明度、景深和界面绑定。横向取景、纵向取景与旋转位于预览图正下方的独立折叠区，可一边调节一边查看效果。连续缩放条每次松手会回到中点，可反复缩放且没有固定上限；也可点“精确倍率”直接输入。缩小后，截断模式让范围外保持透明，镜像模式会反射图片边缘补齐，边缘像素延展会把最外圈像素一直铺到画布边界。动态位移可统一设置，也可分别设置聊天、侧栏和设置界面。大陆版与 Google Play 版共用同一配置和渲染链路。",
+                "Import an image from Experimental Features → Chat appearance and use it as wallpaper, a page sticker, or a top decoration for either bubble side. Wallpaper supports full screen or the top, center, or bottom half; crop, fit, or stretch; focus, rotation, opacity, depth, and screen binding. Horizontal focus, vertical focus, and rotation are in a separate collapsible section directly below the preview, so changes remain visible while adjusting. The continuous zoom slider recenters after every release, can be repeated without a fixed maximum, and Exact multiplier accepts a direct value. After zooming out, Clip leaves the outside transparent, Mirror reflects the image edges, and Outermost-pixel extension carries the border pixels to the canvas boundary. Motion can be unified or configured separately for chat, sidebar, and settings. Mainland and Google Play builds share this configuration and rendering path.");
+        add("【问题】为什么半屏背景仍显示在别处，或者缩小后出现空白？",
+                "[Question] Why does half-screen wallpaper appear elsewhere, or why is there empty space after zooming out?");
+        add("解决办法：半屏有上方、中间和下方三个位置，先确认“显示范围”选项；容器会在半屏边界处裁切旋转和位移后的图片。选择“截断”时，缩小后留下透明区域是预期效果；需要反射补齐时改为“镜像延展”，需要沿用图片边缘颜色时改为“边缘像素延展”。横图还可在预览图下方展开横向/纵向取景，决定主体保留位置。",
+                "Solution: half-screen wallpaper has top, center, and bottom positions, so first check Display area. The container clips the rotated and shifted image at the half-screen boundary. Transparent space after zooming out is expected in Clip mode; choose Mirrored extension for reflected fill, or Outermost-pixel extension to continue the image's border colors. For a landscape image, expand horizontal and vertical focus below the preview to choose where the subject remains.");
+        add("【问题】为什么背景缩放条松手后回到中间？",
+                "[Question] Why does the wallpaper zoom slider return to the center after release?");
+        add("解决办法：这是无固定上限缩放的设计。中点代表本次缩放的起点，向左或向右连续调整，松手后自动把当前倍率作为新的起点；可以反复拖动继续放大或缩小。需要准确倍率时点“精确倍率”输入大于 0 的数值，1 表示原始适配大小。",
+                "Solution: this is how zoom avoids a fixed maximum. The midpoint is the starting value for the current gesture. Drag left or right continuously; after release, the current multiplier becomes the next starting point, so you can repeat the gesture to keep zooming. For an exact value, tap Exact multiplier and enter a number above zero. A value of 1 is the fitted size.");
+        add("解决办法：确认聊天外观总开关已打开，并在背景图“高级选项”中勾选当前界面；贴纸会在聊天与设置页保留，登录页等其他路由会自动隐藏。背景层不会拦截点击，但不透明度过高会降低文字可读性，可调低背景不透明度。",
+                "Solution: enable the Chat appearance master switch and select the current screen under the wallpaper's Advanced options. Stickers remain on chat and settings screens while sign-in and other routes hide them. The wallpaper does not intercept taps, but high opacity can reduce text readability, so lower wallpaper opacity if needed.");
         add("【功能】专家模式图片上传", "[Feature] Expert-mode image upload");
         add("开启后，专家模式可选择相册图片。图片会先保存到 DeepSeek 私有目录，并由视觉模型生成客观描述，再把描述交给专家模型；同一会话后续轮会继续捕获图片上下文。视觉识别结果和服务器能力不作保证。",
                 "When enabled, expert mode can select gallery images. An image is saved to DeepSeek's private directory, objectively described by the vision model, and then relayed to the expert model. Later turns in the same chat continue to capture image context. Vision results and server capabilities are not guaranteed.");
         add("【功能】本地 API 服务", "[Feature] Local API service");
         add("首次进入会校验 DeepSeek 已设为不限制电池优化且允许后台活动，未通过时不会启动监听。OpenAI 格式提供 /v1/models、/v1/chat/completions 和 /v1/responses；Anthropic 格式提供 /v1/messages 与 /v1/messages/count_tokens。两种格式均支持普通 JSON、SSE、深度思考和 Agent 工具结果回传。",
                 "On first entry the module verifies that DeepSeek is exempt from battery optimization and allowed to run in the background; listening does not start until both pass. OpenAI format provides /v1/models, /v1/chat/completions, and /v1/responses. Anthropic format provides /v1/messages and /v1/messages/count_tokens. Both support JSON, SSE, deep reasoning, and Agent tool-result continuation.");
+        add("【功能】AI 主动消息", "[Feature] AI proactive messages");
+        add("开启后，模块会按你设置的分钟间隔唤醒 DeepSeek，并使用绑定对话的近期上下文生成自然的主动消息。点按功能说明即可修改间隔，范围为 15 分钟到 7 天。请在想绑定的对话中直接说“以后心跳时来找我闲聊”；在另一个对话重新约定会切换周期心跳的绑定，不会建立全局约定。也可以说“5 天后晚上 6:37 来找我”安排只属于当前对话的一次性心跳，或让 AI 取消单次、周期或全部心跳。AI 会调用真实的本地调度能力，内部执行指令不会显示；模型回复会写入任务所属对话，无论 DeepSeek 是否在前台，模块应用都会同时发送系统通知，点按通知会回到该对话。关闭周期心跳不会删除已经确认的一次性任务，除非明确要求 AI 一并取消。该功能默认关闭，通知需要在模块应用中授权，系统省电策略可能让时间略有延迟。",
+                "When enabled, the module wakes DeepSeek at the minute interval you choose and uses recent context from the bound chat to generate a natural proactive message. Tap the feature description to set an interval from 15 minutes to 7 days. In the chat you want to bind, say “come chat with me whenever the heartbeat runs.” Making a new agreement in another chat switches the recurring heartbeat binding instead of creating a global agreement. You can also say “come talk to me at 6:37 PM five days from now” to schedule a one-time heartbeat belonging only to the current chat, or ask the AI to cancel one-time, recurring, or all heartbeats. The AI uses real local scheduling and hides internal execution instructions. The model reply is added to the task's chat, and the module app also sends a system notification whether or not DeepSeek is in the foreground; tapping it returns to that chat. Turning off recurring heartbeats does not delete confirmed one-time tasks unless you explicitly ask the AI to cancel them too. The feature is off by default, notification permission is required in the module app, and battery policies may delay delivery slightly.");
         add("【问题】为什么专家模式第一轮能发图，后续轮却提示不支持？",
                 "[Question] Why can expert mode send an image on the first turn but reject later turns?");
         add("解决办法：新版会按会话捕获每一轮完整图片 fragment，并在发送点识别专家模型。安装后先冷启动，再新建专家会话测试；服务器若调整模型能力仍可能拒绝，此时可关闭功能改用普通视觉模型。",
@@ -335,11 +718,13 @@ final class UiLanguageCatalog {
                 "[Question] Why doesn't thinking appear immediately after a request starts?");
         add("解决办法：这是修正后的正常顺序。服务会先完成排队、PoW 和原生请求启动，再发送 Anthropic message_start 与 thinking；这样等待本地处理时不会伪装成模型已经开始思考。",
                 "Solution: this is the corrected order. The service completes queueing, PoW, and native request startup before sending Anthropic message_start and thinking, so local preprocessing is not misrepresented as model reasoning.");
-        add("【风险】怎样降低账号、聊天和文件损失风险？",
-                "[Risk] How can I reduce account, chat, and file-loss risk?");
-        add("不要使用重要账号或保存唯一聊天记录的设备；开启前备份数据库和工作区文件，不共享 API Key，保留 Agent 沙箱与操作确认。遇到宿主更新、异常重复工具调用或数据不同步时立即关闭实验性开关。",
-                "Do not use an important account or a device containing the only copy of chats. Back up databases and workspace files before enabling, never share the API key, and keep Agent sandboxing and confirmations. Disable experimental switches immediately after a host update, abnormal repeated tool calls, or data desynchronization.");
+        add("【建议】怎样更稳妥地使用这些功能？",
+                "[Tip] How can I use these features more smoothly?");
+        add("按需开启，一次只启用需要的选项；编辑重要内容前先备份，不共享 API Key，并保留 Agent 沙箱与操作确认。宿主更新后如有异常，可关闭对应开关并重启 DeepSeek。",
+                "Enable only what you need, back up before important edits, keep the API key private, and retain Agent sandboxing and confirmations. If a host update causes an issue, turn off the related option and restart DeepSeek.");
         add("实验性功能 · 帮助与问题", "Experimental Features · Help & Questions");
+        add("这里收录聊天外观、专家模式图片中继和本地 API 的完整说明。点一下条目展开。",
+                "This page contains complete guidance for Chat appearance, expert image relay, and the local API. Tap an item to expand it.");
         add("这里只收录专家模式图片中继和本地 API 的说明。点一下条目展开。",
                 "This page covers only expert image relay and the local API. Tap an item to expand it.");
 
@@ -881,6 +1266,10 @@ final class UiLanguageCatalog {
         add("保持本地 API 与 SSE 流在后台可用",
                 "Keep the local API and SSE streams available in the background");
         add("DeepSeek 本地 API 正在运行", "DeepSeek Local API is running");
+        add("本地、局域网与 Cloudflare 公网入口均在运行",
+                "Local, LAN, and Cloudflare endpoints are active");
+        add("本地、局域网与公网入口均在运行",
+                "Local, LAN, and public endpoints are active");
         add("正在保持后台监听与流式响应稳定",
                 "Keeping background listening and streaming responses stable");
         add("CPU 保活不可用：", "CPU keepalive unavailable: ");
@@ -925,6 +1314,23 @@ final class UiLanguageCatalog {
         add(" 必须是整数", " must be an integer");
         add(" 必须是字符串", " must be a string");
         add("未知账号", "Unknown account");
+        add("画笔粗细", "Brush size");
+        add("画笔粗细：", "Brush size: ");
+        add("背景、页面贴纸和气泡；支持全屏/半屏、无固定上限缩放、截断、镜像或边缘像素延展、取景、旋转、景深与曲线位移。",
+                "Wallpaper, page stickers, and bubbles; supports full/half screen, uncapped zoom, clip, mirror or outermost-pixel extension, focus, rotation, depth, and curved motion.");
+        add("被你发现彩蛋了喵～", "You found the easter egg~");
+        add("隐藏彩蛋", "Hidden easter egg");
+        add("一键破甲", "One-tap armor break");
+        add("启用全局液态玻璃", "Enable global liquid glass");
+        add("仅测试版本可启用；功能尚未完成，可能异常或闪退",
+                "Only test builds can enable this; it is unfinished and may cause problems or crashes.");
+        add("懂你意思喵～", "Got it, meow~");
+        add("内置提示词启用失败", "Could not enable the bundled prompt");
+        add("此页面功能仅供本地测试。液态玻璃尚未完成，可能导致显示异常甚至应用闪退。",
+                "The features on this page are for local testing only. Liquid glass is unfinished and may cause display problems or crashes.");
+        add("液态玻璃设置保存失败", "Could not save liquid-glass settings");
+        add("非 Google Play 版本提供；Google Play 版不含此开关。",
+                "Available in non-Google-Play builds; the Google Play build does not include this switch.");
 
         Collections.sort(FRAGMENTS, new Comparator<Entry>() {
             @Override public int compare(Entry left, Entry right) {

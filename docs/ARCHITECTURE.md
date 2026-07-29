@@ -45,7 +45,7 @@ obfuscated and does not expose a supported plugin API.
 The shared stable core performs the following high-level work:
 
 1. installs activity lifecycle and file-picker result hooks;
-2. records the current host activity and displays the first-run disclosure;
+2. records the current host activity and displays the short first-use note;
 3. hooks completion request construction for optional prompt injection;
 4. hooks online history construction and the version-matched history repository
    so injected prompt wrappers are removed before rendering or persistence;
@@ -75,11 +75,40 @@ surface for:
 - expert controls;
 - chat editing;
 - data export, search, statistics, and backup;
-- help and risk information.
+- help and practical usage information.
+
+The optional chat-appearance renderer follows the same host-version-resistant
+boundary. It attaches a touch-transparent `FrameLayout` to the activity content
+root and tracks the navigation destination. Chat and settings routes keep
+stickers visible, while three persisted bindings independently select the
+wallpaper for chat, sidebar, and settings.
+
+For Google Play 236, `ds5.w` exposes the sidebar host `so2`; its `uo2` drawer
+state provides the exact animated offset through `uo2.c()`. Closed/Open anchors
+come from `uo2.c -> ya.b() -> fc2.d(vo2)`, while `c71.u()` identifies the real
+toggle action without forcing an endpoint. Only live drawer frames update the
+motion target. A one-pole frame follower then closes part of the remaining
+distance each frame, so the wallpaper starts quickly, continuously slows, and
+settles slightly after the native surface. This also covers closing, swipe
+gestures, interrupted transitions, and reversals without the earlier
+click-endpoint race. Navigation route changes drive the same follower for
+settings and return.
+
+Motion can be derived from one common amount or three signed per-screen
+offsets. A rotation-aware overscanned canvas prevents exposed edges and
+corners. Crop-to-fill uses persisted normalized horizontal/vertical focus in an
+explicit image matrix, allowing the import-time nine-position chooser and
+continuous editor controls to select which region survives the crop. Optional
+depth processing scales, softens, and desaturates only the wallpaper bitmap; it
+does not modify the host Compose hierarchy. Images are sampled to the current
+window size rather than decoded at original resolution. Sticker positions and
+sizes are normalized, while editing happens in an isolated interactive preview
+so the live overlay never consumes chat gestures.
 
 The discontinued test editions' direct Compose and host long-press menu
-experiments are not part of 1.7.1 release support. Maintained risky features
-are exposed through the stable builds' gated Experimental Features page.
+experiments are not part of 1.7.1 release support. Maintained optional tools
+are exposed through the stable builds' Experimental Features page and stay off
+by default.
 
 ## DeepSeek Local API Gateway Path
 

@@ -12,16 +12,37 @@ release and must not be assumed compatible with a later Play Store update.
 - Minimum SDK: `32`
 - Source APKS SHA-256:
   `f9a3f7c313c39a4e825f996b2bd562a408f318c5d7a8e480cf2e6883e44399b3`
-- Current module build: `1.7.2` (`versionCode 36`)
+- Current module build: `1.7.3` (`versionCode 37`)
 
 No DeepSeek APK, account material, device log, or decompiled source is included
 in this repository.
 
-## Restored and verified
+## Feature-parity audit
 
-| Area | `1.7.2` evidence |
+The Google Play source now carries the same maintained feature set as the
+mainland development tree. Host-facing hooks still use Play 236's own R8
+symbols; source equality alone is not treated as a mapping proof.
+
+| Area | Google Play 236 status |
 |---|---|
-| Settings and Experimental Features | Native entry loads; first-entry disclaimer and nested pages render. |
+| Settings, launcher activation and language | Synchronized. The launcher heartbeat fallback, target verification, Chinese/English catalog and nested settings pages pass local regressions. |
+| Prompt import and system-prompt injection | Synchronized and mapped to `tx0`. Imported prompt state remains independent of other settings. |
+| Accounts and regional login | Account add/switch/remove/import/export, strict server validation, Google login restoration, and WeChat/mobile restoration are synchronized. |
+| Chat data tools | Editor, local conversation persistence, gallery images, native navigation/deletion, search, Markdown export, statistics and backup are synchronized. |
+| Response preservation | Clear-response, content-filter, status, final merge/apply, online history and cold-history protection use the Play mappings. |
+| Expert mode and image relay | Expert features, native upload, temporary vision description, prompt rewrite and image-metadata restoration are synchronized. |
+| Local API and public tunnels | OpenAI Chat/Responses, Anthropic Messages, tool loops, background keeper, Binder bridge, JSch/Pinggy and the arm64 cloudflared backend are synchronized. |
+| Chat appearance | Wallpaper, stickers, crop/focus/rotation/depth, bubble/input styling, liquid-glass renderer, route glide and shake parallax are synchronized. |
+| AI proactive messages | Interval control, chat binding, one-time tasks, cancellation tools, inherited deep-thinking state, same-chat native streaming, folded hidden transport turns, notifications and notification-to-chat navigation are synchronized. |
+
+The only intentional channel exception is the private bundled-prompt payload:
+it is not packaged, provisioned or exposed by the Google Play build.
+
+## Restored and device-verified before the 1.7.3 parity pass
+
+| Area | Evidence |
+|---|---|
+| Settings and Experimental Features | Native entry loads; the short first-entry usage note and nested pages render. |
 | Expert mode | Expert selection is accepted by the native composer and the expert request path completes. |
 | Image upload and expert relay | Native picker, upload, temporary vision session, streamed description extraction, expert prompt rewrite, and local image-metadata restoration were exercised on-device. |
 | Response overwrite protection | Play mappings for clear-response, content-filter patch, status write, final merge, final apply, online history, and cold local history are installed. A real clear-response event was blocked; cold-history behavior is covered by regression tests. |
@@ -49,11 +70,33 @@ is why visible controls could appear while their behavior remained inert.
 | Expert config / file feature / upload gate | `sf5` / `gf5` / `y91` | `eh5` / `sg5` / `mb1` |
 | Session / message / online history | `tp` / `uo` / `pw0` | `vp` / `xo` / `ey0` |
 | Clear response / response model / patch decoder | `kb7` / `mv` / `mv.i` | `df7` / `ov` / `ov.k` |
+| Sidebar composable / host / drawer state | `mq5.i` / `zm2` / `bn2` | `ds5.w` / `so2` / `uo2` |
+| Sidebar click / drawer value / anchors | `n51` / `cn2` / `na2` | `c71` / `vo2` / `fc2` |
+| Chat route / settings route | `c81` / `vc7` | `r91` / `og7` |
+| Active chat ViewModel / session / message / outcome | `za1` / `tp` / `uo` / `bu0` | `nc1` / `vp` / `xo` / `qv0` |
+| Empty attachments / idle generation state | `uo7.i()` / `gp` | `ms7.k()` / `ip` |
+| History request / parser context / continuation | `lj9` / `pl9` / `uz1` | `sn9` / `o6` / `j12` |
+| History repository / metadata / codec | `gm8` / `am8` / `x94` | `mq8` / `gq8` / `cc4` |
+| Live response/think fragments | `fo2.g/i` / `ho2.g/i` | `yp2.h/k` / `aq2.h/k` |
+| Static response/think fragments | `at7` / `ht7` | `vw7` / `cx7` |
 
 The coroutine-suspended mapping is particularly important: using the mainland
 sentinel made the API collector declare an asynchronous native Flow complete
 before its first event and return `502 empty_completion` even though DeepSeek
 was still generating.
+
+## Current local verification
+
+The `1.7.3` APK builds successfully with `GOOGLE_PLAY=true`. The complete JVM
+regression suite passes, including the Play appearance mapping and proactive
+message protocol/history-folding tests. The heartbeat and native-history
+reflection shapes were also checked directly against the cached JADX output for
+the exact Play 236 APK.
+
+The currently installed DeepSeek host on this device is mainland `233`, so the
+Play APK was not installed over it. Appearance and proactive same-chat streaming
+still require an end-to-end acceptance pass on an actual Play 236 host before
+they can be promoted from mapping-verified to device-verified.
 
 ## Remaining caveats
 
@@ -61,8 +104,8 @@ was still generating.
   exact target above was inspected.
 - Server-side availability, rate limits, account policy, and content the server
   never sends cannot be changed by client hooks.
-- Account import, chat editing, multi-select, prompt injection, and login hooks
-  have mapped code paths and regression coverage, but they have not all received
-  the same end-to-end UI pass as expert upload and the local API.
-- Back up important chats before enabling experimental database or account
-  features, and do not test with an irreplaceable account or device state.
+- A source/regression/mapping pass cannot replace a real Play-host UI and
+  background-alarm acceptance pass. Keep the exact-host distinction visible in
+  release notes.
+- Back up important chats before enabling optional database or account tools,
+  and enable only the feature you currently need.

@@ -25,8 +25,8 @@ contain the same stable and opt-in experimental functionality:
 - regional native-login restoration controls;
 - OpenAI Chat/Responses and Anthropic Messages local gateway;
 - Codex and Claude Code tool-result loops and conversation isolation;
-- the gated **Experimental Features** page, five-second first-entry disclosure
-  and separate experimental help.
+- the optional **Experimental Features** page, short one-time usage note and
+  separate experimental help.
 
 Features in the Experimental Features page remain off by default and are not a
 stability guarantee. See [Experimental Features](EXPERIMENTAL_FEATURES.md).

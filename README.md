@@ -1,22 +1,19 @@
 # Deekseep
 
-[![Build stable releases](https://github.com/haoyangtu09-art/Deekseep/actions/workflows/build.yml/badge.svg)](https://github.com/haoyangtu09-art/Deekseep/actions/workflows/build.yml)
+[![Build stable releases](https://github.com/lllucccian/Deekseep/actions/workflows/build.yml/badge.svg)](https://github.com/lllucccian/Deekseep/actions/workflows/build.yml)
 [![libxposed API 102](https://img.shields.io/badge/libxposed-API%20102-2f6feb)](https://github.com/libxposed/api)
 [![Android 7+](https://img.shields.io/badge/Android-7.0%2B-3ddc84)](https://developer.android.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> [!WARNING]
-> **Google Play 实验分支 / Experimental Google Play branch**
+> [!NOTE]
+> **Google Play 2.2.2 branch**
 >
 > 此 `google-play` 分支只针对 **Google Play DeepSeek 2.2.2
-> (`versionCode 236`)**。当前实机测试包为 **`1.7.2`**，已恢复专家模式、
-> 图片上传/视觉中继、响应覆盖保护，以及 OpenAI/Anthropic 本地 API。它仍是按精确
-> APK 混淆表适配的实验版本；使用前请备份聊天和账号数据。
+> (`versionCode 236`)**。请使用明确标注为 Google Play 的模块包；聊天或账号重要操作前建议先备份。
 >
 > This branch targets only **Google Play DeepSeek 2.2.2 (`versionCode 236`)**.
-> Device build **`1.7.2`** restores expert mode, image upload/vision
-> relay, response-preservation guards, and the OpenAI/Anthropic local API. It is
-> still an exact-APK experimental port; back up chat and account data first.
+> Use the module APK explicitly labelled for Google Play, and back up before
+> important chat or account changes.
 
 Deekseep is an unofficial Xposed module toolkit for the DeepSeek Android client.
 It provides a stable native settings entry, prompt injection, response-preservation
@@ -26,16 +23,9 @@ local/LAN OpenAI/Anthropic gateway for local SDKs, Codex, and Claude Code. This
 branch currently produces only the modern libxposed API 102 Google Play build;
 the traditional-Xposed directories remain mainland reference code.
 
-> [!CAUTION]
-> **UNOFFICIAL SOFTWARE - READ BEFORE INSTALLING**
->
-> This project is not affiliated with, endorsed by, or supported by DeepSeek,
-> High-Flyer, LSPosed, or the Xposed project. It modifies a third-party app at
-> runtime and directly accesses local chat databases. It may stop working after
-> an app update, cause data loss, conflict with service terms, trigger account
-> restrictions, or weaken safeguards expected by the original client. Back up
-> your data, use only on accounts and devices you control, and accept all risk.
-> See the full [Disclaimer](DISCLAIMER.md).
+Deekseep is an independent project rather than an official DeepSeek feature.
+Match the APK to the documented host build and keep exports, API keys, and logs
+private. See the concise [project notice](DISCLAIMER.md).
 
 ## Google Play build
 
@@ -44,8 +34,8 @@ interface under [`module/`](module/). Download the explicitly labelled Google
 Play asset from the unified `v1.7.2` release; its mainland assets use a separate
 symbol map and are not interchangeable with this build.
 
-The Google Play port retains the gated **Experimental Features** page, its
-five-second first-entry disclosure, and separate help. Modern and legacy APKs
+The Google Play port retains the optional **Experimental Features** page, its
+short one-time usage note, and separate help. Modern and legacy APKs
 share one package ID but may use different signing keys, so Android may require
 uninstalling the old interface variant before switching.
 
@@ -59,6 +49,12 @@ uninstalling the old interface variant before switching.
 - Local chat editor for titles, user messages, assistant responses, and reasoning
   fragments, including creation of a missing reasoning chain and a custom
   `elapsed_secs` duration.
+- Current source builds can import chat wallpaper and up to 12 stickers. The
+  wallpaper supports crop focus, rotation, opacity, background-only depth,
+  per-screen binding, and unified or independent chat/sidebar/settings
+  offsets. Google Play 236's live drawer state drives the rightward sidebar
+  motion and its complete return; a frame follower makes the wallpaper settle
+  slightly after the native surface instead of moving in lockstep.
 - Automatic repair for malformed reasoning fragments in every complete build.
 - Search across user input, model output, and deep-reasoning text. A result opens
   the matching conversation in DeepSeek's native chat screen.
@@ -80,12 +76,14 @@ uninstalling the old interface variant before switching.
   Chat/Responses/Messages SSE, deep-thinking parameters, Codex/Claude Code Agent tool
   loops, HTTP heartbeat and adaptive rate-limit recovery, a module foreground keeper
   for Cached Apps Freezer, one fair account-wide native generation lane with Agent
-  priority and client-session isolation, and live request diagnostics.
+  priority and client-session isolation, and live request diagnostics. Its advanced
+  page can pin a stable listener port and connect one or more existing custom
+  hostnames through a user-owned Cloudflare Tunnel connector token.
 - Opt-in protocol diagnostics and module activation diagnostics.
-- First-run in-app risk disclosure.
+- Friendly one-time first-use note.
 
 See the [stable interface guide](docs/VARIANTS.md) and dedicated
-[Experimental Features](docs/EXPERIMENTAL_FEATURES.md) safety notes.
+[Experimental Features](docs/EXPERIMENTAL_FEATURES.md) usage notes.
 
 ## Compatibility
 
@@ -98,6 +96,9 @@ See the [stable interface guide](docs/VARIANTS.md) and dedicated
   Responses tool loop.
 - Other mapped features retain regression coverage but have not all received
   the same exhaustive UI acceptance pass; treat the branch as experimental.
+- The current chat-appearance port is source-, mapping-, build-, and regression-
+  verified for Google Play 236. It still needs an on-device visual acceptance
+  pass with the Play host before being described as device-verified.
 - For the maintained mainland-China build, use the `main` branch and stable
   release instead.
 - Module minimum Android version: Android 7.0 / API 24.
@@ -121,7 +122,7 @@ permanent guarantee.
 5. Select `com.deepseek.chat` in scope. Modern libxposed does not require or
    support self-hooking the module application.
 6. Force-stop and restart DeepSeek.
-7. Accept the first-run risk disclosure.
+7. Read the short first-use note and select **Got it**.
 8. Open DeepSeek Settings and select the injected **Deekseep** entry.
 
 FPA packaging, signature switching, activation checks, and recovery steps are
@@ -192,7 +193,10 @@ those logs can contain complete prompts and model output. Do not publish logs or
 database backups without reviewing and redacting them. The private connection
 file and its optional shared-storage compatibility copy contain the complete
 Gateway Key and must be treated as credentials; diagnostic logs and runtime
-status JSON deliberately record only whether a key is configured.
+status JSON deliberately record only whether a key is configured. A saved
+Cloudflare connector token is encrypted with Android Keystore in the module app;
+the temporary plaintext token file is private to that app and removed when the
+connector stops.
 
 The response-preservation option only prevents a client-side replacement of text
 that has already reached the device. It does not provide access to content the

@@ -2,6 +2,8 @@ package com.dsmod.probe;
 
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,15 +36,18 @@ abstract class LegacyXposedModule {
         private final List<Hooker> hookers;
         private final int nextHooker;
         private final Object[] args;
+        private final Object[] originalArgs;
         private boolean proceeded;
 
         Chain(Member executable, XC_MethodHook.MethodHookParam param,
-              List<Hooker> hookers, int nextHooker, Object[] args) {
+              List<Hooker> hookers, int nextHooker, Object[] args,
+              Object[] originalArgs) {
             this.executable = executable;
             this.param = param;
             this.hookers = hookers;
             this.nextHooker = nextHooker;
             this.args = args == null ? new Object[0] : args;
+            this.originalArgs = originalArgs == null ? new Object[0] : originalArgs;
         }
 
         Object getThisObject() { return param.thisObject; }
@@ -63,14 +68,72 @@ abstract class LegacyXposedModule {
             Object[] actual = args == null ? new Object[0] : args;
             if (nextHooker < hookers.size()) {
                 return hookers.get(nextHooker).intercept(new Chain(
-                        executable, param, hookers, nextHooker + 1, actual));
+                        executable, param, hookers, nextHooker + 1, actual, originalArgs));
             }
             // Keep MethodHookParam consistent for traditional after callbacks registered by
             // other modules. invokeOriginalMethod bypasses hook dispatch but uses these exact
             // arguments and thisObject, including for constructors.
-            param.args = actual;
-            return XposedBridge.invokeOriginalMethod(
-                    executable, param.thisObject, actual);
+            Object[] invokeArgs = actual;
+            if (!argumentsCompatible(executable, actual)
+                    && argumentsCompatible(executable, originalArgs)) {
+                XposedBridge.log("Deekseep universal: rejected incompatible replacement for "
+                        + executable + " actual=" + argumentTypes(actual)
+                        + " original=" + argumentTypes(originalArgs));
+                invokeArgs = originalArgs.clone();
+            }
+            param.args = invokeArgs;
+            try {
+                return XposedBridge.invokeOriginalMethod(
+                        executable, param.thisObject, invokeArgs);
+            } catch (InvocationTargetException wrapped) {
+                Throwable cause = wrapped.getCause();
+                if (cause != null) throw cause;
+                throw wrapped;
+            }
+        }
+
+        private static boolean argumentsCompatible(Member member, Object[] values) {
+            Class<?>[] types;
+            if (member instanceof Method) {
+                types = ((Method) member).getParameterTypes();
+            } else if (member instanceof Constructor) {
+                types = ((Constructor<?>) member).getParameterTypes();
+            } else {
+                return true;
+            }
+            if (values == null || types.length != values.length) return false;
+            for (int i = 0; i < types.length; i++) {
+                Object value = values[i];
+                if (value == null) {
+                    if (types[i].isPrimitive()) return false;
+                    continue;
+                }
+                if (!boxed(types[i]).isInstance(value)) return false;
+            }
+            return true;
+        }
+
+        private static Class<?> boxed(Class<?> type) {
+            if (!type.isPrimitive()) return type;
+            if (type == boolean.class) return Boolean.class;
+            if (type == byte.class) return Byte.class;
+            if (type == char.class) return Character.class;
+            if (type == short.class) return Short.class;
+            if (type == int.class) return Integer.class;
+            if (type == long.class) return Long.class;
+            if (type == float.class) return Float.class;
+            if (type == double.class) return Double.class;
+            return Void.class;
+        }
+
+        private static String argumentTypes(Object[] values) {
+            if (values == null) return "null";
+            StringBuilder out = new StringBuilder("[");
+            for (int i = 0; i < values.length; i++) {
+                if (i > 0) out.append(',');
+                out.append(values[i] == null ? "null" : values[i].getClass().getName());
+            }
+            return out.append(']').toString();
         }
     }
 
@@ -95,7 +158,10 @@ abstract class LegacyXposedModule {
                         try {
                             List<Hooker> snapshot = Arrays.asList(
                                     hookers.toArray(new Hooker[hookers.size()]));
-                            Chain chain = new Chain(member, param, snapshot, 0, param.args);
+                            Object[] original = param.args == null
+                                    ? new Object[0] : param.args.clone();
+                            Chain chain = new Chain(
+                                    member, param, snapshot, 0, param.args, original);
                             param.setResult(chain.proceed());
                         } catch (Throwable error) {
                             param.setThrowable(error);

@@ -75,6 +75,33 @@ prefixes are removed in one pass, using the injector's exact byte-zero wrapper
 format so indented user-authored XML is preserved. Force-stop and restart
 DeepSeek after updating the module so the new history hooks are installed.
 
+## Chat Wallpaper or Stickers Do Not Appear
+
+- Open **Deekseep → Chat appearance** and confirm the master switch is enabled.
+- Return to an actual DeepSeek chat or settings page. Stickers remain on both;
+  the wallpaper appears only on screens selected under **Advanced**. Sign-in,
+  table preview, and unrelated routes hide the overlay.
+- If the wallpaper does not move, confirm **Dynamic wallpaper motion** is on
+  and its amount is above 0%. Leave **Set offsets per screen** off for one
+  unified control, or turn it on for signed Chat, Sidebar, and Settings
+  offsets.
+- If a landscape crop preserves the wrong area, choose one of the nine focus
+  positions after import or adjust **Horizontal focus** and **Vertical focus**.
+- **Wallpaper depth** processes only the image; it does not modify DeepSeek's
+  native cards or controls.
+- Reimport an image if Android's picker returned an unreadable or oversized
+  file. Imports are limited to 32 MB and must decode as an image.
+- Fully restart DeepSeek after replacing the module APK so the activity,
+  navigation, and Google Play 236 drawer hooks all come from the same build.
+
+On the exact Play target, the log should report one installed `ds5.w` hook, one
+`uo2.c` live-offset hook, and one `c71.u` appearance click hook. The wallpaper
+is intentionally expected to arrive slightly after the native drawer. Repeated
+per-frame diagnostic logging is not used. If the image still moves in lockstep,
+snaps on return, or moves in the wrong direction, collect only the first
+redacted hook-install lines and verify the host is version code `236`.
+Imported copies and configuration live under `files/deekseep_appearance`.
+
 ## The Chat Editor Says a Conversation Has No Local Messages
 
 DeepSeek may keep a cloud conversation in memory without creating its dynamic
@@ -198,6 +225,35 @@ The OpenAI and Anthropic formats have different SSE contracts and are intentiona
 mutually exclusive. Select OpenAI for `/v1/chat/completions`, `/v1/responses` and
 Codex; select Anthropic for `/v1/messages` and Claude Code. OpenAI's base URL ends
 in `/v1`; Anthropic's base URL does not.
+
+## The Cloudflare Custom Domain Stays on Connecting
+
+Open **Local API → Advanced settings** and first confirm that the fixed local
+port matches the `localhost` service configured in the Cloudflare published
+application route. The app runs a remotely managed connector; the hostname,
+DNS record, and hostname-to-service route must already exist in the same
+Cloudflare tunnel. Saving a domain in the app is only for display and copying.
+
+Start with **Auto** transport. If the log reports QUIC or UDP 7844 failures, try
+**HTTP/2**. If HTTP/2 also reports TCP 7844, TLS handshake, or `EOF` failures,
+the current carrier, Wi-Fi, VPN, firewall, or router is blocking the connector's
+outbound edge connection. Change networks or permit outbound TCP/UDP 7844; the
+app cannot bypass that network policy.
+
+For token or route errors:
+
+- copy the tunnel's connector token again, not a broad Cloudflare account API
+  token;
+- verify the tunnel and published hostname show as active in Cloudflare;
+- configure the route service as `http://localhost:<the fixed port shown by the
+  app>`;
+- avoid a browser-interactive Cloudflare Access login policy on an API hostname
+  unless the API client can supply the required service credentials.
+
+The advanced page shows a redacted tail of
+`deekseep_cloudflared.log`. A route that works in a browser but fails in a client
+may instead be using the wrong base URL: append `/v1` for OpenAI clients, but not
+for Anthropic clients.
 
 ## Claude Code Stays at Zero Tokens or Prints Tool Tags
 

@@ -13,7 +13,7 @@ data, arbitrary files, credentials, signed URLs, or unsafe cross-process access.
 
 Use GitHub's private security advisory form:
 
-https://github.com/haoyangtu09-art/Deekseep/security/advisories/new
+https://github.com/lllucccian/Deekseep/security/advisories/new
 
 Include:
 

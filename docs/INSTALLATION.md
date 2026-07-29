@@ -27,8 +27,8 @@ deekseep-stable-legacy-v1.7.1.apk
 ```
 
 The former modern and legacy test editions are discontinued in 1.7.1 and are
-not release downloads. Maintained high-risk functions now live behind the
-dedicated **Experimental Features** page in both stable builds.
+not release downloads. Maintained optional tools now live on the dedicated
+**Experimental Features** page in both stable builds and remain off by default.
 
 See [Build Variants](VARIANTS.md) for the full comparison.
 
@@ -42,7 +42,7 @@ See [Build Variants](VARIANTS.md) for the full comparison.
    itself for activation detection; modern libxposed does not self-hook module
    applications.
 5. Force-stop DeepSeek.
-6. Start DeepSeek and accept the first-run disclosure.
+6. Start DeepSeek, read the short first-use note, and select **Got it**.
 7. Open DeepSeek Settings. The Deekseep entry should appear on the settings
    screen.
 

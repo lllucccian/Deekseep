@@ -2,6 +2,38 @@
 
 All notable public releases are documented here.
 
+## Unreleased (local only)
+
+- Advanced the Google Play module to **1.7.3** (`versionCode 37`) and completed a
+  mainland-versus-Play feature audit. All maintained features are synchronized
+  except the intentionally excluded private bundled-prompt payload.
+- Added AI proactive messages with configurable intervals, per-chat binding,
+  one-time scheduling and cancellation tools, inherited deep-thinking state,
+  native same-chat streaming, history folding, notifications and notification
+  navigation. The runtime path is mapped to Play 236's
+  `nc1/vp/xo/qv0`, `sn9/o6/j12`, `mq8/gq8/cc4` and
+  `yp2/aq2/vw7/cx7` symbols.
+- Synchronized current activation verification, prompt-state UI, editor/history
+  fixes, liquid-glass behavior, shake parallax, route animation, public-tunnel
+  controls and the complete language catalog.
+- Added notification/alarm/boot permissions and the proactive receiver. The
+  full JVM suite and direct JADX signature audit pass for the exact Play 236
+  target.
+- Reduced the local APK from four cloudflared ABIs to the arm64 payload used by
+  the target device; unrelated x86, x86_64 and armeabi-v7a binaries are no
+  longer packaged.
+- Synchronized the complete chat-wallpaper and multi-sticker editor to the
+  Google Play 2.2.2 (`236`) source without publishing a release.
+- Added crop focus, rotation, opacity, background-only depth, advanced screen
+  binding, and unified or per-screen chat/sidebar/settings offsets.
+- Mapped the live drawer chain as `ds5.w -> so2.a -> uo2.c()`, with
+  `c71.u()` identification and `vo2`/`fc2` anchors. Live frames exclusively
+  drive a delayed ease-out follower, so opening and closing move in the correct
+  direction and the wallpaper settles after the native surface.
+- Added route aliases, English catalog coverage, configuration regressions, and
+  Google Play-specific documentation. This local port remains pending an
+  on-device Play-host visual acceptance pass.
+
 ## 1.7.2 - 2026-07-22
 
 ### Google Play 2.2.2 port

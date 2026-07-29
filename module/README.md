@@ -1,19 +1,21 @@
-# Google Play API 102
+# Google Play module
 
 This directory builds the Google Play DeepSeek 2.2.2 (`versionCode 236`) port
 for a current LSPosed installation.
 
-Current release: **1.7.2**.
+Current local build: **1.7.3**.
 
 - Package: `com.dsmod.probe`
 - Interface: libxposed API 102
 - Metadata: `META-INF/xposed/`
-- Output: `ds-probe.apk`
-- Public asset: `deekseep-google-play-2.2.2-v1.7.2.apk`
+- Output: `ds-probe-google-play.apk`
 
 It contains the broadest maintained stable feature set, including the advanced
 chat editor with live refresh, persistent blank local conversations, direct
 user/AI row appending, gallery image persistence and existing-image reuse,
+the current-source chat wallpaper and multi-sticker editor with crop focus,
+background-only depth, screen binding, and delayed curved unified/per-screen
+sidebar/settings motion mapped for Google Play 236,
 1.7.1 reasoning creation, repair and duration support,
 reasoning-aware native chat search, local data tools, sidebar multi-select, and
 the current expert image relay port. It also includes independent opt-in switches
@@ -21,6 +23,10 @@ that restore DeepSeek's own Google Credential Manager entry on the mainland
 login screen, or restore the native WeChat and SMS/mobile entries together on
 an overseas login screen. Modern activation uses the official Xposed service
 provider and a separately UID-validated heartbeat from the DeepSeek process.
+It also includes chat-bound AI proactive messages with configurable intervals,
+one-time tasks, cancellation, inherited deep-thinking state, native same-chat
+streaming and system notifications. The Google Play package intentionally does
+not include the private bundled-prompt payload.
 
 This build additionally contains the local API gateway under a gated
 Experimental Features subpage alongside expert image relay. First entry requires a
