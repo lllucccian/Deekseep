@@ -8,8 +8,10 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
 
 /**
@@ -31,6 +33,11 @@ final class HeartbeatToolProtocol {
     static final String TOOL_SET_INTERVAL = "set_interval";
     static final String TOOL_BIND_CHAT = "bind_chat";
     static final String TOOL_CANCEL_HEARTBEAT = "cancel_heartbeat";
+    static final String TOOL_GET_CURRENT_TIME = "get_current_time";
+    static final String TOOL_CAPTURE_SCREEN = "capture_screen";
+    static final String TOOL_TAP_SCREEN = "tap_screen";
+    static final String TOOL_SWIPE_SCREEN = "swipe_screen";
+    static final String TOOL_PRESS_BACK = "press_back";
 
     // Invisible presentation marker consumed by the host Compose text hook. It keeps tool status
     // styling separate from model-authored Markdown and remains visually harmless if a future
@@ -50,8 +57,11 @@ final class HeartbeatToolProtocol {
     private static final int MAX_CALLS_PER_BLOCK = 8;
     private static final int MAX_INSTRUCTION = 1200;
     private static final int MAX_REGISTERED_TOOL_STATUSES = 32;
+    private static final int MAX_TRACKED_CALL_TIMES = 128;
     private static final ArrayList<String> REGISTERED_TOOL_STATUSES =
             new ArrayList<>();
+    private static final LinkedHashMap<String, Long> TRACKED_CALL_TIMES =
+            new LinkedHashMap<>();
 
     private HeartbeatToolProtocol() {}
 
@@ -64,9 +74,22 @@ final class HeartbeatToolProtocol {
         final int minutes;
         final String mode;
         final String targetId;
+        final int x;
+        final int y;
+        final int toX;
+        final int toY;
+        final int durationMs;
+        final long invokedAt;
 
         ToolCall(String id, String tool, String scope, String at,
                  String instruction, int minutes, String mode, String targetId) {
+            this(id, tool, scope, at, instruction, minutes, mode, targetId,
+                    -1, -1, -1, -1, 0);
+        }
+
+        ToolCall(String id, String tool, String scope, String at,
+                 String instruction, int minutes, String mode, String targetId,
+                 int x, int y, int toX, int toY, int durationMs) {
             this.id = id;
             this.tool = tool;
             this.scope = scope;
@@ -75,6 +98,12 @@ final class HeartbeatToolProtocol {
             this.minutes = minutes;
             this.mode = mode;
             this.targetId = targetId;
+            this.x = x;
+            this.y = y;
+            this.toX = toX;
+            this.toY = toY;
+            this.durationMs = durationMs;
+            this.invokedAt = stableInvocationTime(scope, id, tool);
         }
     }
 
@@ -216,7 +245,17 @@ final class HeartbeatToolProtocol {
         if (!hasToolStatusStyleMarker(value)
                 && value.indexOf("\u5fc3\u8df3") < 0
                 && value.indexOf("heartbeat") < 0
-                && value.indexOf("Heartbeat") < 0) {
+                && value.indexOf("Heartbeat") < 0
+                && value.indexOf("\u5f53\u524d\u65f6\u95f4") < 0
+                && value.indexOf("Current time") < 0
+                && value.indexOf("\u622a\u56fe") < 0
+                && value.indexOf("screen") < 0
+                && value.indexOf("\u70b9\u51fb") < 0
+                && value.indexOf("Tap") < 0
+                && value.indexOf("\u6ed1\u52a8") < 0
+                && value.indexOf("Swipe") < 0
+                && value.indexOf("\u8fd4\u56de") < 0
+                && value.indexOf("Back") < 0) {
             return false;
         }
         String clean = stripToolStatusStyleMarkers(value);
@@ -254,40 +293,89 @@ final class HeartbeatToolProtocol {
     }
 
     private static String toolStatusText(ToolCall call, boolean chinese) {
-        if (call == null) return chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
+        String status;
+        if (call == null) {
+            status = chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
+            return statusClock(System.currentTimeMillis()) + "  " + status;
+        }
         if (TOOL_SCHEDULE_ONCE.equals(call.tool)) {
-            return joinStatus(
-                    chinese ? "\u8bbe\u7f6e\u5fc3\u8df3" : "Set heartbeat",
-                    friendlyToolTime(call.at, chinese), chinese);
-        }
-        if (TOOL_SET_PLAN.equals(call.tool)) {
-            return chinese ? "\u66f4\u65b0\u5fc3\u8df3\u7ea6\u5b9a" : "Update heartbeat plan";
-        }
-        if (TOOL_CLEAR_PLAN.equals(call.tool)) {
-            return chinese ? "\u6e05\u9664\u5fc3\u8df3\u7ea6\u5b9a" : "Clear heartbeat plan";
-        }
-        if (TOOL_SET_INTERVAL.equals(call.tool)) {
+            status = (chinese ? "\u8bbe\u7f6e\u5fc3\u8df3" : "Set heartbeat")
+                    + " to " + friendlyToolTime(call.at, chinese);
+        } else if (TOOL_SET_PLAN.equals(call.tool)) {
+            status = chinese ? "\u66f4\u65b0\u5fc3\u8df3\u7ea6\u5b9a" : "Update heartbeat plan";
+        } else if (TOOL_CLEAR_PLAN.equals(call.tool)) {
+            status = chinese ? "\u6e05\u9664\u5fc3\u8df3\u7ea6\u5b9a" : "Clear heartbeat plan";
+        } else if (TOOL_SET_INTERVAL.equals(call.tool)) {
             String interval = call.minutes > 0
                     ? (chinese ? "\u6bcf" + call.minutes + "\u5206\u949f"
                     : "Every " + call.minutes
                     + (call.minutes == 1 ? " minute" : " minutes"))
                     : "";
-            return joinStatus(
-                    chinese ? "\u8bbe\u7f6e\u5fc3\u8df3" : "Set heartbeat",
-                    interval, chinese);
-        }
-        if (TOOL_BIND_CHAT.equals(call.tool)) {
-            return joinStatus(
+            status = (chinese ? "\u8bbe\u7f6e\u5fc3\u8df3" : "Set heartbeat")
+                    + " to " + interval;
+        } else if (TOOL_BIND_CHAT.equals(call.tool)) {
+            status = joinStatus(
                     chinese ? "\u7ed1\u5b9a\u5fc3\u8df3" : "Bind heartbeat",
                     chinese ? "\u5f53\u524d\u5bf9\u8bdd" : "Current chat",
                     chinese);
-        }
-        if (TOOL_CANCEL_HEARTBEAT.equals(call.tool)) {
-            return joinStatus(
+        } else if (TOOL_CANCEL_HEARTBEAT.equals(call.tool)) {
+            status = joinStatus(
                     chinese ? "\u53d6\u6d88\u5fc3\u8df3" : "Cancel heartbeat",
                     cancelDetail(call, chinese), chinese);
+        } else if (TOOL_GET_CURRENT_TIME.equals(call.tool)) {
+            status = joinStatus(
+                    chinese ? "\u83b7\u53d6\u5f53\u524d\u65f6\u95f4" : "Get current time",
+                    fullStatusTime(call.invokedAt), chinese);
+        } else if (TOOL_CAPTURE_SCREEN.equals(call.tool)) {
+            status = chinese ? "\u83b7\u53d6\u622a\u56fe" : "Capture screen";
+        } else if (TOOL_TAP_SCREEN.equals(call.tool)) {
+            status = joinStatus(
+                    chinese ? "\u70b9\u51fb\u5c4f\u5e55" : "Tap screen",
+                    "x=" + call.x + ", y=" + call.y, chinese);
+        } else if (TOOL_SWIPE_SCREEN.equals(call.tool)) {
+            status = joinStatus(
+                    chinese ? "\u6ed1\u52a8\u5c4f\u5e55" : "Swipe screen",
+                    "(" + call.x + "," + call.y + ") \u2192 ("
+                            + call.toX + "," + call.toY + ")", chinese);
+        } else if (TOOL_PRESS_BACK.equals(call.tool)) {
+            status = chinese ? "\u8fd4\u56de\u4e0a\u4e00\u5c42" : "Back";
+        } else {
+            status = chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
         }
-        return chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
+        return statusClock(call.invokedAt) + "  " + status;
+    }
+
+    private static String statusClock(long value) {
+        SimpleDateFormat format = new SimpleDateFormat("HH:mm:ss", Locale.US);
+        format.setTimeZone(TimeZone.getDefault());
+        return format.format(new Date(value));
+    }
+
+    private static String fullStatusTime(long value) {
+        SimpleDateFormat format = new SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss", Locale.US);
+        format.setTimeZone(TimeZone.getDefault());
+        return format.format(new Date(value));
+    }
+
+    private static long stableInvocationTime(
+            String scope, String id, String tool) {
+        String key = String.valueOf(scope) + "|" + String.valueOf(id)
+                + "|" + String.valueOf(tool);
+        synchronized (TRACKED_CALL_TIMES) {
+            Long existing = TRACKED_CALL_TIMES.get(key);
+            if (existing != null) return existing.longValue();
+            long now = System.currentTimeMillis();
+            TRACKED_CALL_TIMES.put(key, Long.valueOf(now));
+            while (TRACKED_CALL_TIMES.size() > MAX_TRACKED_CALL_TIMES) {
+                java.util.Iterator<Map.Entry<String, Long>> iterator =
+                        TRACKED_CALL_TIMES.entrySet().iterator();
+                if (!iterator.hasNext()) break;
+                iterator.next();
+                iterator.remove();
+            }
+            return now;
+        }
     }
 
     private static String joinStatus(String label, String detail, boolean chinese) {
@@ -370,7 +458,12 @@ final class HeartbeatToolProtocol {
                 && !TOOL_CLEAR_PLAN.equals(tool)
                 && !TOOL_SET_INTERVAL.equals(tool)
                 && !TOOL_BIND_CHAT.equals(tool)
-                && !TOOL_CANCEL_HEARTBEAT.equals(tool)) return null;
+                && !TOOL_CANCEL_HEARTBEAT.equals(tool)
+                && !TOOL_GET_CURRENT_TIME.equals(tool)
+                && !TOOL_CAPTURE_SCREEN.equals(tool)
+                && !TOOL_TAP_SCREEN.equals(tool)
+                && !TOOL_SWIPE_SCREEN.equals(tool)
+                && !TOOL_PRESS_BACK.equals(tool)) return null;
         String id = cleanId(call.optString("id", ""));
         if (id.length() == 0) {
             id = "auto_" + Integer.toHexString(call.toString().hashCode());
@@ -401,7 +494,30 @@ final class HeartbeatToolProtocol {
             if ("once".equals(mode) && targetId.length() == 0) return null;
             return new ToolCall(id, tool, scope, "", "", 0, mode, targetId);
         }
+        if (TOOL_TAP_SCREEN.equals(tool)) {
+            int x = call.optInt("x", -1);
+            int y = call.optInt("y", -1);
+            if (!validScreenCoordinate(x) || !validScreenCoordinate(y)) return null;
+            return new ToolCall(id, tool, scope, "", "", 0, "", "",
+                    x, y, -1, -1, 0);
+        }
+        if (TOOL_SWIPE_SCREEN.equals(tool)) {
+            int x = call.optInt("x", -1);
+            int y = call.optInt("y", -1);
+            int toX = call.optInt("to_x", -1);
+            int toY = call.optInt("to_y", -1);
+            int durationMs = call.optInt("duration_ms", 360);
+            if (!validScreenCoordinate(x) || !validScreenCoordinate(y)
+                    || !validScreenCoordinate(toX) || !validScreenCoordinate(toY)
+                    || durationMs < 120 || durationMs > 1200) return null;
+            return new ToolCall(id, tool, scope, "", "", 0, "", "",
+                    x, y, toX, toY, durationMs);
+        }
         return new ToolCall(id, tool, scope, "", "", 0, "", "");
+    }
+
+    private static boolean validScreenCoordinate(int value) {
+        return value >= 0 && value <= 1000;
     }
 
     static String systemPrompt(long now, String existingPlan, int intervalMinutes,
@@ -411,9 +527,10 @@ final class HeartbeatToolProtocol {
         if (plan.length() == 0) plan = "尚未设置；周期心跳时自然、简短地找用户聊天";
         int interval = Math.max(15, Math.min(7 * 24 * 60, intervalMinutes));
         String scope = cleanScope(conversationScope);
-        return "你可以使用 Deekseep 在此设备上提供的真实本地心跳工具。"
+        return "你可以使用 Deekseep 在此设备上提供的真实本地心跳与基础界面工具。"
                 + "这些工具确实可执行；当用户要求定时提醒、稍后主动联系、修改心跳用途或间隔时，"
-                + "不要声称你无法设置闹钟或无法主动发消息，而要调用对应工具。\n"
+                + "不要声称你无法设置闹钟或无法主动发消息，而要调用对应工具。"
+                + "界面工具只操作当前前台的 DeepSeek 窗口。\n"
                 + "当前设备本地时间：" + localTime + "。当前周期心跳间隔："
                 + interval + " 分钟。当前对话的心跳约定：" + plan + "。"
                 + "当前对话绑定标识：" + scope + "。\n"
@@ -445,12 +562,29 @@ final class HeartbeatToolProtocol {
                 + "cancel_heartbeat：{\"id\":\"唯一短标识\","
                 + "\"tool\":\"cancel_heartbeat\",\"scope\":\"" + scope
                 + "\",\"mode\":\"all_once\"}\n"
+                + "get_current_time：{\"id\":\"唯一短标识\","
+                + "\"tool\":\"get_current_time\",\"scope\":\"" + scope + "\"}\n"
+                + "capture_screen：{\"id\":\"唯一短标识\","
+                + "\"tool\":\"capture_screen\",\"scope\":\"" + scope + "\"}\n"
+                + "tap_screen：{\"id\":\"唯一短标识\",\"tool\":\"tap_screen\","
+                + "\"scope\":\"" + scope + "\",\"x\":500,\"y\":500}\n"
+                + "swipe_screen：{\"id\":\"唯一短标识\",\"tool\":\"swipe_screen\","
+                + "\"scope\":\"" + scope + "\",\"x\":500,\"y\":800,"
+                + "\"to_x\":500,\"to_y\":200,\"duration_ms\":360}\n"
+                + "press_back：{\"id\":\"唯一短标识\",\"tool\":\"press_back\","
+                + "\"scope\":\"" + scope + "\"}\n"
                 + "规则：schedule_once 的 at 必须换算成未来的绝对本地时间并带时区，最长一年；"
                 + "set_interval 只接受 15 到 10080 分钟。只在确实需要时输出调用。"
                 + "cancel_heartbeat 的 mode 可为 once、all_once、periodic 或 all；"
                 + "once 还必须用 target_id 指定原 schedule_once 的 id，"
                 + "all_once 取消此对话全部一次性心跳，periodic 关闭周期心跳，"
                 + "all 同时取消两者。"
+                + "tap_screen 和 swipe_screen 的坐标统一为 0 到 1000：左上角是 0,0，"
+                + "右下角是 1000,1000；duration_ms 只能为 120 到 1200。"
+                + "capture_screen 会把当前 DeepSeek 窗口保存为截图供用户使用，"
+                + "但不会在同一轮把像素返回给你；调用后不得假装已经看见截图内容。"
+                + "只有用户明确要求操作当前界面时，才可调用点击、滑动或返回工具；"
+                + "不得自行点击删除、退出登录或其他不可逆操作。"
                 + "每个调用都必须原样携带当前对话绑定标识 scope；它把任务限定在这个对话，"
                 + "绝不能改成其他标识或当成全局任务。"
                 + "当用户只要求把心跳绑定到当前对话时调用 bind_chat。"

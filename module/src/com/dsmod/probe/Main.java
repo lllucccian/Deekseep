@@ -6,11 +6,14 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.Dialog;
 import android.content.BroadcastReceiver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -240,6 +243,10 @@ public class Main extends XposedModule {
     private static final Map<Object, HeartbeatResponseStream> HEARTBEAT_RESPONSE_STREAMS =
             Collections.synchronizedMap(
                     new WeakHashMap<Object, HeartbeatResponseStream>());
+    private static final Object AGENT_UI_ACTION_LOCK = new Object();
+    private static final String AGENT_SCREENSHOT_DIR =
+            "/data/data/com.deepseek.chat/files/deekseep_agent";
+    private static volatile long agentUiActionNotBefore;
     private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_HIT_LOGGED =
             new AtomicBoolean();
     private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_ERROR_LOGGED =
@@ -5140,17 +5147,273 @@ public class Main extends XposedModule {
                             : UiLanguage.text(effective,
                             "取消心跳失败",
                             "Could not cancel the heartbeat"));
+                } else if (HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME.equals(call.tool)) {
+                    // The exact device time is already rendered into this call's activity row.
+                    success = true;
+                } else if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)) {
+                    success = queueAgentUiTool(effective, call, announce);
                 }
                 if (success) {
                     completed++;
-                    log("heartbeat local tool completed tool=" + call.tool
+                    log("local tool completed tool=" + call.tool
                             + " id=" + call.id);
                 }
             } catch (Throwable t) {
-                log("heartbeat local tool failed tool=" + call.tool + ": " + t);
+                log("local tool failed tool=" + call.tool + ": " + t);
             }
         }
         return completed;
+    }
+
+    private static boolean queueAgentUiTool(
+            final Context context, final HeartbeatToolProtocol.ToolCall call,
+            final boolean announce) {
+        final Activity activity = currentHostActivity();
+        final Handler handler = currentMainHandler();
+        if (activity == null || handler == null || activity.isFinishing()
+                || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed())) {
+            if (announce) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "当前没有可操作的 DeepSeek 界面",
+                            "There is no active DeepSeek screen to operate"));
+            return false;
+        }
+        int actionSpan = 240;
+        if (HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(call.tool)) {
+            actionSpan = call.durationMs + 180;
+        } else if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)) {
+            actionSpan = 520;
+        }
+        final long delay;
+        synchronized (AGENT_UI_ACTION_LOCK) {
+            long now = SystemClock.uptimeMillis();
+            long scheduledAt = Math.max(now + 180L, agentUiActionNotBefore);
+            agentUiActionNotBefore = scheduledAt + actionSpan;
+            delay = Math.max(0L, scheduledAt - now);
+        }
+        final WeakReference<Activity> reference = new WeakReference<>(activity);
+        return handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                Activity live = reference.get();
+                boolean success = false;
+                try {
+                    success = live != null && !live.isFinishing()
+                            && (Build.VERSION.SDK_INT < 17 || !live.isDestroyed())
+                            && performAgentUiTool(live, context, call);
+                } catch (Throwable error) {
+                    log("agent UI tool failed tool=" + call.tool
+                            + " id=" + call.id + ": " + error);
+                }
+                if (!success && announce) {
+                    showHeartbeatToolToast(context, UiLanguage.text(context,
+                            "界面工具执行失败：" + call.tool,
+                            "UI tool failed: " + call.tool));
+                }
+            }
+        }, delay);
+    }
+
+    private static boolean performAgentUiTool(
+            Activity activity, Context context,
+            HeartbeatToolProtocol.ToolCall call) {
+        if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)) {
+            return captureAgentScreenshot(activity, context, call.id);
+        }
+        if (HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)) {
+            activity.onBackPressed();
+            return true;
+        }
+        Window window = activity.getWindow();
+        View decor = window == null ? null : window.getDecorView();
+        if (decor == null || decor.getWidth() <= 0 || decor.getHeight() <= 0) return false;
+        if (HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(call.tool)) {
+            return dispatchAgentTap(activity,
+                    normalizedScreenCoordinate(call.x, decor.getWidth()),
+                    normalizedScreenCoordinate(call.y, decor.getHeight()));
+        }
+        if (HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(call.tool)) {
+            return dispatchAgentSwipe(activity,
+                    normalizedScreenCoordinate(call.x, decor.getWidth()),
+                    normalizedScreenCoordinate(call.y, decor.getHeight()),
+                    normalizedScreenCoordinate(call.toX, decor.getWidth()),
+                    normalizedScreenCoordinate(call.toY, decor.getHeight()),
+                    call.durationMs);
+        }
+        return false;
+    }
+
+    private static float normalizedScreenCoordinate(int value, int size) {
+        if (size <= 1) return 0.0f;
+        int bounded = Math.max(0, Math.min(1000, value));
+        return (bounded / 1000.0f) * (size - 1);
+    }
+
+    private static boolean dispatchAgentTap(
+            Activity activity, float x, float y) {
+        long now = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(
+                now, now, MotionEvent.ACTION_DOWN, x, y, 0);
+        MotionEvent up = MotionEvent.obtain(
+                now, now + 48L, MotionEvent.ACTION_UP, x, y, 0);
+        try {
+            boolean accepted = activity.dispatchTouchEvent(down);
+            return activity.dispatchTouchEvent(up) || accepted;
+        } finally {
+            down.recycle();
+            up.recycle();
+        }
+    }
+
+    private static boolean dispatchAgentSwipe(
+            final Activity activity, final float fromX, final float fromY,
+            final float toX, final float toY, final int durationMs) {
+        final Handler handler = currentMainHandler();
+        if (handler == null) return false;
+        final long downTime = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(
+                downTime, downTime, MotionEvent.ACTION_DOWN, fromX, fromY, 0);
+        boolean accepted;
+        try {
+            accepted = activity.dispatchTouchEvent(down);
+        } finally {
+            down.recycle();
+        }
+        final int steps = Math.max(4, Math.min(18, durationMs / 40));
+        for (int step = 1; step <= steps; step++) {
+            final int index = step;
+            handler.postDelayed(new Runnable() {
+                @Override public void run() {
+                    if (activity.isFinishing()
+                            || (Build.VERSION.SDK_INT >= 17
+                            && activity.isDestroyed())) return;
+                    float fraction = index / (float) steps;
+                    float x = fromX + ((toX - fromX) * fraction);
+                    float y = fromY + ((toY - fromY) * fraction);
+                    int action = index == steps
+                            ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
+                    long eventTime = SystemClock.uptimeMillis();
+                    MotionEvent event = MotionEvent.obtain(
+                            downTime, eventTime, action, x, y, 0);
+                    try {
+                        activity.dispatchTouchEvent(event);
+                    } finally {
+                        event.recycle();
+                    }
+                }
+            }, Math.max(1L, (durationMs * step) / steps));
+        }
+        return accepted;
+    }
+
+    private static boolean captureAgentScreenshot(
+            Activity activity, Context context, String callId) {
+        Window window = activity.getWindow();
+        final View decor = window == null ? null : window.getDecorView();
+        if (decor == null || decor.getWidth() <= 0 || decor.getHeight() <= 0) {
+            return false;
+        }
+        int sourceWidth = decor.getWidth();
+        int sourceHeight = decor.getHeight();
+        float scale = Math.min(1.0f,
+                Math.min(1080.0f / sourceWidth, 2400.0f / sourceHeight));
+        int width = Math.max(1, Math.round(sourceWidth * scale));
+        int height = Math.max(1, Math.round(sourceHeight * scale));
+        final Bitmap bitmap;
+        try {
+            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            canvas.scale(scale, scale);
+            decor.draw(canvas);
+        } catch (Throwable error) {
+            log("agent screenshot render failed: " + error);
+            return false;
+        }
+        Context source = context == null ? activity : context;
+        Context application = source.getApplicationContext();
+        final Context safeContext = application == null ? source : application;
+        final String safeCallId = callId == null ? "" : callId;
+        Thread writer = new Thread(new Runnable() {
+            @Override public void run() {
+                saveAgentScreenshot(safeContext, bitmap, safeCallId);
+            }
+        }, "Deekseep-Agent-Screenshot");
+        writer.setDaemon(true);
+        writer.start();
+        return true;
+    }
+
+    private static void saveAgentScreenshot(
+            Context context, Bitmap bitmap, String callId) {
+        boolean privateSaved = false;
+        Uri galleryUri = null;
+        OutputStream output = null;
+        try {
+            File directory = new File(AGENT_SCREENSHOT_DIR);
+            if (directory.exists() || directory.mkdirs()) {
+                File latest = new File(directory, "latest_screen.png");
+                output = new FileOutputStream(latest, false);
+                privateSaved = bitmap.compress(
+                        Bitmap.CompressFormat.PNG, 100, output);
+                output.flush();
+                output.close();
+                output = null;
+            }
+            if (Build.VERSION.SDK_INT >= 29) {
+                String stamp = new SimpleDateFormat(
+                        "yyyyMMdd_HHmmss", Locale.US).format(new Date());
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME,
+                        "DeepSeek_Agent_" + stamp + ".png");
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                values.put(MediaStore.Images.Media.RELATIVE_PATH,
+                        "Pictures/DeekseepAgent");
+                values.put(MediaStore.Images.Media.IS_PENDING, Integer.valueOf(1));
+                galleryUri = context.getContentResolver().insert(
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                if (galleryUri != null) {
+                    output = context.getContentResolver().openOutputStream(
+                            galleryUri, "w");
+                    if (output == null || !bitmap.compress(
+                            Bitmap.CompressFormat.PNG, 100, output)) {
+                        throw new IOException("MediaStore screenshot write failed");
+                    }
+                    output.flush();
+                    output.close();
+                    output = null;
+                    ContentValues ready = new ContentValues();
+                    ready.put(MediaStore.Images.Media.IS_PENDING, Integer.valueOf(0));
+                    context.getContentResolver().update(
+                            galleryUri, ready, null, null);
+                }
+            }
+            boolean success = privateSaved || galleryUri != null;
+            log("agent screenshot saved=" + success
+                    + " call=" + callId + " gallery=" + galleryUri);
+            showHeartbeatToolToast(context, success
+                    ? UiLanguage.text(context,
+                    "截图已保存到 Pictures/DeekseepAgent",
+                    "Screenshot saved to Pictures/DeekseepAgent")
+                    : UiLanguage.text(context,
+                    "截图保存失败", "Could not save screenshot"));
+        } catch (Throwable error) {
+            log("agent screenshot save failed call=" + callId + ": " + error);
+            if (galleryUri != null) {
+                try {
+                    context.getContentResolver().delete(galleryUri, null, null);
+                } catch (Throwable ignored) {}
+            }
+            showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "截图保存失败", "Could not save screenshot"));
+        } finally {
+            if (output != null) {
+                try { output.close(); } catch (Throwable ignored) {}
+            }
+            try { bitmap.recycle(); } catch (Throwable ignored) {}
+        }
     }
 
     private static boolean dispatchProactiveTask(

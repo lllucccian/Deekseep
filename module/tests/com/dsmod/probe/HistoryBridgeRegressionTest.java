@@ -130,8 +130,8 @@ public final class HistoryBridgeRegressionTest {
         String response = safe.getJSONObject(2).getString("content");
         check(response.contains("安排好了") && !response.contains("schedule_once")
                         && !response.contains("DEEKSEEP_LOCAL_TOOLS")
-                        && (response.contains("设置心跳：")
-                        || response.contains("Set heartbeat:")),
+                        && (response.contains("设置心跳 to ")
+                        || response.contains("Set heartbeat to ")),
                 "hidden heartbeat tool call reached persisted response JSON");
     }
 
