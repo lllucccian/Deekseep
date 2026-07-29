@@ -855,6 +855,8 @@ public class Main extends XposedModule {
         hookChatRequest(cl);
         // 心跳开启时向正常对话注入本地工具说明，并在流式/静态回复两端隐藏控制块。
         hookHeartbeatToolResponses(cl);
+        // 仅在最终 Compose 文本边界为模块生成的心跳状态设置灰色小字。
+        hookHeartbeatToolStatusStyle(cl, "i68");
         // 在线历史在进入宿主 UI/SQLite 前同步清掉注入前缀，并缓存未落库的会话快照。
         try { installExpertHistoryImagePreserver(cl); }
         catch (Throwable t) { log("install history bridge wiring failed: " + t); }
@@ -5865,6 +5867,60 @@ public class Main extends XposedModule {
         }
         log("heartbeat hidden-tool response hooks live=" + liveHooks
                 + " static=" + staticHooks);
+    }
+
+    private void hookHeartbeatToolStatusStyle(
+            ClassLoader cl, String rendererClassName) {
+        try {
+            Class<?> renderer = cl.loadClass(rendererClassName);
+            int hooked = 0;
+            for (Method method : renderer.getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if (!"b".equals(method.getName()) || types.length != 18
+                        || types[0] != String.class
+                        || types[2] != long.class || types[4] != long.class
+                        || types[15] != int.class || types[16] != int.class
+                        || types[17] != int.class) {
+                    continue;
+                }
+                hook(method).intercept(new Hooker() {
+                    @Override public Object intercept(Chain chain) throws Throwable {
+                        Object raw = chain.getArg(0);
+                        if (!(raw instanceof String)
+                                || !HeartbeatToolProtocol.hasToolStatusStyleMarker(
+                                        (String) raw)) {
+                            return chain.proceed();
+                        }
+                        String marked = (String) raw;
+                        boolean applyStyle =
+                                HeartbeatToolProtocol.isIsolatedToolStatusText(marked);
+                        Object[] args = chain.getArgs().toArray();
+                        args[0] =
+                                HeartbeatToolProtocol.stripToolStatusStyleMarkers(marked);
+                        if (applyStyle) {
+                            args[2] = Long.valueOf(
+                                    HeartbeatToolProtocol.TOOL_STATUS_GRAY_COLOR);
+                            args[4] = Long.valueOf(
+                                    HeartbeatToolProtocol.TOOL_STATUS_FONT_SIZE);
+                            Object mask = args[17];
+                            if (mask instanceof Number) {
+                                args[17] = Integer.valueOf(
+                                        HeartbeatToolProtocol
+                                                .explicitToolStatusStyleMask(
+                                                        ((Number) mask).intValue()));
+                            }
+                        }
+                        return chain.proceed(args);
+                    }
+                });
+                hooked++;
+            }
+            log("heartbeat tool status Compose hooks=" + hooked
+                    + " renderer=" + rendererClassName);
+        } catch (Throwable t) {
+            log("heartbeat tool status renderer unavailable "
+                    + rendererClassName + ": " + t);
+        }
     }
 
     private static void sanitizeLiveHeartbeatResponse(
