@@ -634,6 +634,7 @@ public class Main extends XposedModule {
         final String pkg = param.getPackageName();
 
         if (!TARGET.equals(pkg)) return;
+        HostCompat.initialize(cl);
         Looper mainLooper = Looper.getMainLooper();
         if (mainLooper == null) {
             log("target package callback arrived before the main Looper was prepared");
@@ -652,7 +653,8 @@ public class Main extends XposedModule {
             try { new FileWriter(SRV_LOG_PATH, false).close(); } catch (Throwable ignored) {}
             try { new FileWriter(SRV_LOG_EXT, false).close(); } catch (Throwable ignored) {}
         }
-        log("module loaded (modern), package=" + pkg);
+        log("module loaded (modern), package=" + pkg
+                + ", hostGeneration=" + HostCompat.generationName());
         installLocalApiKeepAliveReceiverHook(cl);
         restoreLocalEditorImages();
         int obsoleteTriggers = ChatEditorUi.removeObsoleteLocalSessionProtection();
@@ -867,9 +869,12 @@ public class Main extends XposedModule {
         // 心跳开启时向正常对话注入本地工具说明，并在流式/静态回复两端隐藏控制块。
         hookHeartbeatToolResponses(cl);
         // 仅在最终 Compose 文本边界为模块生成的心跳状态设置灰色小字。
-        hookHeartbeatToolStatusStyle(cl, "i68", "h78");
+        hookHeartbeatToolStatusStyle(
+                cl, HostCompat.name("i68"), HostCompat.name("h78"));
         // Markdown 会移除零宽标记；在合并 TextStyle 后的 BasicText 边界按登记文本兜底。
-        hookHeartbeatToolStatusBasicText(cl, "yg8", "b", "h78");
+        hookHeartbeatToolStatusBasicText(
+                cl, HostCompat.name("yg8"),
+                HostCompat.method("yg8", "b"), HostCompat.name("h78"));
         // 在线历史在进入宿主 UI/SQLite 前同步清掉注入前缀，并缓存未落库的会话快照。
         try { installExpertHistoryImagePreserver(cl); }
         catch (Throwable t) { log("install history bridge wiring failed: " + t); }
@@ -950,10 +955,12 @@ public class Main extends XposedModule {
 
         // hook 设置页主 Composable -> 显示 Deekseep 按钮
         try {
-            Class<?> k = cl.loadClass(SETTINGS_CLASS);
+            String settingsClass = HostCompat.name(SETTINGS_CLASS);
+            String settingsMethod = HostCompat.method(SETTINGS_CLASS, SETTINGS_METHOD);
+            Class<?> k = cl.loadClass(settingsClass);
             int n = 0;
             for (Method m : k.getDeclaredMethods()) {
-                if (m.getName().equals(SETTINGS_METHOD)) {
+                if (m.getName().equals(settingsMethod)) {
                     hook(m).intercept(new Hooker() {
                         @Override public Object intercept(Chain chain) throws Throwable {
                             Object r = chain.proceed();
@@ -964,7 +971,8 @@ public class Main extends XposedModule {
                     n++;
                 }
             }
-            log("hooked settings composable " + SETTINGS_CLASS + "." + SETTINGS_METHOD + " x" + n);
+            log("hooked settings composable " + settingsClass + "."
+                    + settingsMethod + " x" + n);
         } catch (Throwable t) { log("hook settings composable failed: " + t); }
     }
 
@@ -1403,6 +1411,66 @@ public class Main extends XposedModule {
                 spatialTranslationXMethod = "w";
                 spatialTranslationYMethod = "x";
                 spatialRotationXMethod = "h";
+            } else if (HostCompat.isV230()) {
+                // DeepSeek 2.3.0 upgraded Compose and R8 split several helpers that lived in
+                // large 2.2.x utility classes.  Keep this mapping separate from the legacy
+                // mainland table so one module APK can safely drive both host generations.
+                userOwner = "g55";
+                userMethod = "d";
+                assistantBodyOwner = "le4";
+                assistantBodyMethod = "d";
+                assistantOuterOwner = "zj8";
+                assistantOuterMethod = "M";
+                assistantResolvedOwner = "zj8";
+                assistantResolvedMethod = "M";
+                assistantRestartOwner = "qt";
+                surfaceOwner = "kt9";
+                surfaceMethod = "b";
+                modifierClass = "lj5";
+                callbackClass = "td3";
+                shapeClass = "ch7";
+                roundedOwner = "y17";
+                roundedMethod = "a";
+                clipOwner = "nn0";
+                clipMethod = "D";
+                backgroundOwner = "vd0";
+                backgroundMethod = "j";
+                borderOwner = "cs1";
+                borderMethod = "C";
+                drawOwner = "vd0";
+                drawMethod = "t";
+                imageClass = "je";
+                drawScopeClass = "hp4";
+                drawImageMethod = "f";
+                unitClass = "vl8";
+                unitField = "a";
+                attachmentOwner = "ab5";
+                attachmentMethod = "f";
+                inputOwner = "nn0";
+                inputMethod = "a";
+                searchOwner = "ky1";
+                searchMethod = "q";
+                modeItemOwner = "j65";
+                modeItemMethod = "b";
+                modeLabelOwner = "j65";
+                modeLabelMethod = "d";
+                modeContainerOwner = "zj8";
+                modeContainerMethod = "M";
+                positionElementClass = "fz5";
+                coordinatesClass = "qo4";
+                coordinatesAttachedMethod = "h";
+                coordinatesSizeMethod = "j";
+                coordinatesWindowMethod = "q";
+                spatialElementClass = "bf0";
+                spatialScopeClass = "o07";
+                spatialStateClass = "w66";
+                spatialStatePolicyOwner = "yt9";
+                spatialStatePolicyField = "t";
+                spatialScaleXMethod = "j";
+                spatialScaleYMethod = "k";
+                spatialTranslationXMethod = "s";
+                spatialTranslationYMethod = "t";
+                spatialRotationXMethod = "h";
             } else {
                 userOwner = "dc5";
                 userMethod = "c";
@@ -1597,7 +1665,9 @@ public class Main extends XposedModule {
                     classLoader.loadClass(mapping.positionElementClass);
             positionElementConstructor =
                     positionElementClass.getDeclaredConstructor(callbackClass);
-            modifierThenMethod = modifierClass.getMethod("w", modifierClass);
+            modifierThenMethod = modifierClass.getMethod(
+                    !mapping.googlePlay && HostCompat.isV230() ? "s" : "w",
+                    modifierClass);
             Class<?> coordinatesClass =
                     classLoader.loadClass(mapping.coordinatesClass);
             coordinatesAttachedMethod = coordinatesClass.getMethod(
@@ -2334,7 +2404,7 @@ public class Main extends XposedModule {
      */
     private void hookLocalEditorImageUris(final ClassLoader cl) {
         try {
-            Class<?> imagePath = cl.loadClass("us");
+            Class<?> imagePath = HostCompat.load(cl, "us");
             final Field signedPath = imagePath.getDeclaredField("b");
             signedPath.setAccessible(true);
             Method resolve = imagePath.getDeclaredMethod("a", String.class);
@@ -2378,13 +2448,14 @@ public class Main extends XposedModule {
     // modern：拦到后按需改 args[4]=长按代理、args[9]=追加坐标捕获的 Modifier，再一次性 proceed(args)。
     private void hookSidebarMultiSelectDelete(final ClassLoader cl) {
         try {
-            final Class<?> mc = cl.loadClass("mc");
-            final Class<?> tp = cl.loadClass("tp");
-            final Class<?> xa3 = cl.loadClass("xa3");
+            final Class<?> mc = HostCompat.load(cl, "mc");
+            final Class<?> tp = HostCompat.load(cl, "tp");
+            final Class<?> xa3 = HostCompat.load(cl, "xa3");
             int n = 0;
             for (Method m : mc.getDeclaredMethods()) {
                 Class<?>[] pts = m.getParameterTypes();
-                if (!m.getName().equals("e") || pts.length != 12 || pts[0] != tp) continue;
+                if (!m.getName().equals(HostCompat.method("mc", "e"))
+                        || pts.length != 12 || pts[0] != tp) continue;
                 if (!xa3.isAssignableFrom(pts[4]) || !xa3.isAssignableFrom(pts[7])) continue;
                 hook(m).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
@@ -2436,7 +2507,7 @@ public class Main extends XposedModule {
     }
 
     private Object buildSidebarLongPressProxy(final ClassLoader cl, final String sid) throws Exception {
-        final Class<?> xa3 = cl.loadClass("xa3");
+        final Class<?> xa3 = HostCompat.load(cl, "xa3");
         return Proxy.newProxyInstance(cl, new Class[]{xa3}, new InvocationHandler() {
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                 String name = method.getName();
@@ -2460,10 +2531,10 @@ public class Main extends XposedModule {
     // 把 onGloballyPositioned(callback) 追加到会话行的 Modifier(qg5) 上：modifier.then(new lw5(cb))
     private Object wrapModifierWithBoundsCapture(ClassLoader cl, String sid, Object modifier) {
         try {
-            Class<?> qg5 = cl.loadClass("qg5");
+            Class<?> qg5 = HostCompat.load(cl, "qg5");
             if (!qg5.isInstance(modifier)) return null;
-            Class<?> ib3 = cl.loadClass("ib3");
-            Class<?> lw5 = cl.loadClass("lw5");
+            Class<?> ib3 = HostCompat.load(cl, "ib3");
+            Class<?> lw5 = HostCompat.load(cl, "lw5");
             Object cb;
             synchronized (SIDEBAR_BOUNDS_CB) {
                 cb = SIDEBAR_BOUNDS_CB.get(sid);
@@ -2472,19 +2543,19 @@ public class Main extends XposedModule {
             java.lang.reflect.Constructor<?> ctor = lw5.getDeclaredConstructor(ib3);
             ctor.setAccessible(true);
             Object element = ctor.newInstance(cb);
-            Method w = qg5.getMethod("w", qg5);
+            Method w = qg5.getMethod(HostCompat.method("qg5", "w"), qg5);
             return w.invoke(modifier, element);
         } catch (Throwable t) { log("wrap sidebar bounds capture failed: " + t); return null; }
     }
 
     // ib3(Function1) 代理：Compose 布局后回调 g(bm4 coords)，把行的窗口坐标写入 SIDEBAR_ROW_BOUNDS
     private Object buildBoundsCallback(final ClassLoader cl, final String sid) throws Exception {
-        final Class<?> ib3 = cl.loadClass("ib3");
-        final Class<?> bm4 = cl.loadClass("bm4");
+        final Class<?> ib3 = HostCompat.load(cl, "ib3");
+        final Class<?> bm4 = HostCompat.load(cl, "bm4");
         if (BM4_I == null) {
-            BM4_I = bm4.getMethod("i");
-            BM4_K = bm4.getMethod("k");
-            BM4_W = bm4.getMethod("w", long.class);
+            BM4_I = bm4.getMethod(HostCompat.method("bm4", "i"));
+            BM4_K = bm4.getMethod(HostCompat.method("bm4", "k"));
+            BM4_W = bm4.getMethod(HostCompat.method("bm4", "w"), long.class);
         }
         return Proxy.newProxyInstance(cl, new Class[]{ib3}, new InvocationHandler() {
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -2527,12 +2598,13 @@ public class Main extends XposedModule {
     // 侧栏收起时 mq5.i 的 toggle 回调(xa3)：包一层，收起动作触发时把多选覆盖层滑出并退出。
     private void hookSidebarToggleCleanup(final ClassLoader cl) {
         try {
-            Class<?> mq5 = cl.loadClass("mq5");
-            final Class<?> xa3 = cl.loadClass("xa3");
+            Class<?> mq5 = HostCompat.load(cl, "mq5");
+            final Class<?> xa3 = HostCompat.load(cl, "xa3");
             int n = 0;
             for (Method m : mq5.getDeclaredMethods()) {
                 Class<?>[] pts = m.getParameterTypes();
-                if (!m.getName().equals("i") || pts.length != 6 || !xa3.isAssignableFrom(pts[2])) continue;
+                if (!m.getName().equals(HostCompat.method("mq5", "i"))
+                        || pts.length != 6 || !xa3.isAssignableFrom(pts[2])) continue;
                 hook(m).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
                         Object[] args = null;
@@ -2540,7 +2612,7 @@ public class Main extends XposedModule {
                             Object[] a = chain.getArgs().toArray();
                             Object drawerHost = a[0];
                             Object state = readHostField(drawerHost, "a");
-                            if (state != null && state.getClass().getName().endsWith("bn2")) {
+                            if (HostCompat.simpleNameIs(state, "bn2")) {
                                 if (sidebarDrawerState != state) {
                                     sidebarDrawerWidthPx = 0;
                                     sidebarLiveLoggedState = null;
@@ -2569,7 +2641,7 @@ public class Main extends XposedModule {
         // on every native drawer frame and therefore also covers closing, swipe gestures, and
         // interrupted/reversed animations.
         try {
-            Class<?> bn2 = cl.loadClass("bn2");
+            Class<?> bn2 = HostCompat.load(cl, "bn2");
             int n = 0;
             for (Method m : bn2.getDeclaredMethods()) {
                 if (!m.getName().equals("c") || m.getParameterTypes().length != 0
@@ -2627,7 +2699,7 @@ public class Main extends XposedModule {
         // destination signal. The supported host's later DrawerState.c() frames exclusively drive
         // the follower target, preventing an eager endpoint from erasing the visible lag.
         try {
-            Class<?> n51 = cl.loadClass("n51");
+            Class<?> n51 = HostCompat.load(cl, "n51");
             int n = 0;
             for (Method m : n51.getDeclaredMethods()) {
                 if (!m.getName().equals("u") || m.getParameterTypes().length != 0) continue;
@@ -2640,8 +2712,8 @@ public class Main extends XposedModule {
                             Object drawerHost = readHostField(action, "f");
                             if (Integer.valueOf(0).equals(kind)
                                     && drawerState != null && drawerHost != null
-                                    && drawerState.getClass().getName().endsWith("bn2")
-                                    && drawerHost.getClass().getName().endsWith("zm2")) {
+                                    && HostCompat.simpleNameIs(drawerState, "bn2")
+                                    && HostCompat.simpleNameIs(drawerHost, "zm2")) {
                                 if (sidebarDrawerState != drawerState) {
                                     sidebarDrawerState = drawerState;
                                     sidebarDrawerWidthPx = 0;
@@ -2676,7 +2748,7 @@ public class Main extends XposedModule {
             anchorsMethod.setAccessible(true);
             Object anchors = anchorsMethod.invoke(anchored);
             if (anchors == null) return 0;
-            Class<?> cn2 = cl.loadClass("cn2");
+            Class<?> cn2 = HostCompat.load(cl, "cn2");
             Field closedField = cn2.getDeclaredField("a");
             Field openField = cn2.getDeclaredField("b");
             closedField.setAccessible(true);
@@ -2698,7 +2770,7 @@ public class Main extends XposedModule {
     }
 
     private Object buildSidebarToggleProxy(final ClassLoader cl, final Object original) throws Exception {
-        final Class<?> xa3 = cl.loadClass("xa3");
+        final Class<?> xa3 = HostCompat.load(cl, "xa3");
         return Proxy.newProxyInstance(cl, new Class[]{xa3}, new InvocationHandler() {
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                 String name = method.getName();
@@ -2717,7 +2789,7 @@ public class Main extends XposedModule {
     // 2.2.2：Kotlin Unit 是 ui8（静态字段 a）；legacy 的 ti8 在本 build 不是 Unit。
     private static Object ui8Unit(ClassLoader cl) {
         try {
-            Field f = cl.loadClass("ui8").getDeclaredField("a");
+            Field f = HostCompat.load(cl, "ui8").getDeclaredField("a");
             f.setAccessible(true);
             return f.get(null);
         } catch (Throwable ignored) { return null; }
@@ -4112,8 +4184,8 @@ public class Main extends XposedModule {
      */
     private void hookRegionalLoginUnlock(final ClassLoader cl) {
         try {
-            final Class<?> stateType = cl.loadClass("cy4");
-            final Class<?> optionType = cl.loadClass("px4");
+            final Class<?> stateType = HostCompat.load(cl, "cy4");
+            final Class<?> optionType = HostCompat.load(cl, "px4");
             Field googleField = optionType.getDeclaredField("a");
             Field mobileField = optionType.getDeclaredField("b");
             Field wechatField = optionType.getDeclaredField("f");
@@ -4587,6 +4659,11 @@ public class Main extends XposedModule {
         }
     }
 
+    private static boolean isIdleGenerationState(Object state) {
+        String name = simpleName(state);
+        return HostCompat.isV230() ? "np".equals(name) : "gp".equals(name);
+    }
+
     /**
      * When the bound conversation is still the active Chat ViewModel, use DeepSeek's own send
      * pipeline. That pipeline owns the Compose message state and SSE reducer, so the assistant
@@ -4607,7 +4684,7 @@ public class Main extends XposedModule {
         if (selected == null || !sid.equals(String.valueOf(
                 readHostField(selected, "a")))) return false;
         Object generationState = invokeNoArg(readHostField(selected, "i"), "getValue");
-        if (!"gp".equals(simpleName(generationState))) {
+        if (!isIdleGenerationState(generationState)) {
             log("native proactive stream unavailable because chat is busy sid=" + sid
                     + " state=" + simpleName(generationState));
             return false;
@@ -4635,21 +4712,40 @@ public class Main extends XposedModule {
                     if (current == null || !pending.sid.equals(String.valueOf(
                             readHostField(current, "a")))) return;
                     Object state = invokeNoArg(readHostField(current, "i"), "getValue");
-                    if (!"gp".equals(simpleName(state))) return;
+                    if (!isIdleGenerationState(state)) return;
 
                     ClassLoader cl = viewModel.getClass().getClassLoader();
-                    Object attachmentsState =
-                            cl.loadClass("uo7").getDeclaredConstructor().newInstance();
-                    Object emptyAttachments = invokeNoArg(attachmentsState, "i");
+                    Field emptyField = HostCompat.load(cl, "jm7").getDeclaredField("b");
+                    emptyField.setAccessible(true);
+                    Object emptyAttachments = emptyField.get(null);
                     if (emptyAttachments == null) return;
                     Method sendMethod = null;
-                    for (Method method : viewModel.getClass().getDeclaredMethods()) {
-                        Class<?>[] types = method.getParameterTypes();
-                        if ("Q".equals(method.getName()) && types.length == 4
-                                && types[0] == String.class
-                                && types[2] == String.class) {
-                            sendMethod = method;
-                            break;
+                    if (HostCompat.isV230()) {
+                        Class<?> persistentList = HostCompat.load(cl, "h1");
+                        for (Method method : viewModel.getClass().getDeclaredMethods()) {
+                            Class<?>[] types = method.getParameterTypes();
+                            if ("R".equals(method.getName())
+                                    && java.lang.reflect.Modifier.isStatic(
+                                    method.getModifiers())
+                                    && types.length == 5
+                                    && types[0] == viewModel.getClass()
+                                    && types[1] == String.class
+                                    && types[2] == persistentList
+                                    && types[3] == String.class
+                                    && types[4] == int.class) {
+                                sendMethod = method;
+                                break;
+                            }
+                        }
+                    } else {
+                        for (Method method : viewModel.getClass().getDeclaredMethods()) {
+                            Class<?>[] types = method.getParameterTypes();
+                            if ("Q".equals(method.getName()) && types.length == 4
+                                    && types[0] == String.class
+                                    && types[2] == String.class) {
+                                sendMethod = method;
+                                break;
+                            }
                         }
                     }
                     if (sendMethod == null) return;
@@ -4659,8 +4755,16 @@ public class Main extends XposedModule {
                     // Passing these in the opposite order makes DeepSeek send
                     // "proactive_heartbeat" as the prompt and treat the event
                     // payload as an audio id, which the server rejects with 422.
-                    sendMethod.invoke(viewModel, prompt,
-                            emptyAttachments, null, null);
+                    if (HostCompat.isV230()) {
+                        // cc1.R is the Kotlin default bridge for the 2.3.0 send pipeline.
+                        // Bit 8 supplies the absent audio id while preserving the prompt and
+                        // immutable attachment list.
+                        sendMethod.invoke(null, viewModel, prompt,
+                                emptyAttachments, null, 8);
+                    } else {
+                        sendMethod.invoke(viewModel, prompt,
+                                emptyAttachments, null, null);
+                    }
                     invoked.set(true);
                 } catch (Throwable error) {
                     log("native proactive stream start failed sid=" + pending.sid
@@ -4772,7 +4876,7 @@ public class Main extends XposedModule {
         Object historyApi = fieldByName(services, "a");
         if (historyApi == null) throw new IOException("DeepSeek history API is unavailable");
 
-        Class<?> requestType = cl.loadClass("lj9");
+        Class<?> requestType = HostCompat.load(cl, "lj9");
         Constructor<?> requestConstructor =
                 requestType.getDeclaredConstructor(
                         Object.class, Object.class, Object.class, Object.class, int.class);
@@ -4780,7 +4884,7 @@ public class Main extends XposedModule {
         Object historyRequest = requestConstructor.newInstance(
                 sid, "stream_close", null, null, Integer.valueOf(7));
 
-        Class<?> continuation = cl.loadClass("uz1");
+        Class<?> continuation = HostCompat.load(cl, "uz1");
         Method fetch = null;
         for (Method method : historyApi.getClass().getDeclaredMethods()) {
             Class<?>[] types = method.getParameterTypes();
@@ -4794,7 +4898,7 @@ public class Main extends XposedModule {
         Object raw = driveSuspend(cl, fetch, historyApi, new Object[]{historyRequest});
         if (raw == null) throw new IOException("DeepSeek returned no history response");
 
-        Class<?> parserContext = cl.loadClass("pl9");
+        Class<?> parserContext = HostCompat.load(cl, "pl9");
         Method parse = raw.getClass().getDeclaredMethod(
                 "a", boolean.class, parserContext, continuation);
         Object wrapper = driveSuspend(
@@ -4809,11 +4913,11 @@ public class Main extends XposedModule {
         }
 
         Object jsonValue = fieldByName(wrapper, "c");
-        Class<?> x94 = cl.loadClass("x94");
+        Class<?> x94 = HostCompat.load(cl, "x94");
         Field codecField = x94.getDeclaredField("a");
         codecField.setAccessible(true);
         Object codec = codecField.get(null);
-        Class<?> pw0 = cl.loadClass("pw0");
+        Class<?> pw0 = HostCompat.load(cl, "pw0");
         Field companionField = pw0.getDeclaredField("Companion");
         companionField.setAccessible(true);
         Object companion = companionField.get(null);
@@ -4821,7 +4925,7 @@ public class Main extends XposedModule {
         serializerMethod.setAccessible(true);
         Object serializer = serializerMethod.invoke(companion);
         Method decode = codec.getClass().getMethod(
-                "a", cl.loadClass("ch4"), cl.loadClass("m84"));
+                "a", HostCompat.load(cl, "ch4"), HostCompat.load(cl, "m84"));
         decode.setAccessible(true);
         Object response = decode.invoke(codec, serializer, jsonValue);
         if (response == null) throw new IOException("DeepSeek history could not be decoded");
@@ -4923,13 +5027,13 @@ public class Main extends XposedModule {
         ArrayList rows = new ArrayList(history.messages.size());
         for (Object message : history.messages) {
             if (message == null) continue;
-            Method toRow = message.getClass().getMethod("O");
+            Method toRow = HostCompat.publicMessageMethod(message, "O");
             toRow.setAccessible(true);
             Object row = toRow.invoke(message);
             if (row != null) rows.add(row);
         }
 
-        Class<?> metadataType = cl.loadClass("am8");
+        Class<?> metadataType = HostCompat.load(cl, "am8");
         Object insertedValue = fieldByName(history.session, "e");
         Object updatedValue = fieldByName(history.session, "f");
         double inserted = insertedValue instanceof Number
@@ -5938,7 +6042,7 @@ public class Main extends XposedModule {
 
     private void hookChatRequest(ClassLoader cl) {
         try {
-            Class<?> k = cl.loadClass("ew0");
+            Class<?> k = HostCompat.load(cl, "ew0");
             int n = 0;
             for (Constructor<?> ctor : k.getDeclaredConstructors()) {
                 Class<?>[] pts = ctor.getParameterTypes();
@@ -6051,8 +6155,11 @@ public class Main extends XposedModule {
         int liveHooks = 0;
         int staticHooks = 0;
         String[] liveClasses = new String[]{"fo2", "ho2"};
-        for (String className : liveClasses) {
-            final boolean executeTools = "fo2".equals(className);
+        for (String legacyClassName : liveClasses) {
+            final boolean executeTools = "fo2".equals(legacyClassName);
+            String className = HostCompat.name(legacyClassName);
+            final String appendMethod =
+                    HostCompat.method(legacyClassName, "g");
             try {
                 Class<?> liveResponse = cl.loadClass(className);
                 for (Constructor<?> ctor : liveResponse.getDeclaredConstructors()) {
@@ -6073,7 +6180,7 @@ public class Main extends XposedModule {
                 for (Method method : liveResponse.getDeclaredMethods()) {
                     final String name = method.getName();
                     Class<?>[] types = method.getParameterTypes();
-                    if ((!"g".equals(name) && !"i".equals(name))
+                    if ((!appendMethod.equals(name) && !"i".equals(name))
                             || types.length == 0 || types[0] != String.class) continue;
                     hook(method).intercept(new Hooker() {
                         @Override public Object intercept(Chain chain) throws Throwable {
@@ -6081,7 +6188,7 @@ public class Main extends XposedModule {
                             try {
                                 if ("content".equals(chain.getArg(0))) {
                                     sanitizeLiveHeartbeatResponse(
-                                            chain.getThisObject(), "g".equals(name),
+                                            chain.getThisObject(), appendMethod.equals(name),
                                             executeTools);
                                 }
                             } catch (Throwable t) {
@@ -6098,8 +6205,9 @@ public class Main extends XposedModule {
             }
         }
         String[] staticClasses = new String[]{"at7", "ht7"};
-        for (String className : staticClasses) {
-            final boolean renderToolRows = "at7".equals(className);
+        for (String legacyClassName : staticClasses) {
+            final boolean renderToolRows = "at7".equals(legacyClassName);
+            String className = HostCompat.name(legacyClassName);
             try {
                 Class<?> staticResponse = cl.loadClass(className);
                 for (Constructor<?> ctor : staticResponse.getDeclaredConstructors()) {
@@ -6464,8 +6572,8 @@ public class Main extends XposedModule {
     // 服务器默认给 expert 返回 f/g=true 但 j/k/l=null(禁思考/搜索/文件)；构造后回填真模板即本地点亮。
     private void hookExpertUnlock(ClassLoader cl) {
         try {
-            final Class<?> sf5 = cl.loadClass("sf5");
-            final Class<?> gf5c = cl.loadClass("gf5");
+            final Class<?> sf5 = HostCompat.load(cl, "sf5");
+            final Class<?> gf5c = HostCompat.load(cl, "gf5");
             EX_A = sf5.getDeclaredField("a"); EX_A.setAccessible(true);
             EX_F = sf5.getDeclaredField("f"); EX_F.setAccessible(true);
             EX_G = sf5.getDeclaredField("g"); EX_G.setAccessible(true);
@@ -6557,8 +6665,8 @@ public class Main extends XposedModule {
     // 打印它的 identityHashCode + l/k/j 状态（对比构造时 patch 的 @hash），并就地点亮 → 直接命中真正被读的实例。
     private void installExpertUploadGate(ClassLoader cl) {
         try {
-            final Class<?> sf5 = cl.loadClass("sf5");
-            final Class<?> y91 = cl.loadClass("y91");
+            final Class<?> sf5 = HostCompat.load(cl, "sf5");
+            final Class<?> y91 = HostCompat.load(cl, "y91");
             int n = 0;
             for (final java.lang.reflect.Method mtd : y91.getDeclaredMethods()) {
                 if (!"a".equals(mtd.getName())) continue;
@@ -6652,7 +6760,7 @@ public class Main extends XposedModule {
     // ── 阻止内容安全审查擦除（clear_response 拦截）─────────────────
     private void hookSafetyRetraction(ClassLoader cl) {
         try {
-            Class<?> k = cl.loadClass("kb7");
+            Class<?> k = HostCompat.load(cl, "kb7");
             int n = 0;
             for (Constructor<?> ctor : k.getDeclaredConstructors()) {
                 Class<?>[] pts = ctor.getParameterTypes();
@@ -6695,7 +6803,7 @@ public class Main extends XposedModule {
     // ── 诊断：抓取服务器返回的 SSE 原始事件 ─────────────────────────
     private void installServerCapture(ClassLoader cl) {
         try {
-            Class<?> k = cl.loadClass("lv7");
+            Class<?> k = HostCompat.load(cl, "lv7");
             int n = 0;
             for (Constructor<?> ctor : k.getDeclaredConstructors()) {
                 Class<?>[] pts = ctor.getParameterTypes();
@@ -6726,7 +6834,7 @@ public class Main extends XposedModule {
     // ── 真正的替换拦截：mv.i() JSON-patch 应用点 ────────────────────
     private void hookContentFilterApply(ClassLoader cl) {
         try {
-            Class<?> k = cl.loadClass("mv");
+            Class<?> k = HostCompat.load(cl, "mv");
             int n = 0;
             for (Method m : k.getDeclaredMethods()) {
                 if (!m.getName().equals("i")) continue;
@@ -6789,7 +6897,8 @@ public class Main extends XposedModule {
     // 诊断：反射读取 mv 的 fragments 容器内容（mv.m = wv0, wv0.a = to7 list）
     private static String dumpMv(Object mvObj) {
         try {
-            Field mf = mvObj.getClass().getDeclaredField("m");
+            Field mf = mvObj.getClass().getDeclaredField(
+                    HostCompat.staticMessageField(mvObj, "m"));
             mf.setAccessible(true);
             Object wv0 = mf.get(mvObj);
             Field af = wv0.getClass().getDeclaredField("a");
@@ -6808,7 +6917,7 @@ public class Main extends XposedModule {
     // 诊断：抓 vv7.e()（把服务端 kv 反序列化成全新 mv 消息对象）
     private void installMsgRebuildCapture(ClassLoader cl) {
         try {
-            Class<?> k = cl.loadClass("vv7");
+            Class<?> k = HostCompat.load(cl, "vv7");
             int n = 0;
             for (Method m : k.getDeclaredMethods()) {
                 if (!m.getName().equals("e") || m.getParameterTypes().length != 1) continue;
@@ -6830,11 +6939,12 @@ public class Main extends XposedModule {
     // 第二拦截点：mv.S(status)/mv.R(quasi_status) 直接状态写入
     private void hookStatusWrite(ClassLoader cl) {
         try {
-            Class<?> k = cl.loadClass("mv");
+            Class<?> k = HostCompat.load(cl, "mv");
             int n = 0;
             for (Method m : k.getDeclaredMethods()) {
                 final String mn = m.getName();
-                if (!mn.equals("S") && !mn.equals("R")) continue;
+                if (!mn.equals(HostCompat.messageMethod("S"))
+                        && !mn.equals(HostCompat.messageMethod("R"))) continue;
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts.length != 1 || pts[0] != String.class) continue;
                 hook(m).intercept(new Hooker() {
@@ -6863,7 +6973,7 @@ public class Main extends XposedModule {
     // 诊断：hook h83.h(l84) fragment 反序列化选择器
     private void hookTemplateProbe(ClassLoader cl) {
         try {
-            Class<?> k = cl.loadClass("h83");
+            Class<?> k = HostCompat.load(cl, "h83");
             int n = 0;
             for (Method m : k.getDeclaredMethods()) {
                 if (!m.getName().equals("h")) continue;
@@ -6892,7 +7002,7 @@ public class Main extends XposedModule {
     // ── close 后整表合并 tp.u(tp, List) ──────────────────
     private void hookFinalMessageMerge(ClassLoader cl) {
         try {
-            final Class<?> tpk = cl.loadClass("tp");
+            final Class<?> tpk = HostCompat.load(cl, "tp");
             final Field fField = tpk.getDeclaredField("f");
             fField.setAccessible(true);
             int n = 0;
@@ -6970,10 +7080,10 @@ public class Main extends XposedModule {
     // ── 单条消息替换拦截：tp.q(uo)/tp.p(uo,String)/tp.a(uo,bool) ─────────
     private void hookFinalMessageApply(ClassLoader cl) {
         try {
-            final Class<?> tpk = cl.loadClass("tp");
+            final Class<?> tpk = HostCompat.load(cl, "tp");
             final Field fField = tpk.getDeclaredField("f");
             fField.setAccessible(true);
-            final Class<?> uok = cl.loadClass("uo");
+            final Class<?> uok = HostCompat.load(cl, "uo");
             int n = 0;
             for (Method m : tpk.getDeclaredMethods()) {
                 final String mn = m.getName();
@@ -7037,7 +7147,8 @@ public class Main extends XposedModule {
     // 反射调用无参方法返回字符串（uo.D()=status / uo.x()=quasi_status）
     private static String callStr(Object obj, String method) {
         try {
-            Method m = obj.getClass().getMethod(method);
+            Method m = obj.getClass().getMethod(
+                    HostCompat.messageMethod(method));
             Object r = m.invoke(obj);
             return r == null ? null : String.valueOf(r);
         } catch (Throwable t) { return null; }
@@ -7046,7 +7157,8 @@ public class Main extends XposedModule {
     // 反射调用无参方法返回 int（uo.u()=消息id）
     private static Integer callInt(Object obj, String method) {
         try {
-            Method m = obj.getClass().getMethod(method);
+            Method m = obj.getClass().getMethod(
+                    HostCompat.messageMethod(method));
             Object r = m.invoke(obj);
             if (r instanceof Integer) return (Integer) r;
             if (r instanceof Number) return ((Number) r).intValue();
@@ -7133,7 +7245,7 @@ public class Main extends XposedModule {
     private void installImageCredentialBridge(final ClassLoader cl) {
         int installed = 0;
         try {
-            Class<?> apiClass = cl.loadClass("pv0");
+            Class<?> apiClass = HostCompat.load(cl, "pv0");
             for (Constructor<?> ctor : apiClass.getDeclaredConstructors()) {
                 hook(ctor).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
@@ -7149,7 +7261,7 @@ public class Main extends XposedModule {
 
         // 兜底：即使 pv0 比模块安装钩子更早构造，也能从之后创建的 k31.c.d 取回同一实例。
         try {
-            Class<?> composerClass = cl.loadClass("k31");
+            Class<?> composerClass = HostCompat.load(cl, "k31");
             for (Constructor<?> ctor : composerClass.getDeclaredConstructors()) {
                 hook(ctor).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
@@ -7427,7 +7539,7 @@ public class Main extends XposedModule {
         if (found == null) return null;
         found.setAccessible(true);
         final Method preprocess = found;
-        Class<?> blockClass = cl.loadClass("mb3");
+        Class<?> blockClass = HostCompat.load(cl, "mb3");
         Object block = Proxy.newProxyInstance(cl, new Class<?>[]{blockClass},
                 new InvocationHandler() {
                     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -7501,7 +7613,7 @@ public class Main extends XposedModule {
 
     private static Object forkUploadedImageOnce(ClassLoader cl, Object api, String fileId,
                                                  String fromModel, String toModel) throws Throwable {
-        Class<?> coroutine = cl.loadClass("a60");
+        Class<?> coroutine = HostCompat.load(cl, "a60");
         Constructor<?> forkCtor = null;
         for (Constructor<?> ctor : coroutine.getDeclaredConstructors()) {
             Class<?>[] p = ctor.getParameterTypes();
@@ -7515,13 +7627,13 @@ public class Main extends XposedModule {
         forkCtor.setAccessible(true);
         Object task = forkCtor.newInstance(api, fileId, fromModel, toModel, null, 2);
         Object result = runHostCoroutine(cl, api, task);
-        if (!"kp5".equals(simpleName(result))) {
+        if (!HostCompat.simpleNameIs(result, "kp5")) {
             log("fork_file_task rejected " + fromModel + "->" + toModel
                     + " result=" + logValue(result));
             return null;
         }
         Object fp = readHostField(result, "b");
-        if (!"fp".equals(simpleName(fp))) {
+        if (!HostCompat.simpleNameIs(fp, "fp")) {
             log("fork_file_task success wrapper had no fp: " + logValue(result));
             return null;
         }
@@ -7567,7 +7679,7 @@ public class Main extends XposedModule {
     private static Object fetchUploadedImageOnce(ClassLoader cl, Object api, String fileId)
             throws Throwable {
         Constructor<?> fetchCtor = null;
-        for (Constructor<?> ctor : cl.loadClass("u40").getDeclaredConstructors()) {
+        for (Constructor<?> ctor : HostCompat.load(cl, "u40").getDeclaredConstructors()) {
             Class<?>[] p = ctor.getParameterTypes();
             if (p.length == 4 && p[0] == Object.class && p[1] == Object.class
                     && p[3] == int.class) {
@@ -7579,7 +7691,7 @@ public class Main extends XposedModule {
         fetchCtor.setAccessible(true);
         Object task = fetchCtor.newInstance(api, Collections.singleton(fileId), null, 1);
         Object result = runHostCoroutine(cl, api, task);
-        if (!"kp5".equals(simpleName(result))) {
+        if (!HostCompat.simpleNameIs(result, "kp5")) {
             log("fetch_files rejected file=" + fileId + " result=" + deepDump(result, 4));
             return null;
         }
@@ -7598,8 +7710,9 @@ public class Main extends XposedModule {
         Object context = readHostField(api, "a");
         if (context == null) throw new IllegalStateException("pv0 dispatcher missing");
         Method runBlocking = null;
-        for (Method method : cl.loadClass("u82").getDeclaredMethods()) {
-            if ("K".equals(method.getName()) && method.getParameterTypes().length == 2
+        for (Method method : HostCompat.load(cl, "u82").getDeclaredMethods()) {
+            if (HostCompat.method("u82", "K").equals(method.getName())
+                    && method.getParameterTypes().length == 2
                     && java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
                 runBlocking = method;
                 break;
@@ -7699,12 +7812,13 @@ public class Main extends XposedModule {
      */
     private void hookLocalSessionDirectoryMerge(final ClassLoader cl) {
         try {
-            Class<?> transaction = cl.loadClass("p68");
-            Class<?> directoryDao = cl.loadClass("aw");
+            Class<?> transaction = HostCompat.load(cl, "p68");
+            Class<?> directoryDao = HostCompat.load(cl, "aw");
             int transactionHooks = 0;
             int directoryHooks = 0;
             for (Method method : transaction.getDeclaredMethods()) {
-                if (!"a".equals(method.getName()) || method.getParameterTypes().length != 0
+                if (!HostCompat.method("p68", "a").equals(method.getName())
+                        || method.getParameterTypes().length != 0
                         || method.getReturnType() != void.class) continue;
                 hook(method).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
@@ -7731,7 +7845,7 @@ public class Main extends XposedModule {
             }
             for (Method method : directoryDao.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
-                if (!"a".equals(method.getName())
+                if (!HostCompat.method("aw", "a").equals(method.getName())
                         || !java.lang.reflect.Modifier.isStatic(method.getModifiers())
                         || types.length != 1 || types[0] != directoryDao
                         || !List.class.isAssignableFrom(method.getReturnType())) continue;
@@ -7783,26 +7897,29 @@ public class Main extends XposedModule {
      */
     private void hookLocalNativeSessionRefresh(final ClassLoader cl) {
         try {
-            Class<?> repository = cl.loadClass("ed0");
-            Class<?> continuation = cl.loadClass("uz1");
+            Class<?> repository = HostCompat.load(cl, "ed0");
+            Class<?> continuation = HostCompat.load(cl, "uz1");
             int installed = 0;
             for (Method method : repository.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
-                if (!"h".equals(method.getName()) || types.length != 1
+                if (!HostCompat.method("ed0", "h").equals(method.getName())
+                        || types.length != 1
                         || types[0] != continuation) continue;
                 try { deoptimize(method); } catch (Throwable ignored) {}
                 hook(method).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
                         Object before = readHostField(chain.getThisObject(), "e");
                         HashSet<String> localIds = localOnlySessionIds(cl);
-                        if (before instanceof List && "uo7".equals(before.getClass().getName())) {
+                        if (before instanceof List
+                                && HostCompat.simpleNameIs(before, "uo7")) {
                             preserveEditorLocalNativeSessions((List) before, localIds);
                         }
                         try {
                             return chain.proceed();
                         } finally {
                             Object after = readHostField(chain.getThisObject(), "e");
-                            if (after instanceof List && "uo7".equals(after.getClass().getName())) {
+                            if (after instanceof List
+                                    && HostCompat.simpleNameIs(after, "uo7")) {
                                 int restored = preserveEditorLocalNativeSessions(
                                         (List) after, localIds);
                                 if (restored > 0) {
@@ -7910,7 +8027,7 @@ public class Main extends XposedModule {
             Method reader = null;
             for (Method method : directory.getClass().getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
-                if ("a".equals(method.getName())
+                if (HostCompat.method("aw", "a").equals(method.getName())
                         && java.lang.reflect.Modifier.isStatic(method.getModifiers())
                         && types.length == 1 && types[0] == directory.getClass()
                         && List.class.isAssignableFrom(method.getReturnType())) {
@@ -7960,8 +8077,8 @@ public class Main extends XposedModule {
      * session as deleted and replaces the successfully loaded local state with an empty chat. */
     private void hookLocalSessionRemoteReload(final ClassLoader cl) {
         try {
-            Class<?> viewModel = cl.loadClass("za1");
-            Class<?> action = cl.loadClass("na1");
+            Class<?> viewModel = HostCompat.load(cl, "za1");
+            Class<?> action = HostCompat.load(cl, "na1");
             int installed = 0;
             for (Method method : viewModel.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
@@ -7972,7 +8089,10 @@ public class Main extends XposedModule {
                     @Override public Object intercept(Chain chain) throws Throwable {
                         try {
                             Object event = chain.getArg(0);
-                            if (event != null && "fa1".equals(event.getClass().getName())) {
+                            String remoteReloadEvent =
+                                    HostCompat.isV230() ? "eb1" : "fa1";
+                            if (event != null && remoteReloadEvent.equals(
+                                    event.getClass().getSimpleName())) {
                                 Object session = invokeNoArg(chain.getThisObject(), "G");
                                 Object id = readHostField(session, "a");
                                 String sid = id == null ? null : String.valueOf(id);
@@ -8010,9 +8130,9 @@ public class Main extends XposedModule {
      */
     private void hookLocalSessionDeletedResponse(final ClassLoader cl) {
         try {
-            Class<?> handler = cl.loadClass("at0");
-            Class<?> resultType = cl.loadClass("op5");
-            Class<?> ownerType = cl.loadClass("yg3");
+            Class<?> handler = HostCompat.load(cl, "at0");
+            Class<?> resultType = HostCompat.load(cl, "op5");
+            Class<?> ownerType = HostCompat.load(cl, "yg3");
             int installed = 0;
             for (Method method : handler.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
@@ -8068,11 +8188,11 @@ public class Main extends XposedModule {
      */
     private void hookLocalSessionDeletedFlow(final ClassLoader cl) {
         try {
-            Class<?> viewModelType = cl.loadClass("za1");
-            Class<?> eventType = cl.loadClass("bu0");
-            Class<?> optionType = cl.loadClass("zs0");
-            Class<?> envelopeType = cl.loadClass("au0");
-            Class<?> errorType = cl.loadClass("op5");
+            Class<?> viewModelType = HostCompat.load(cl, "za1");
+            Class<?> eventType = HostCompat.load(cl, "bu0");
+            Class<?> optionType = HostCompat.load(cl, "zs0");
+            Class<?> envelopeType = HostCompat.load(cl, "au0");
+            Class<?> errorType = HostCompat.load(cl, "op5");
             int installed = 0;
             for (Method method : viewModelType.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
@@ -8135,7 +8255,7 @@ public class Main extends XposedModule {
     /** Removes the gateway's reusable server sessions before DeepSeek persists/renders its page. */
     private void hookLocalApiSessionVisibility(final ClassLoader cl) {
         try {
-            Class<?> pageType = cl.loadClass("sb1");
+            Class<?> pageType = HostCompat.load(cl, "sb1");
             int installed = 0;
             for (Constructor<?> ctor : pageType.getDeclaredConstructors()) {
                 Class<?>[] types = ctor.getParameterTypes();
@@ -8174,12 +8294,13 @@ public class Main extends XposedModule {
 
     private void hookNativeSessionNavigator(final ClassLoader cl) {
         try {
-            Class<?> mc = cl.loadClass("mc");
-            Class<?> ib3 = cl.loadClass("ib3");
+            Class<?> mc = HostCompat.load(cl, "mc");
+            Class<?> ib3 = HostCompat.load(cl, "ib3");
             int installed = 0;
             for (Method method : mc.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
-                if (!"f".equals(method.getName()) || types.length != 13) continue;
+                if (!HostCompat.method("mc", "f").equals(method.getName())
+                        || types.length != 13) continue;
                 if (!List.class.isAssignableFrom(types[0])
                         || !ib3.isAssignableFrom(types[4])
                         || !ib3.isAssignableFrom(types[5])) continue;
@@ -8304,7 +8425,7 @@ public class Main extends XposedModule {
                             }
                             Object session = chain.getArg(0);
                             if (session == null
-                                    || !"tp".equals(session.getClass().getName())) {
+                                    || !HostCompat.simpleNameIs(session, "tp")) {
                                 return chain.proceed();
                             }
                             try {
@@ -8375,15 +8496,15 @@ public class Main extends XposedModule {
             Integer localHead = FROZEN_SESSION_HEADS.get(sid);
             if (repository == null || localHead == null) return false;
 
-            Class<?> continuation = cl.loadClass("uz1");
-            Class<?> unitType = cl.loadClass("ui8");
+            Class<?> continuation = HostCompat.load(cl, "uz1");
+            Class<?> unitType = HostCompat.load(cl, "ui8");
             Field unitField = unitType.getDeclaredField("a");
             unitField.setAccessible(true);
             Object unit = unitField.get(null);
 
-            Class<?> loaderType = cl.loadClass("ve1");
+            Class<?> loaderType = HostCompat.load(cl, "ve1");
             Constructor<?> loaderCtor = loaderType.getDeclaredConstructor(
-                    cl.loadClass("gm8"), String.class, continuation, int.class);
+                    HostCompat.load(cl, "gm8"), String.class, continuation, int.class);
             loaderCtor.setAccessible(true);
             Object loader = loaderCtor.newInstance(repository, sid, null, 0);
             Method executeLoader = loaderType.getDeclaredMethod("y", Object.class);
@@ -8394,7 +8515,7 @@ public class Main extends XposedModule {
                 return false;
             }
 
-            Class<?> mapperType = cl.loadClass("ie");
+            Class<?> mapperType = HostCompat.load(cl, "ie");
             Constructor<?> mapperCtor = null;
             for (Constructor<?> ctor : mapperType.getDeclaredConstructors()) {
                 Class<?>[] types = ctor.getParameterTypes();
@@ -8435,7 +8556,7 @@ public class Main extends XposedModule {
 
     private void hookHistoryLoadDiagnostics(final ClassLoader cl) {
         try {
-            Class<?> rawLoader = cl.loadClass("ve1");
+            Class<?> rawLoader = HostCompat.load(cl, "ve1");
             int rawHooks = 0;
             for (Method method : rawLoader.getDeclaredMethods()) {
                 if (!"y".equals(method.getName())
@@ -8461,7 +8582,7 @@ public class Main extends XposedModule {
                 rawHooks++;
             }
 
-            Class<?> mapper = cl.loadClass("ie");
+            Class<?> mapper = HostCompat.load(cl, "ie");
             int mapperHooks = 0;
             for (Method method : mapper.getDeclaredMethods()) {
                 if (!"y".equals(method.getName())
@@ -8509,8 +8630,8 @@ public class Main extends XposedModule {
      */
     private void hookActiveChatSessionCapture(final ClassLoader cl) {
         try {
-            Class<?> viewModel = cl.loadClass("za1");
-            Class<?> sessionType = cl.loadClass("tp");
+            Class<?> viewModel = HostCompat.load(cl, "za1");
+            Class<?> sessionType = HostCompat.load(cl, "tp");
             int installed = 0;
             for (Method method : viewModel.getDeclaredMethods()) {
                 if (!"G".equals(method.getName())
@@ -8556,7 +8677,7 @@ public class Main extends XposedModule {
     /** Keeps the anonymous transport request out of Compose while retaining its assistant child. */
     private void hookProactiveVisibleThreadFilter(final ClassLoader cl) {
         try {
-            Class<?> sessionType = cl.loadClass("tp");
+            Class<?> sessionType = HostCompat.load(cl, "tp");
             int installed = 0;
             for (Method method : sessionType.getDeclaredMethods()) {
                 if (!"s".equals(method.getName())
@@ -8604,10 +8725,10 @@ public class Main extends XposedModule {
      */
     private void hookNativeUiHeartbeatCompletion(final ClassLoader cl) {
         try {
-            Class<?> sessionType = cl.loadClass("tp");
-            Class<?> messageType = cl.loadClass("uo");
-            Class<?> viewModelType = cl.loadClass("za1");
-            Class<?> outcomeType = cl.loadClass("bu0");
+            Class<?> sessionType = HostCompat.load(cl, "tp");
+            Class<?> messageType = HostCompat.load(cl, "uo");
+            Class<?> viewModelType = HostCompat.load(cl, "za1");
+            Class<?> outcomeType = HostCompat.load(cl, "bu0");
             int installed = 0;
             for (Method method : sessionType.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
@@ -8956,7 +9077,7 @@ public class Main extends XposedModule {
         if (session != null && events != null) {
             try {
                 ClassLoader cl = session.getClass().getClassLoader();
-                Class<?> eventType = cl.loadClass("h61");
+                Class<?> eventType = HostCompat.load(cl, "h61");
                 Constructor<?> eventCtor = null;
                 for (Constructor<?> ctor : eventType.getDeclaredConstructors()) {
                     Class<?>[] types = ctor.getParameterTypes();
@@ -9051,6 +9172,7 @@ public class Main extends XposedModule {
 
     private static Object readHostField(Object target, String name) {
         if (target == null) return null;
+        name = HostCompat.staticMessageField(target, name);
         for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
             try {
                 Field field = type.getDeclaredField(name);
@@ -9078,7 +9200,7 @@ public class Main extends XposedModule {
 
     private void hookSettingsNavigation(ClassLoader cl) {
         try {
-            Class<?> nav = cl.loadClass("rm5");
+            Class<?> nav = HostCompat.load(cl, "rm5");
             for (Method m : nav.getDeclaredMethods()) {
                 if (!m.getName().equals("n") || m.getParameterTypes().length != 2) continue;
                 hook(m).intercept(new Hooker() {
@@ -9100,7 +9222,7 @@ public class Main extends XposedModule {
         } catch (Throwable t) { log("hook nav route failed: " + t); }
 
         try {
-            Class<?> gf8 = cl.loadClass("gf8");
+            Class<?> gf8 = HostCompat.load(cl, "gf8");
             for (Method m : gf8.getDeclaredMethods()) {
                 if (!m.getName().equals("A0") || m.getParameterTypes().length != 1) continue;
                 hook(m).intercept(new Hooker() {
@@ -9205,6 +9327,7 @@ public class Main extends XposedModule {
 
     private static String stringField(Object obj, String name) {
         try {
+            name = HostCompat.staticMessageField(obj, name);
             Field f = obj.getClass().getDeclaredField(name);
             f.setAccessible(true);
             Object v = f.get(obj);
@@ -9327,10 +9450,11 @@ public class Main extends XposedModule {
     // 1) transport 入口 r92.b：捕获活着的 r92、把发送点图片挂到 ew0、返回时包装 Flow 跑中继
     private void installNetworkPayloadCapture(ClassLoader cl) {
         try {
-            Class<?> rs0 = cl.loadClass("rs0");
+            Class<?> rs0 = HostCompat.load(cl, "rs0");
             int n = 0;
             // 快路径：transport 类 b(rs0,Long)。build 间该类改名(2.2.1=r92 / 2.2.2=s92)，两名都试。
-            for (String txName : new String[]{"r92", "s92", "t92", "q92"}) {
+            for (String legacyTxName : new String[]{"r92", "s92", "t92", "q92"}) {
+                String txName = HostCompat.name(legacyTxName);
                 try {
                     Class<?> txc = cl.loadClass(txName);
                     for (Method m : txc.getDeclaredMethods()) {
@@ -9435,7 +9559,8 @@ public class Main extends XposedModule {
         int repoCount = 0;
         int ctorCount = 0;
         int writeCount = 0;
-        for (String repoName : new String[]{"gm8", "fm8"}) {
+        for (String legacyRepoName : new String[]{"gm8", "fm8"}) {
+            String repoName = HostCompat.name(legacyRepoName);
             try {
                 final Class<?> repo = cl.loadClass(repoName);
                 ArrayList<Method> writers = new ArrayList<>();
@@ -9489,7 +9614,7 @@ public class Main extends XposedModule {
         log("installed history repositories=" + repoCount + " ctor=" + ctorCount + " write=" + writeCount);
 
         try {
-            Class<?> pw0 = cl.loadClass("pw0");
+            Class<?> pw0 = HostCompat.load(cl, "pw0");
             int n = 0;
             for (Constructor<?> ctor : pw0.getDeclaredConstructors()) {
                 hook(ctor).intercept(new Hooker() {
@@ -9604,7 +9729,7 @@ public class Main extends XposedModule {
         }
         if (!(fragmentsValue instanceof List)) return false;
         for (Object fragment : (List) fragmentsValue) {
-            boolean request = "ws7".equals(simpleName(fragment))
+            boolean request = HostCompat.simpleNameIs(fragment, "xs7")
                     || "REQUEST".equals(String.valueOf(fieldByName(fragment, "a")));
             if (!request) continue;
             Object content = fieldByName(fragment, "c");
@@ -9631,7 +9756,7 @@ public class Main extends XposedModule {
 
     private void hookSendPointFps(final ClassLoader cl, final String cls, final boolean directList) {
         try {
-            Class<?> c = cl.loadClass(cls);
+            Class<?> c = HostCompat.load(cl, cls);
             final Method y = c.getDeclaredMethod("y", Object.class);
             hook(y).intercept(new Hooker() {
                 @Override public Object intercept(Chain chain) throws Throwable {
@@ -9668,7 +9793,8 @@ public class Main extends XposedModule {
                     }
                 }
             });
-            log("installed send-point fp capture on " + cls + ".y");
+            log("installed send-point fp capture on "
+                    + HostCompat.name(cls) + ".y");
         } catch (Throwable t) { log("hookSendPointFps " + cls + " failed: " + t); }
     }
 
@@ -9681,7 +9807,7 @@ public class Main extends XposedModule {
     // 4) 捕获一个活着的 q71（completion PoW 管理器）实例
     private void installPowManagerCapture(ClassLoader cl) {
         try {
-            Class<?> q71 = cl.loadClass("q71");
+            Class<?> q71 = HostCompat.load(cl, "q71");
             int n = 0;
             for (Constructor<?> ctor : q71.getDeclaredConstructors()) {
                 hook(ctor).intercept(new Hooker() {
@@ -9731,7 +9857,8 @@ public class Main extends XposedModule {
 
     private static Object invokeNoArg(Object target, String name) {
         try {
-            Method m = target.getClass().getMethod(name);
+            Method m = target.getClass().getMethod(
+                    HostCompat.instanceMethod(target, name));
             m.setAccessible(true);
             return m.invoke(target);
         } catch (Throwable t) { return null; }
@@ -9784,7 +9911,7 @@ public class Main extends XposedModule {
         int candidates = 0;
         int detailLogs = 0;
         for (Object message : messages) {
-            if (message == null || !"kv".equals(simpleName(message))) continue;
+            if (!HostCompat.simpleNameIs(message, "kv")) continue;
             Integer messageId = intField(message, "f");
             if (messageId == null) continue;
             Object serverObj = fieldByName(message, "t");
@@ -9946,7 +10073,7 @@ public class Main extends XposedModule {
     private static boolean fragmentListContainsRelayMarker(List fragments) {
         if (fragments == null) return false;
         for (Object fragment : fragments) {
-            boolean request = "ws7".equals(simpleName(fragment))
+            boolean request = HostCompat.simpleNameIs(fragment, "xs7")
                     || "REQUEST".equals(String.valueOf(fieldByName(fragment, "a")));
             if (!request) continue;
             Object content = fieldByName(fragment, "c");
@@ -10013,16 +10140,19 @@ public class Main extends XposedModule {
         File out = relayImageFile(sid);
         if (out == null) { extLog("[HISTORY] persistImages skip: sid 文件名不安全 sid=" + truncateForLog(sid, 80)); return; }
         try {
-            Constructor<?> ctor = null;
-            for (String name : new String[]{"rs7", "qs7"}) {
-                try {
-                    ctor = cl.loadClass(name).getDeclaredConstructor(List.class);
-                    break;
-                } catch (Throwable ignored) {}
+            Class<?> fileFragment = HostCompat.load(cl, "rs7");
+            Constructor<?> ctor;
+            Object frag;
+            if (HostCompat.isV230()) {
+                ctor = fileFragment.getDeclaredConstructor(
+                        int.class, String.class, List.class);
+                ctor.setAccessible(true);
+                frag = ctor.newInstance(1, "FILE", imageFps);
+            } else {
+                ctor = fileFragment.getDeclaredConstructor(List.class);
+                ctor.setAccessible(true);
+                frag = ctor.newInstance(imageFps);
             }
-            if (ctor == null) throw new NoSuchMethodException("FILE fragment(List) not found");
-            ctor.setAccessible(true);
-            Object frag = ctor.newInstance(imageFps);
             String json = encodeStaticFragments(cl, java.util.Collections.singletonList(frag));
             if (json == null || json.length() == 0) { extLog("[HISTORY] persistImages 编码失败 sid=" + sid); return; }
             File dir = out.getParentFile();
@@ -10087,12 +10217,12 @@ public class Main extends XposedModule {
     private static List decodeStaticFragments(ClassLoader cl, String json) {
         if (cl == null || json == null || json.trim().length() == 0) return null;
         try {
-            Class<?> ch4 = cl.loadClass("ch4");
-            Class<?> x94 = cl.loadClass("x94");
+            Class<?> ch4 = HostCompat.load(cl, "ch4");
+            Class<?> x94 = HostCompat.load(cl, "x94");
             Field jsonField = x94.getDeclaredField("a");
             jsonField.setAccessible(true);
             Object jsonCodec = jsonField.get(null);
-            Class<?> xv0 = cl.loadClass("xv0");
+            Class<?> xv0 = HostCompat.load(cl, "xv0");
             Field serializerField = xv0.getDeclaredField("a");
             serializerField.setAccessible(true);
             Object serializer = serializerField.get(null);
@@ -10110,16 +10240,16 @@ public class Main extends XposedModule {
     private static String encodeStaticFragments(ClassLoader cl, List fragments) {
         if (cl == null || fragments == null) return null;
         try {
-            Class<?> ch4 = cl.loadClass("ch4");
-            Class<?> x94 = cl.loadClass("x94");
+            Class<?> ch4 = HostCompat.load(cl, "ch4");
+            Class<?> x94 = HostCompat.load(cl, "x94");
             Field jsonField = x94.getDeclaredField("a");
             jsonField.setAccessible(true);
             Object jsonCodec = jsonField.get(null);
-            Class<?> xv0 = cl.loadClass("xv0");
+            Class<?> xv0 = HostCompat.load(cl, "xv0");
             Field serializerField = xv0.getDeclaredField("a");
             serializerField.setAccessible(true);
             Object serializer = serializerField.get(null);
-            Class<?> zv0 = cl.loadClass("zv0");
+            Class<?> zv0 = HostCompat.load(cl, "zv0");
             Constructor<?> wrapperCtor = zv0.getDeclaredConstructor(List.class);
             wrapperCtor.setAccessible(true);
             Object wrapper = wrapperCtor.newInstance(fragments);
@@ -10165,7 +10295,7 @@ public class Main extends XposedModule {
     private static void stripRelayDescriptionText(List fragments) {
         if (fragments == null) return;
         for (Object fragment : fragments) {
-            boolean request = "ws7".equals(simpleName(fragment))
+            boolean request = HostCompat.simpleNameIs(fragment, "xs7")
                     || "REQUEST".equals(String.valueOf(fieldByName(fragment, "a")));
             if (!request) continue;
             Object content = fieldByName(fragment, "c");
@@ -10229,7 +10359,7 @@ public class Main extends XposedModule {
 
     private static boolean isFileFragment(Object fragment) {
         if (fragment == null) return false;
-        if ("qs7".equals(simpleName(fragment)) || "rs7".equals(simpleName(fragment))) return true;
+        if (HostCompat.simpleNameIs(fragment, "rs7")) return true;
         return "FILE".equals(String.valueOf(fieldByName(fragment, "a")));
     }
 
@@ -10240,6 +10370,7 @@ public class Main extends XposedModule {
 
     private static boolean forceSetObjectField(Object obj, String name, Object value) {
         if (obj == null) return false;
+        name = HostCompat.staticMessageField(obj, name);
         try {
             Field field = obj.getClass().getDeclaredField(name);
             field.setAccessible(true);
@@ -10282,7 +10413,7 @@ public class Main extends XposedModule {
         if (reqObj == null) return false;
         // One-shot association: every transport call consumes the send-point model captured for this request.
         String capturedModel = ew0EffectiveModels.remove(reqObj);
-        if (!"ew0".equals(simpleName(reqObj))) return false;
+        if (!HostCompat.simpleNameIs(reqObj, "ew0")) return false;
         Object files = fieldByName(reqObj, "d");
         boolean hasFiles = files instanceof java.util.List && !((java.util.List) files).isEmpty();
         Object explicitModel = fieldByName(reqObj, "i");
@@ -10319,8 +10450,8 @@ public class Main extends XposedModule {
     // 仅当 this 是已登记的 expert 带图冷 Flow 时介入；否则原样放行(热路径，identity 命中开销 O(1))。
     private void installExpertFlowCollectHook(ClassLoader cl) {
         try {
-            Class<?> b41 = cl.loadClass("b41");
-            Class<?> q03 = cl.loadClass("q03");
+            Class<?> b41 = HostCompat.load(cl, "b41");
+            Class<?> q03 = HostCompat.load(cl, "q03");
             Method bColl = null;
             for (Method m : b41.getDeclaredMethods()) {
                 Class<?>[] p = m.getParameterTypes();
@@ -11248,7 +11379,7 @@ public class Main extends XposedModule {
     private Object newLocalApiNativeRequest(ClassLoader cl, String sid,
                                              LocalApiGateway.CompletionRequest request,
                                              String pow) throws Exception {
-        Class<?> ew0 = cl.loadClass("ew0");
+        Class<?> ew0 = HostCompat.load(cl, "ew0");
         Constructor<?> selected = null;
         for (Constructor<?> ctor : ew0.getDeclaredConstructors()) {
             Class<?>[] p = ctor.getParameterTypes();
@@ -11442,7 +11573,7 @@ public class Main extends XposedModule {
         }
         Object suspended = null;
         try {
-            Field field = cl.loadClass("w02").getDeclaredField("a");
+            Field field = HostCompat.load(cl, "w02").getDeclaredField("a");
             field.setAccessible(true);
             suspended = field.get(null);
         } catch (Throwable ignored) {}
@@ -11491,7 +11622,7 @@ public class Main extends XposedModule {
 
     private static Throwable coroutineFailure(Object value) {
         if (value instanceof Throwable) return (Throwable) value;
-        if (value != null && "fx6".equals(simpleName(value))) {
+        if (HostCompat.simpleNameIs(value, "fx6")) {
             Object failure = fieldByName(value, "a");
             if (failure instanceof Throwable) return (Throwable) failure;
         }
@@ -11502,51 +11633,52 @@ public class Main extends XposedModule {
                                            NativeApiPatchDecoder patchDecoder) {
         ApiEvent out = new ApiEvent();
         try {
-            String valueType = simpleName(value);
-            if ("ws0".equals(valueType)) {
-                Object response = fieldByName(value, "a");
-                Object bodyValue = fieldByName(response, "j");
-                if (bodyValue instanceof String) {
-                    String body = ((String) bodyValue).trim();
-                    if (body.startsWith("{")) {
-                        JSONObject envelope = new JSONObject(body);
-                        int outerCode = envelope.optInt("code", 0);
-                        JSONObject data = envelope.optJSONObject("data");
-                        int businessCode = data == null ? 0 : data.optInt("biz_code", 0);
-                        String message = data == null ? envelope.optString("msg", "")
-                                : data.optString("biz_msg", envelope.optString("msg", ""));
-                        if (outerCode != 0 || businessCode != 0) {
-                            String lower = message.toLowerCase(Locale.US);
-                            if (lower.contains("invalid chat session")
-                                    || lower.contains("session not found")
-                                    || lower.contains("session deleted")) {
-                                out.errorStatus = 409;
-                                out.errorCode = "invalid_api_session";
-                                out.errorType = "server_error";
-                            } else if (isNativeBusyLimit(message)
-                                    || lower.contains("rate_limit")
-                                    || lower.contains("too frequent")
-                                    || message.contains("过于频繁")) {
-                                out.errorStatus = 429;
-                                out.errorCode = "upstream_rate_limit";
-                                out.errorType = "rate_limit_error";
-                            } else {
-                                out.errorStatus = 502;
-                                out.errorCode = "upstream_rejected";
-                                out.errorType = "server_error";
-                            }
-                            out.error = message.length() == 0 ? body : message;
-                            return out;
+            // The sealed Flow wrapper names are R8-generated and changed in 2.3.0.  Their stable
+            // wire shape did not: HTTP terminal events wrap a response whose body is field j;
+            // SSE events wrap {eventName=a,data=b}.  Decode that contract directly.
+            Object wrapped = fieldByName(value, "a");
+            Object bodyValue = fieldByName(wrapped, "j");
+            if (bodyValue instanceof String) {
+                String body = ((String) bodyValue).trim();
+                if (body.startsWith("{")) {
+                    JSONObject envelope = new JSONObject(body);
+                    int outerCode = envelope.optInt("code", 0);
+                    JSONObject data = envelope.optJSONObject("data");
+                    int businessCode = data == null ? 0 : data.optInt("biz_code", 0);
+                    String message = data == null ? envelope.optString("msg", "")
+                            : data.optString("biz_msg", envelope.optString("msg", ""));
+                    if (outerCode != 0 || businessCode != 0) {
+                        String lower = message.toLowerCase(Locale.US);
+                        if (lower.contains("invalid chat session")
+                                || lower.contains("session not found")
+                                || lower.contains("session deleted")) {
+                            out.errorStatus = 409;
+                            out.errorCode = "invalid_api_session";
+                            out.errorType = "server_error";
+                        } else if (isNativeBusyLimit(message)
+                                || lower.contains("rate_limit")
+                                || lower.contains("too frequent")
+                                || message.contains("过于频繁")) {
+                            out.errorStatus = 429;
+                            out.errorCode = "upstream_rate_limit";
+                            out.errorType = "rate_limit_error";
+                        } else {
+                            out.errorStatus = 502;
+                            out.errorCode = "upstream_rejected";
+                            out.errorType = "server_error";
                         }
+                        out.error = message.length() == 0 ? body : message;
+                        return out;
                     }
                 }
                 return out;
             }
-            if (!"xs0".equals(valueType)) return out;
-            Object wrapper = fieldByName(value, "a");
+            Object wrapper = wrapped;
             if (wrapper == null) return out;
-            String eventName = String.valueOf(fieldByName(wrapper, "a"));
             Object dataValue = fieldByName(wrapper, "b");
+            if (!(dataValue instanceof String)) return out;
+            Object rawEventName = fieldByName(wrapper, "a");
+            String eventName = rawEventName == null ? "" : String.valueOf(rawEventName);
             String data = dataValue instanceof String ? (String) dataValue : null;
             String lowerEvent = eventName == null ? "" : eventName.toLowerCase(Locale.US);
             if (lowerEvent.contains("error") || lowerEvent.contains("failed")) {
@@ -11696,7 +11828,11 @@ public class Main extends XposedModule {
             Object i91 = bf.get(r92);
             Method createM = null;
             for (Method m : i91.getClass().getDeclaredMethods()) {
-                if (m.getName().equals("a") && m.getParameterTypes().length == 1) { createM = m; break; }
+                if (m.getName().equals(HostCompat.method("i91", "a"))
+                        && m.getParameterTypes().length == 1) {
+                    createM = m;
+                    break;
+                }
             }
             if (createM == null) {
                 localApiLastSessionError = "i91.a(create) method missing";
@@ -11739,10 +11875,15 @@ public class Main extends XposedModule {
             java.lang.reflect.Field bf = r92.getClass().getDeclaredField("b"); // i91
             bf.setAccessible(true);
             Object i91 = bf.get(r92);
-            Object jb1 = cl.loadClass("jb1").getConstructor(String.class).newInstance(sid);
+            Object jb1 = HostCompat.load(cl, "jb1")
+                    .getConstructor(String.class).newInstance(sid);
             Method delM = null;
             for (Method m : i91.getClass().getDeclaredMethods()) {
-                if (m.getName().equals("c") && m.getParameterTypes().length == 2) { delM = m; break; }
+                if (m.getName().equals(HostCompat.method("i91", "c"))
+                        && m.getParameterTypes().length == 2) {
+                    delM = m;
+                    break;
+                }
             }
             if (delM == null) { extLog("[RELAY] i91.c(delete) 未找到"); return false; }
             Object response = driveSuspend(cl, delM, i91, new Object[]{ jb1 });
@@ -11771,13 +11912,16 @@ public class Main extends XposedModule {
 
     private volatile Method cachedRunBlocking;
     private Object driveSuspend(ClassLoader cl, final Method m, final Object target, final Object[] preArgs) throws Throwable {
-        Class<?> n02 = cl.loadClass("n02");
-        Class<?> mb3 = cl.loadClass("mb3");
+        Class<?> n02 = HostCompat.load(cl, "n02");
+        Class<?> mb3 = HostCompat.load(cl, "mb3");
         // runBlocking(CoroutineContext, Function2)=静态 (n02,mb3)->Object。
         // build 间该 holder 类改名(2.2.1=t82 / 2.2.2=u82)，按候选名 + 结构签名兜底解析。
         Method K = cachedRunBlocking;
         if (K == null) {
-            for (String nm : new String[]{"u82", "t82", "v82", "s82", "w82"}) {
+            String[] holders = HostCompat.isV230()
+                    ? new String[]{HostCompat.name("u82")}
+                    : new String[]{"u82", "t82", "v82", "s82", "w82"};
+            for (String nm : holders) {
                 try {
                     Class<?> holder = cl.loadClass(nm);
                     for (Method mm : holder.getDeclaredMethods()) {
@@ -11932,12 +12076,11 @@ public class Main extends XposedModule {
 
     private String extractContentDeltaFromEvent(Object value) {
         try {
-            if (!"xs0".equals(simpleName(value))) return null;
-            Object lv7 = fieldByName(value, "a");
-            if (lv7 == null) return null;
-            Object ename = fieldByName(lv7, "a");
+            Object event = fieldByName(value, "a");
+            if (event == null || fieldByName(event, "j") instanceof String) return null;
+            Object ename = fieldByName(event, "a");
             if (ename != null) return null;
-            Object bj = fieldByName(lv7, "b");
+            Object bj = fieldByName(event, "b");
             if (!(bj instanceof String)) return null;
             return extractContentDelta((String) bj);
         } catch (Throwable t) { return null; }
@@ -12010,7 +12153,7 @@ public class Main extends XposedModule {
     /** Creates the host's real coroutine Job so disconnects cancel the upstream Flow. */
     private static Object newLocalApiCancellationJob(ClassLoader cl, Class<?> contextClass) {
         try {
-            Class<?> jobClass = cl.loadClass("c74");
+            Class<?> jobClass = HostCompat.load(cl, "c74");
             Constructor<?> constructor = jobClass.getDeclaredConstructor(boolean.class);
             constructor.setAccessible(true);
             Object job = constructor.newInstance(true);
@@ -12073,7 +12216,7 @@ public class Main extends XposedModule {
     private static String summarizeFlowEvent(Object v) {
         if (v == null) return "null";
         String n = simpleName(v);
-        if ("lv7".equals(n)) {
+        if (HostCompat.simpleNameIs(v, "lv7")) {
             return "lv7{event=" + logValue(fieldByName(v, "a")) + ", data=" + logValue(fieldByName(v, "b")) + "}";
         }
         String nr = summarizeNetworkResult(v);
@@ -12106,20 +12249,21 @@ public class Main extends XposedModule {
     private static String summarizeNetworkResult(Object result) {
         if (result == null) return null;
         String n = simpleName(result);
-        if ("w02".equals(n)) return null;
-        if ("kp5".equals(n)) {
+        if (HostCompat.simpleNameIs(result, "w02")) return null;
+        if (HostCompat.simpleNameIs(result, "kp5")) {
             Object biz = fieldByName(result, "a");
             Object data = fieldByName(result, "b");
             String dataName = simpleName(data);
             String bizName = simpleName(biz);
-            if ("fp".equals(dataName) || "ul6".equals(dataName) || "vx2".equals(bizName)) {
+            if (HostCompat.simpleNameIs(data, "fp")
+                    || "ul6".equals(dataName) || HostCompat.simpleNameIs(biz, "vx2")) {
                 return "ok biz=" + logValue(biz) + " data=" + logValue(data);
             }
             return null;
         }
-        if ("op5".equals(n)) {
+        if (HostCompat.simpleNameIs(result, "op5")) {
             Object biz = fieldByName(result, "a");
-            if ("vx2".equals(simpleName(biz))) {
+            if (HostCompat.simpleNameIs(biz, "vx2")) {
                 return "err biz=" + logValue(biz)
                         + " msg=" + logValue(fieldByName(result, "b"))
                         + " detail=" + logValue(fieldByName(result, "c"));
@@ -12154,6 +12298,7 @@ public class Main extends XposedModule {
 
     private static Object fieldByName(Object obj, String name) {
         if (obj == null) return null;
+        name = HostCompat.staticMessageField(obj, name);
         try {
             Field f = obj.getClass().getDeclaredField(name);
             f.setAccessible(true);
@@ -12185,9 +12330,9 @@ public class Main extends XposedModule {
         }
         if (v instanceof android.net.Uri) return "Uri(" + truncateForLog(String.valueOf(v), 200) + ")";
         String n = simpleName(v);
-        if ("fp".equals(n)) return summarizeFp(v);
+        if (HostCompat.simpleNameIs(v, "fp")) return summarizeFp(v);
         if ("ul6".equals(n)) return summarizeUl6(v);
-        if ("jv0".equals(n)) return String.valueOf(v);
+        if (HostCompat.simpleNameIs(v, "jv0")) return String.valueOf(v);
         String s = String.valueOf(v);
         return n + "(" + truncateForLog(s, 160) + ")";
     }

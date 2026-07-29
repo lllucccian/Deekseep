@@ -221,8 +221,8 @@ final class ResponsePreserver {
 
     private static String encodeHostMessage(ClassLoader cl, Object message) {
         try {
-            Object json = staticField(cl.loadClass("x94"), "a");
-            Object serializer = staticField(cl.loadClass("hv"), "a");
+            Object json = staticField(HostCompat.load(cl, "x94"), "a");
+            Object serializer = staticField(HostCompat.load(cl, "hv"), "a");
             Method encode = method(json, "c", 2);
             Object value = encode == null ? null : encode.invoke(json, serializer, message);
             return value instanceof String ? (String) value : null;
@@ -234,8 +234,8 @@ final class ResponsePreserver {
     private static Object decodeHostMessage(ClassLoader cl, String value) {
         if (value == null || value.length() == 0 || value.length() > MAX_HOST_JSON) return null;
         try {
-            Object json = staticField(cl.loadClass("x94"), "a");
-            Object serializer = staticField(cl.loadClass("hv"), "a");
+            Object json = staticField(HostCompat.load(cl, "x94"), "a");
+            Object serializer = staticField(HostCompat.load(cl, "hv"), "a");
             Method decode = method(json, "b", 2);
             return decode == null ? null : decode.invoke(json, serializer, value);
         } catch (Throwable ignored) {
@@ -337,7 +337,7 @@ final class ResponsePreserver {
     }
 
     private static Object call(Object target, String name) {
-        Method method = method(target, name, 0);
+        Method method = method(target, HostCompat.instanceMethod(target, name), 0);
         if (method == null) return null;
         try { return method.invoke(target); }
         catch (Throwable ignored) { return null; }
@@ -354,6 +354,7 @@ final class ResponsePreserver {
 
     private static Object field(Object target, String name) {
         if (target == null) return null;
+        name = HostCompat.staticMessageField(target, name);
         for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
             try {
                 Field field = type.getDeclaredField(name);
@@ -366,6 +367,7 @@ final class ResponsePreserver {
 
     private static boolean setField(Object target, String name, Object value) {
         if (target == null) return false;
+        name = HostCompat.staticMessageField(target, name);
         for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
             try {
                 Field field = type.getDeclaredField(name);

@@ -67,15 +67,16 @@ final class ChatAppearance {
     // wallpaper drifts ~1/5 further than the configured amount without touching saved values.
     static final float MOTION_DISTANCE_BOOST = 1.2f;
     static final float MIN_BACKGROUND_SCALE = 0.01f;
-    // One-pole motion follower: the wallpaper closes this fraction of the remaining distance on
-    // each display frame. Lower = more gradual/floaty trailing while still tracking the drawer.
-    static final float WALLPAPER_LAG_RESPONSE = 0.33f;
-    // Tiny hold before the follower reacts to a new target, so the drawer begins moving a hair
-    // before the background does.
-    static final long WALLPAPER_LAG_START_DELAY_MS = 15L;
+    // Time-based one-pole follower. A fixed per-frame fraction became almost instantaneous on
+    // 120 Hz panels, which removed the intended optical separation between the host drawer and
+    // the wallpaper. This time constant keeps the same restrained trailing at every refresh rate.
+    static final float WALLPAPER_LAG_TIME_CONSTANT_MS = 58f;
+    // Let the foreground transition lead by a few frames before the far background follows.
+    static final long WALLPAPER_LAG_START_DELAY_MS = 36L;
     // Route transitions (chat <-> settings) glide the wallpaper over this window with a decelerate
     // curve so it eases in rather than snapping to the new anchor.
     static final long WALLPAPER_ROUTE_GLIDE_MS = 520L;
+    static final long WALLPAPER_ROUTE_START_DELAY_MS = 42L;
     // Shake parallax (Apple-style inertial drift). This is impulse-driven, NOT attitude mapping:
     // the wallpaper stays put while the phone is held still, reacts only to a quick move/shake,
     // then a spring pulls it back to rest. Angular speed (gyro) or linear-accel jerk feeds an
@@ -1613,9 +1614,16 @@ final class ChatAppearance {
     }
 
     static float laggedMotionStep(float current, float target) {
+        return laggedMotionStep(current, target, 1000f / 60f);
+    }
+
+    static float laggedMotionStep(float current, float target, float deltaMs) {
         if (Float.isNaN(current) || Float.isInfinite(current)) return target;
         if (Float.isNaN(target) || Float.isInfinite(target)) return current;
-        return current + (target - current) * WALLPAPER_LAG_RESPONSE;
+        float dt = clamp(deltaMs, 1f, 50f);
+        float alpha = 1f - (float) Math.exp(
+                -dt / WALLPAPER_LAG_TIME_CONSTANT_MS);
+        return current + (target - current) * alpha;
     }
 
     static void onActivityResumed(Activity activity) {
@@ -1943,6 +1951,7 @@ final class ChatAppearance {
         private boolean motionFollowerRunning;
         private int motionFollowerGeneration;
         private long motionFollowerStartAt;
+        private long motionFollowerLastFrameAt;
         private boolean wallpaperRevealPending;
         private String loggedScene = "";
         private android.animation.ValueAnimator routeMotionAnimator;
@@ -2172,9 +2181,13 @@ final class ChatAppearance {
                 if (routeTransition) {
                     startRouteMotionGlide(target);
                 } else if (animate) {
-                    cancelRouteMotion();
                     motionTargetX = target;
-                    startMotionFollower();
+                    // Drawer state can emit an initial open/closed pair immediately after
+                    // Settings pops. Retarget the active route glide instead of cancelling it;
+                    // otherwise that pair snaps the wallpaper and erases the return delay.
+                    if (routeMotionAnimator == null) {
+                        startMotionFollower();
+                    }
                 } else {
                     cancelRouteMotion();
                     stopMotionFollower();
@@ -2223,9 +2236,10 @@ final class ChatAppearance {
         }
 
         private void cancelRouteMotion() {
-            if (routeMotionAnimator != null) {
-                routeMotionAnimator.cancel();
-                routeMotionAnimator = null;
+            android.animation.ValueAnimator animator = routeMotionAnimator;
+            routeMotionAnimator = null;
+            if (animator != null) {
+                animator.cancel();
             }
         }
 
@@ -2245,14 +2259,24 @@ final class ChatAppearance {
                 return;
             }
             android.animation.ValueAnimator animator =
-                    android.animation.ValueAnimator.ofFloat(start, target);
+                    android.animation.ValueAnimator.ofFloat(0f, 1f);
             animator.setDuration(WALLPAPER_ROUTE_GLIDE_MS);
+            animator.setStartDelay(WALLPAPER_ROUTE_START_DELAY_MS);
             animator.setInterpolator(new DecelerateInterpolator(1.8f));
             animator.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() {
                 @Override public void onAnimationUpdate(android.animation.ValueAnimator a) {
                     if (wallpaperView == null) return;
-                    parallaxX = (Float) a.getAnimatedValue();
+                    float progress = (Float) a.getAnimatedValue();
+                    parallaxX = start + (motionTargetX - start) * progress;
                     applyWallpaperTranslation();
+                }
+            });
+            animator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    if (routeMotionAnimator != animation) return;
+                    parallaxX = motionTargetX;
+                    applyWallpaperTranslation();
+                    routeMotionAnimator = null;
                 }
             });
             routeMotionAnimator = animator;
@@ -2264,6 +2288,7 @@ final class ChatAppearance {
             motionFollowerRunning = true;
             motionFollowerStartAt =
                     android.os.SystemClock.uptimeMillis() + WALLPAPER_LAG_START_DELAY_MS;
+            motionFollowerLastFrameAt = 0L;
             final int generation = ++motionFollowerGeneration;
             postOnAnimation(new Runnable() {
                 @Override public void run() {
@@ -2271,10 +2296,14 @@ final class ChatAppearance {
                             || !motionFollowerRunning || wallpaperView == null) {
                         return;
                     }
-                    if (android.os.SystemClock.uptimeMillis() < motionFollowerStartAt) {
+                    long now = android.os.SystemClock.uptimeMillis();
+                    if (now < motionFollowerStartAt) {
                         postOnAnimation(this);
                         return;
                     }
+                    float deltaMs = motionFollowerLastFrameAt == 0L
+                            ? 1000f / 60f : now - motionFollowerLastFrameAt;
+                    motionFollowerLastFrameAt = now;
                     float current = parallaxX;
                     float remaining = motionTargetX - current;
                     if (Math.abs(remaining) <= 0.4f) {
@@ -2283,7 +2312,8 @@ final class ChatAppearance {
                         motionFollowerRunning = false;
                         return;
                     }
-                    float next = laggedMotionStep(current, motionTargetX);
+                    float next = laggedMotionStep(
+                            current, motionTargetX, deltaMs);
                     parallaxX = next;
                     applyWallpaperTranslation();
                     postOnAnimation(this);
@@ -2294,6 +2324,7 @@ final class ChatAppearance {
         private void stopMotionFollower() {
             motionFollowerGeneration++;
             motionFollowerRunning = false;
+            motionFollowerLastFrameAt = 0L;
         }
 
         // Feeds an impulse into the 2D shake spring. Called from the sensor when a quick move is

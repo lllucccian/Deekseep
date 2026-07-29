@@ -298,7 +298,8 @@ final class HistoryBridge {
 
     private static Integer callInteger(Object target, String name) {
         try {
-            Method method = target.getClass().getMethod(name);
+            Method method = target.getClass().getMethod(
+                    HostCompat.instanceMethod(target, name));
             method.setAccessible(true);
             return asInteger(method.invoke(target));
         } catch (Throwable ignored) {
@@ -423,7 +424,7 @@ final class HistoryBridge {
 
     private static Row persistenceRow(Object message) {
         try {
-            Method method = message.getClass().getMethod("O");
+            Method method = HostCompat.publicMessageMethod(message, "O");
             method.setAccessible(true);
             Object row = method.invoke(message);
             Integer id = asInteger(field(row, "a"));
@@ -443,6 +444,7 @@ final class HistoryBridge {
 
     private static Object field(Object target, String name) {
         if (target == null) return null;
+        name = HostCompat.staticMessageField(target, name);
         for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
             try {
                 Field f = type.getDeclaredField(name);
@@ -455,6 +457,7 @@ final class HistoryBridge {
 
     private static boolean setField(Object target, String name, Object value) {
         if (target == null) return false;
+        name = HostCompat.staticMessageField(target, name);
         for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
             try {
                 Field f = type.getDeclaredField(name);

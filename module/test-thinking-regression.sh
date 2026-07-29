@@ -53,6 +53,7 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     tests/com/dsmod/probe/LocalApiGatewayProtocolRegressionTest.java \
     tests/com/dsmod/probe/LocalApiCoroutineCancellationRegressionTest.java \
     tests/com/dsmod/probe/NativeApiPatchDecoderRegressionTest.java \
+    tests/com/dsmod/probe/HostCompatRegressionTest.java \
     tests/com/dsmod/probe/UiLanguagePolicyRegressionTest.java \
     tests/com/dsmod/probe/ChatAppearanceConfigRegressionTest.java \
     tests/com/dsmod/probe/ImageCutoutRegressionTest.java \
@@ -74,6 +75,7 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     src/com/dsmod/probe/AccountManager.java \
     src/com/dsmod/probe/GoogleLoginUnlock.java \
     src/com/dsmod/probe/ResponsePreserver.java \
+    src/com/dsmod/probe/HostCompat.java \
     src/com/dsmod/probe/Main.java \
     tests/tp.java \
     tests/h61.java \
@@ -128,6 +130,9 @@ java -cp "$TEST_CP" \
 
 java -cp "$TEST_CP" \
     com.dsmod.probe.NativeApiPatchDecoderRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.HostCompatRegressionTest
 
 java -cp "$TEST_CP" \
     com.dsmod.probe.UiLanguagePolicyRegressionTest

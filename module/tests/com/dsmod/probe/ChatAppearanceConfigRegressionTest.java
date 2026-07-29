@@ -429,16 +429,25 @@ public final class ChatAppearanceConfigRegressionTest {
         float lastQuarter = 1f - ChatAppearance.easeOutCubic(0.75f);
         check(firstQuarter > lastQuarter * 10f,
                 "ease-out must make the opening visibly faster than its final quarter");
-        float lag = ChatAppearance.laggedMotionStep(0f, 1f);
-        float firstStep = lag;
-        for (int i = 0; i < 11; i++) {
-            lag = ChatAppearance.laggedMotionStep(lag, 1f);
+        float lag60 = 0f;
+        float lag120 = 0f;
+        float firstStep = ChatAppearance.laggedMotionStep(
+                lag60, 1f, 1000f / 60f);
+        for (int i = 0; i < 12; i++) {
+            lag60 = ChatAppearance.laggedMotionStep(
+                    lag60, 1f, 1000f / 60f);
+        }
+        for (int i = 0; i < 24; i++) {
+            lag120 = ChatAppearance.laggedMotionStep(
+                    lag120, 1f, 1000f / 120f);
         }
         check(firstStep > 0f && firstStep < 1f,
                 "wallpaper follower must trail rather than jump to the host target");
-        check(lag > 0.99f && lag < 1f,
+        check(lag60 > 0.95f && lag60 < 1f,
                 "wallpaper follower must converge smoothly after the host stops");
-        check((1f - lag) < firstStep / 20f,
+        check(Math.abs(lag60 - lag120) < 0.005f,
+                "wallpaper lag must be refresh-rate independent");
+        check((1f - lag60) < firstStep / 5f,
                 "wallpaper follower must slow progressively near the endpoint");
     }
 
