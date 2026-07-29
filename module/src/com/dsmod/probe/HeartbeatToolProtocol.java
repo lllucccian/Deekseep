@@ -32,6 +32,17 @@ final class HeartbeatToolProtocol {
     static final String TOOL_BIND_CHAT = "bind_chat";
     static final String TOOL_CANCEL_HEARTBEAT = "cancel_heartbeat";
 
+    // Invisible presentation marker consumed by the host Compose text hook. It keeps tool status
+    // styling separate from model-authored Markdown and remains visually harmless if a future
+    // host build moves the renderer before its mapping is updated.
+    private static final String TOOL_STATUS_STYLE_MARKER =
+            "\u2063\u200b\u2062\u200d\u2063\u200c\u2062";
+    static final long TOOL_STATUS_GRAY_COLOR = 0xFF8A8A8AL << 32;
+    static final long TOOL_STATUS_FONT_SIZE =
+            4294967296L
+                    | (((long) Float.floatToRawIntBits(10.666667f)) & 4294967295L);
+    static final int TOOL_STATUS_EXPLICIT_STYLE_MASK = (1 << 2) | (1 << 4);
+
     private static final int MAX_CONTROL_JSON = 16 * 1024;
     private static final int MAX_CALLS_PER_BLOCK = 8;
     private static final int MAX_INSTRUCTION = 1200;
@@ -135,7 +146,7 @@ final class HeartbeatToolProtocol {
     }
 
     static String stripControlBlocks(String value) {
-        return parse(value).visibleText;
+        return stripToolStatusStyleMarkers(parse(value).visibleText);
     }
 
     static String renderConversationToolRows(String value) {
@@ -151,9 +162,39 @@ final class HeartbeatToolProtocol {
         for (int index = firstCall; index < calls.size(); index++) {
             if (index > firstCall) visible.append('\n');
             ToolCall call = calls.get(index);
-            visible.append("> ").append(toolStatusText(call, chinese));
+            visible.append("> ")
+                    .append(markToolStatus(toolStatusText(call, chinese)));
         }
         visible.append("\n\n");
+    }
+
+    private static String markToolStatus(String value) {
+        return TOOL_STATUS_STYLE_MARKER + value + TOOL_STATUS_STYLE_MARKER;
+    }
+
+    static boolean hasToolStatusStyleMarker(String value) {
+        return value != null && value.indexOf(TOOL_STATUS_STYLE_MARKER) >= 0;
+    }
+
+    static boolean isIsolatedToolStatusText(String value) {
+        if (value == null) return false;
+        int start = value.indexOf(TOOL_STATUS_STYLE_MARKER);
+        if (start < 0 || value.substring(0, start).trim().length() != 0) return false;
+        int contentStart = start + TOOL_STATUS_STYLE_MARKER.length();
+        int end = value.indexOf(TOOL_STATUS_STYLE_MARKER, contentStart);
+        return end >= contentStart
+                && value.substring(contentStart, end).trim().length() > 0
+                && value.substring(end + TOOL_STATUS_STYLE_MARKER.length())
+                .trim().length() == 0;
+    }
+
+    static String stripToolStatusStyleMarkers(String value) {
+        if (!hasToolStatusStyleMarker(value)) return value == null ? "" : value;
+        return value.replace(TOOL_STATUS_STYLE_MARKER, "");
+    }
+
+    static int explicitToolStatusStyleMask(int defaultMask) {
+        return defaultMask & ~TOOL_STATUS_EXPLICIT_STYLE_MASK;
     }
 
     private static void appendParagraphBreak(StringBuilder value) {
@@ -242,7 +283,7 @@ final class HeartbeatToolProtocol {
                 Date parsed = parser.parse(input, position);
                 if (parsed == null || position.getIndex() != input.length()) continue;
                 SimpleDateFormat display = new SimpleDateFormat(
-                        chinese ? "M\u6708d\u65e5 HH:mm" : "MMM d, HH:mm",
+                        chinese ? "M\u6708d\u65e5 HH:mm:ss" : "MMM d, HH:mm:ss",
                         chinese ? Locale.CHINA : Locale.getDefault());
                 display.setTimeZone(TimeZone.getDefault());
                 return display.format(parsed);

@@ -103,17 +103,47 @@ public final class HeartbeatToolProtocolRegressionTest {
             Locale.setDefault(previousLocale);
             TimeZone.setDefault(previousTimeZone);
         }
-        require(presented.visibleText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a8\u67082\u65e5 18:37"),
+        require(HeartbeatToolProtocol.hasToolStatusStyleMarker(presented.visibleText),
+                "conversation heartbeat status omitted its private style marker");
+        require(!HeartbeatToolProtocol.isIsolatedToolStatusText(presented.visibleText),
+                "mixed assistant response was mistaken for an isolated tool status");
+        String isolatedStatus = null;
+        for (String line : presented.visibleText.split("\n")) {
+            if (line.startsWith("> ") && line.contains("\u8bbe\u7f6e\u5fc3\u8df3\uff1a")) {
+                isolatedStatus = line.substring(2);
+                break;
+            }
+        }
+        require(HeartbeatToolProtocol.isIsolatedToolStatusText(isolatedStatus),
+                "isolated heartbeat status was not recognized for styling");
+        String presentedText =
+                HeartbeatToolProtocol.stripToolStatusStyleMarkers(presented.visibleText);
+        require(presentedText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a8\u67082\u65e5 18:37:00"),
                 "one-time heartbeat did not use the compact time status");
-        require(presented.visibleText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a\u6bcf90\u5206\u949f"),
+        require(presentedText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a\u6bcf90\u5206\u949f"),
                 "heartbeat interval did not use the compact status");
-        require(presented.visibleText.contains(
+        require(presentedText.contains(
                         "> \u53d6\u6d88\u5fc3\u8df3\uff1a\u5168\u90e8\u4e00\u6b21\u6027\u4efb\u52a1"),
                 "heartbeat cancellation did not use the compact status");
-        require(!presented.visibleText.contains("\u25cc")
-                        && !presented.visibleText.contains("\u8c03\u7528\u4e86")
-                        && !presented.visibleText.contains("**"),
+        require(!presentedText.contains("\u25cc")
+                        && !presentedText.contains("\u8c03\u7528\u4e86")
+                        && !presentedText.contains("**"),
                 "removed icon or agent-style wording remained in the status row");
+        require(!HeartbeatToolProtocol.hasToolStatusStyleMarker(
+                        HeartbeatToolProtocol.stripControlBlocks(
+                                presented.visibleText)),
+                "private style marker leaked through the model-context sanitizer");
+        require((HeartbeatToolProtocol.TOOL_STATUS_GRAY_COLOR >>> 32)
+                        == 0xFF8A8A8AL,
+                "tool status color is not the configured neutral gray");
+        float statusSp = Float.intBitsToFloat(
+                (int) HeartbeatToolProtocol.TOOL_STATUS_FONT_SIZE);
+        require(statusSp > 10.6f && statusSp < 10.8f,
+                "tool status font size is not two thirds of 16sp");
+        require(HeartbeatToolProtocol.explicitToolStatusStyleMask(0x3affc)
+                        == (0x3affc
+                        & ~HeartbeatToolProtocol.TOOL_STATUS_EXPLICIT_STYLE_MASK),
+                "Compose default mask did not expose color and font size");
         require(!presented.visibleText.contains("schedule_once")
                         && !presented.visibleText.contains("DEEKSEEP_LOCAL_TOOLS")
                         && !presented.visibleText.contains("conversation-1234"),
