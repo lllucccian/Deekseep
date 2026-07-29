@@ -51,6 +51,18 @@ public final class HeartbeatToolProtocolRegressionTest {
         if (!condition) throw new AssertionError(message);
     }
 
+    private static int occurrences(String value, String needle) {
+        int count = 0;
+        int cursor = 0;
+        while (value != null && needle != null && needle.length() > 0) {
+            int found = value.indexOf(needle, cursor);
+            if (found < 0) return count;
+            count++;
+            cursor = found + needle.length();
+        }
+        return count;
+    }
+
     public static void main(String[] args) {
         String ordinary = "普通回答，不含任何本地控制块。";
         HeartbeatToolProtocol.Result plain = HeartbeatToolProtocol.parse(ordinary);
@@ -177,6 +189,58 @@ public final class HeartbeatToolProtocolRegressionTest {
                         .contains("\u8bbe\u7f6e\u5fc3\u8df3"),
                 "incomplete streamed tool call displayed a premature activity row");
 
+        String firstSingleCall = HeartbeatToolProtocol.CONTROL_START + "\n"
+                + "{\"call\":{\"id\":\"stream_plan\",\"tool\":\"set_plan\","
+                + "\"scope\":\"conversation-1234\","
+                + "\"instruction\":\"每次主动分享一个轻松话题\"}}\n"
+                + HeartbeatToolProtocol.CONTROL_END;
+        String secondSingleCall = HeartbeatToolProtocol.CONTROL_START + "\n"
+                + "{\"call\":{\"id\":\"stream_interval\",\"tool\":\"set_interval\","
+                + "\"scope\":\"conversation-1234\",\"minutes\":90}}\n"
+                + HeartbeatToolProtocol.CONTROL_END;
+        String thirdSingleCall = HeartbeatToolProtocol.CONTROL_START + "\n"
+                + "{\"call\":{\"id\":\"stream_bind\",\"tool\":\"bind_chat\","
+                + "\"scope\":\"conversation-1234\"}}\n"
+                + HeartbeatToolProtocol.CONTROL_END;
+        String nextCallPrefix = HeartbeatToolProtocol.CONTROL_START
+                + "\n{\"call\":{\"id\":\"stream_interval\"";
+        HeartbeatToolProtocol.Result firstStreamingFrame =
+                HeartbeatToolProtocol.parseForConversation(
+                        "正在处理。\n" + firstSingleCall + "\n" + nextCallPrefix);
+        require(firstStreamingFrame.calls.size() == 1
+                        && "stream_plan".equals(firstStreamingFrame.calls.get(0).id),
+                "the first singular call was not available before the next call completed");
+        require(firstStreamingFrame.incompleteControlBlock,
+                "the unfinished second singular call was not reported");
+        require(occurrences(firstStreamingFrame.visibleText, "> ") == 1,
+                "the first completed call did not render immediately and independently");
+
+        String thirdCallPrefix = HeartbeatToolProtocol.CONTROL_START
+                + "\n{\"call\":{\"id\":\"stream_bind\"";
+        HeartbeatToolProtocol.Result secondStreamingFrame =
+                HeartbeatToolProtocol.parseForConversation(
+                        "正在处理。\n" + firstSingleCall + "\n"
+                                + secondSingleCall + "\n" + thirdCallPrefix);
+        require(secondStreamingFrame.calls.size() == 2
+                        && "stream_plan".equals(secondStreamingFrame.calls.get(0).id)
+                        && "stream_interval".equals(secondStreamingFrame.calls.get(1).id),
+                "sequential singular calls were not parsed in emission order");
+        require(secondStreamingFrame.incompleteControlBlock,
+                "the unfinished third singular call was not reported");
+        require(occurrences(secondStreamingFrame.visibleText, "> ") == 2,
+                "the second completed call waited for the remaining calls");
+
+        HeartbeatToolProtocol.Result finalStreamingFrame =
+                HeartbeatToolProtocol.parseForConversation(
+                        "正在处理。\n" + firstSingleCall + "\n"
+                                + secondSingleCall + "\n" + thirdSingleCall);
+        require(finalStreamingFrame.calls.size() == 3
+                        && "stream_bind".equals(finalStreamingFrame.calls.get(2).id),
+                "the final singular call was not parsed");
+        require(!finalStreamingFrame.incompleteControlBlock
+                        && occurrences(finalStreamingFrame.visibleText, "> ") == 3,
+                "independent call rows were not retained after the stream completed");
+
         String partialMarker = "先等等\n[[DEEKSEEP_LOC";
         require("先等等\n".equals(
                         HeartbeatToolProtocol.stripControlBlocks(partialMarker)),
@@ -225,6 +289,11 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && prompt.contains("180 分钟")
                         && prompt.contains("\"scope\":\"conversation-1234\""),
                 "default heartbeat system prompt omitted the local tool contract");
+        require(prompt.contains("每个工具调用必须单独使用一组完整控制块")
+                        && prompt.contains("{\"call\":")
+                        && prompt.contains("写完一个 call 后立刻写结束标记")
+                        && !prompt.contains("{\"calls\":["),
+                "default heartbeat prompt still permits delayed multi-call batches");
 
         try {
             FoldMessage visibleUser = new FoldMessage(
