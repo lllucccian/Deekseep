@@ -41,11 +41,17 @@ final class HeartbeatToolProtocol {
     static final long TOOL_STATUS_FONT_SIZE =
             4294967296L
                     | (((long) Float.floatToRawIntBits(10.666667f)) & 4294967295L);
+    static final float TOOL_STATUS_FONT_SCALE = 2.0f / 3.0f;
     static final int TOOL_STATUS_EXPLICIT_STYLE_MASK = (1 << 2) | (1 << 4);
+    // TextStyle.copy default mask: keep every existing property except color and fontSize.
+    static final int TOOL_STATUS_TEXT_STYLE_COPY_MASK = 0x00FFFFFC;
 
     private static final int MAX_CONTROL_JSON = 16 * 1024;
     private static final int MAX_CALLS_PER_BLOCK = 8;
     private static final int MAX_INSTRUCTION = 1200;
+    private static final int MAX_REGISTERED_TOOL_STATUSES = 32;
+    private static final ArrayList<String> REGISTERED_TOOL_STATUSES =
+            new ArrayList<>();
 
     private HeartbeatToolProtocol() {}
 
@@ -169,7 +175,19 @@ final class HeartbeatToolProtocol {
     }
 
     private static String markToolStatus(String value) {
+        registerToolStatus(value);
         return TOOL_STATUS_STYLE_MARKER + value + TOOL_STATUS_STYLE_MARKER;
+    }
+
+    private static void registerToolStatus(String value) {
+        if (value == null || value.length() == 0) return;
+        synchronized (REGISTERED_TOOL_STATUSES) {
+            REGISTERED_TOOL_STATUSES.remove(value);
+            REGISTERED_TOOL_STATUSES.add(value);
+            while (REGISTERED_TOOL_STATUSES.size() > MAX_REGISTERED_TOOL_STATUSES) {
+                REGISTERED_TOOL_STATUSES.remove(0);
+            }
+        }
     }
 
     static boolean hasToolStatusStyleMarker(String value) {
@@ -191,6 +209,34 @@ final class HeartbeatToolProtocol {
     static String stripToolStatusStyleMarkers(String value) {
         if (!hasToolStatusStyleMarker(value)) return value == null ? "" : value;
         return value.replace(TOOL_STATUS_STYLE_MARKER, "");
+    }
+
+    static boolean isRegisteredToolStatusText(String value) {
+        if (value == null || value.length() == 0) return false;
+        if (!hasToolStatusStyleMarker(value)
+                && value.indexOf("\u5fc3\u8df3") < 0
+                && value.indexOf("heartbeat") < 0
+                && value.indexOf("Heartbeat") < 0) {
+            return false;
+        }
+        String clean = stripToolStatusStyleMarkers(value);
+        int start = 0;
+        boolean found = false;
+        while (start <= clean.length()) {
+            int end = clean.indexOf('\n', start);
+            if (end < 0) end = clean.length();
+            String line = clean.substring(start, end).trim();
+            if (line.startsWith("> ")) line = line.substring(2).trim();
+            if (line.length() > 0) {
+                synchronized (REGISTERED_TOOL_STATUSES) {
+                    if (!REGISTERED_TOOL_STATUSES.contains(line)) return false;
+                }
+                found = true;
+            }
+            if (end == clean.length()) break;
+            start = end + 1;
+        }
+        return found;
     }
 
     static int explicitToolStatusStyleMask(int defaultMask) {

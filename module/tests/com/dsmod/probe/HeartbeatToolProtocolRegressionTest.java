@@ -118,6 +118,11 @@ public final class HeartbeatToolProtocolRegressionTest {
                 "isolated heartbeat status was not recognized for styling");
         String presentedText =
                 HeartbeatToolProtocol.stripToolStatusStyleMarkers(presented.visibleText);
+        require(HeartbeatToolProtocol.isRegisteredToolStatusText(isolatedStatus),
+                "generated heartbeat status was not registered for Markdown fallback");
+        require(!HeartbeatToolProtocol.isRegisteredToolStatusText(
+                        "\u6a21\u578b\u8bf4\u6211\u53ef\u4ee5\u8bbe\u7f6e\u5fc3\u8df3\uff0c\u4f46\u8fd9\u4e0d\u662f\u5de5\u5177\u72b6\u6001\u3002"),
+                "ordinary model prose was mistaken for a registered tool status");
         require(presentedText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a8\u67082\u65e5 18:37:00"),
                 "one-time heartbeat did not use the compact time status");
         require(presentedText.contains("> \u8bbe\u7f6e\u5fc3\u8df3\uff1a\u6bcf90\u5206\u949f"),
@@ -139,11 +144,18 @@ public final class HeartbeatToolProtocolRegressionTest {
         float statusSp = Float.intBitsToFloat(
                 (int) HeartbeatToolProtocol.TOOL_STATUS_FONT_SIZE);
         require(statusSp > 10.6f && statusSp < 10.8f,
-                "tool status font size is not two thirds of 16sp");
+                "tool status fallback font size is not two thirds of 16sp");
+        require(HeartbeatToolProtocol.TOOL_STATUS_FONT_SCALE > 0.666f
+                        && HeartbeatToolProtocol.TOOL_STATUS_FONT_SCALE < 0.667f,
+                "tool status font scale is not exactly one third smaller");
         require(HeartbeatToolProtocol.explicitToolStatusStyleMask(0x3affc)
                         == (0x3affc
                         & ~HeartbeatToolProtocol.TOOL_STATUS_EXPLICIT_STYLE_MASK),
                 "Compose default mask did not expose color and font size");
+        require((HeartbeatToolProtocol.TOOL_STATUS_TEXT_STYLE_COPY_MASK & 0x3) == 0
+                        && (HeartbeatToolProtocol.TOOL_STATUS_TEXT_STYLE_COPY_MASK
+                        & 0x00FFFFFC) == 0x00FFFFFC,
+                "TextStyle copy mask does not preserve non-color typography");
         require(!presented.visibleText.contains("schedule_once")
                         && !presented.visibleText.contains("DEEKSEEP_LOCAL_TOOLS")
                         && !presented.visibleText.contains("conversation-1234"),
