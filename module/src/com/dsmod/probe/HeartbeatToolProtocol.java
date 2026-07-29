@@ -32,11 +32,6 @@ final class HeartbeatToolProtocol {
     static final String TOOL_BIND_CHAT = "bind_chat";
     static final String TOOL_CANCEL_HEARTBEAT = "cancel_heartbeat";
 
-    // U+25CC supplies the dotted ring; the two combining overlays form clock hands inside it.
-    // Keeping the icon font-native avoids target-app drawable IDs, which differ between the
-    // mainland and Google Play builds.
-    static final String TOOL_STATUS_ICON = "\u25CC\u20D2\u20E5";
-
     private static final int MAX_CONTROL_JSON = 16 * 1024;
     private static final int MAX_CALLS_PER_BLOCK = 8;
     private static final int MAX_INSTRUCTION = 1200;
@@ -156,15 +151,7 @@ final class HeartbeatToolProtocol {
         for (int index = firstCall; index < calls.size(); index++) {
             if (index > firstCall) visible.append('\n');
             ToolCall call = calls.get(index);
-            visible.append("> ").append(TOOL_STATUS_ICON).append('\u3000')
-                    .append(chinese ? "\u8c03\u7528\u4e86 **" : "Called **")
-                    .append(toolDisplayName(call, chinese))
-                    .append(chinese ? "** \u5de5\u5177" : "** tool");
-            String detail = toolDisplayDetail(call, chinese);
-            if (detail.length() > 0) {
-                visible.append(chinese ? "\u3000\u00b7\u3000" : "  \u00b7  ")
-                        .append(detail);
-            }
+            visible.append("> ").append(toolStatusText(call, chinese));
         }
         visible.append("\n\n");
     }
@@ -179,10 +166,12 @@ final class HeartbeatToolProtocol {
         else if (trailingNewlines == 1) value.append('\n');
     }
 
-    private static String toolDisplayName(ToolCall call, boolean chinese) {
-        if (call == null) return chinese ? "\u672c\u5730\u5fc3\u8df3" : "Local heartbeat";
+    private static String toolStatusText(ToolCall call, boolean chinese) {
+        if (call == null) return chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
         if (TOOL_SCHEDULE_ONCE.equals(call.tool)) {
-            return chinese ? "\u5b9a\u65f6\u5fc3\u8df3" : "Scheduled heartbeat";
+            return joinStatus(
+                    chinese ? "\u8bbe\u7f6e\u5fc3\u8df3" : "Set heartbeat",
+                    friendlyToolTime(call.at, chinese), chinese);
         }
         if (TOOL_SET_PLAN.equals(call.tool)) {
             return chinese ? "\u66f4\u65b0\u5fc3\u8df3\u7ea6\u5b9a" : "Update heartbeat plan";
@@ -191,27 +180,36 @@ final class HeartbeatToolProtocol {
             return chinese ? "\u6e05\u9664\u5fc3\u8df3\u7ea6\u5b9a" : "Clear heartbeat plan";
         }
         if (TOOL_SET_INTERVAL.equals(call.tool)) {
-            return chinese ? "\u8c03\u6574\u5fc3\u8df3\u95f4\u9694" : "Change heartbeat interval";
+            String interval = call.minutes > 0
+                    ? (chinese ? "\u6bcf" + call.minutes + "\u5206\u949f"
+                    : "Every " + call.minutes
+                    + (call.minutes == 1 ? " minute" : " minutes"))
+                    : "";
+            return joinStatus(
+                    chinese ? "\u8bbe\u7f6e\u5fc3\u8df3" : "Set heartbeat",
+                    interval, chinese);
         }
         if (TOOL_BIND_CHAT.equals(call.tool)) {
-            return chinese ? "\u7ed1\u5b9a\u5f53\u524d\u5bf9\u8bdd" : "Bind current chat";
+            return joinStatus(
+                    chinese ? "\u7ed1\u5b9a\u5fc3\u8df3" : "Bind heartbeat",
+                    chinese ? "\u5f53\u524d\u5bf9\u8bdd" : "Current chat",
+                    chinese);
         }
         if (TOOL_CANCEL_HEARTBEAT.equals(call.tool)) {
-            return chinese ? "\u53d6\u6d88\u5fc3\u8df3" : "Cancel heartbeat";
+            return joinStatus(
+                    chinese ? "\u53d6\u6d88\u5fc3\u8df3" : "Cancel heartbeat",
+                    cancelDetail(call, chinese), chinese);
         }
-        return chinese ? "\u672c\u5730\u5fc3\u8df3" : "Local heartbeat";
+        return chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
     }
 
-    private static String toolDisplayDetail(ToolCall call, boolean chinese) {
+    private static String joinStatus(String label, String detail, boolean chinese) {
+        if (detail == null || detail.length() == 0) return label;
+        return label + (chinese ? "\uff1a" : ": ") + detail;
+    }
+
+    private static String cancelDetail(ToolCall call, boolean chinese) {
         if (call == null) return "";
-        if (TOOL_SCHEDULE_ONCE.equals(call.tool)) {
-            return friendlyToolTime(call.at, chinese);
-        }
-        if (TOOL_SET_INTERVAL.equals(call.tool) && call.minutes > 0) {
-            return chinese ? call.minutes + " \u5206\u949f"
-                    : call.minutes + (call.minutes == 1 ? " minute" : " minutes");
-        }
-        if (!TOOL_CANCEL_HEARTBEAT.equals(call.tool)) return "";
         if ("once".equals(call.mode)) {
             return chinese ? "\u5355\u4e2a\u4efb\u52a1" : "One task";
         }
