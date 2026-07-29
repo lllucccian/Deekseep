@@ -228,6 +228,10 @@ public class Main extends XposedModule {
     private static final Map<Object, HeartbeatResponseStream> HEARTBEAT_RESPONSE_STREAMS =
             Collections.synchronizedMap(
                     new WeakHashMap<Object, HeartbeatResponseStream>());
+    private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_HIT_LOGGED =
+            new AtomicBoolean();
+    private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_ERROR_LOGGED =
+            new AtomicBoolean();
     // DeepSeek permits only one active native generation for this account. Every translated
     // request therefore shares one fair lane. Agent turns announce themselves before queuing;
     // nonessential Claude metadata waits outside the lane so it cannot occupy the sole permit.
@@ -706,7 +710,9 @@ public class Main extends XposedModule {
         // Inject the heartbeat tool contract and hide its control blocks from visible replies.
         hookHeartbeatToolResponses(cl);
         // Style only module-generated heartbeat statuses at the final Compose text boundary.
-        hookHeartbeatToolStatusStyle(cl, "ga8");
+        hookHeartbeatToolStatusStyle(cl, "ga8", "eb8");
+        // Markdown removes zero-width markers; match registered rows after TextStyle merging.
+        hookHeartbeatToolStatusBasicText(cl, "hk5", "f", "eb8");
         // 在线历史在进入宿主 UI/SQLite 前同步清掉注入前缀，并缓存未落库的会话快照。
         try { installExpertHistoryImagePreserver(cl); }
         catch (Throwable t) { log("install history bridge wiring failed: " + t); }
@@ -10801,56 +10807,256 @@ public class Main extends XposedModule {
     }
 
     private void hookHeartbeatToolStatusStyle(
-            ClassLoader cl, String rendererClassName) {
+            ClassLoader cl, String rendererClassName, String styleClassName) {
         try {
             Class<?> renderer = cl.loadClass(rendererClassName);
-            int hooked = 0;
+            Class<?> styleClass = cl.loadClass(styleClassName);
+            final Method styleCopy = findHeartbeatToolStatusStyleCopy(styleClass);
+            int stringHooks = 0;
+            int annotatedHooks = 0;
             for (Method method : renderer.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
-                if (!"b".equals(method.getName()) || types.length != 18
-                        || types[0] != String.class
-                        || types[2] != long.class || types[4] != long.class
-                        || types[15] != int.class || types[16] != int.class
-                        || types[17] != int.class) {
+                if ("b".equals(method.getName()) && types.length == 18
+                        && types[0] == String.class
+                        && types[2] == long.class && types[4] == long.class
+                        && types[13] == styleClass
+                        && types[15] == int.class && types[16] == int.class
+                        && types[17] == int.class) {
+                    hook(method).intercept(new Hooker() {
+                        @Override public Object intercept(Chain chain) throws Throwable {
+                            Object raw = chain.getArg(0);
+                            if (!(raw instanceof String)
+                                    || !HeartbeatToolProtocol.hasToolStatusStyleMarker(
+                                            (String) raw)) {
+                                return chain.proceed();
+                            }
+                            String marked = (String) raw;
+                            Object[] args = chain.getArgs().toArray();
+                            args[0] = HeartbeatToolProtocol
+                                    .stripToolStatusStyleMarkers(marked);
+                            if (HeartbeatToolProtocol.isIsolatedToolStatusText(marked)) {
+                                try {
+                                    args[2] = Long.valueOf(
+                                            HeartbeatToolProtocol.TOOL_STATUS_GRAY_COLOR);
+                                    Object style = args[13];
+                                    long fontSize =
+                                            scaledHeartbeatToolStatusFontSize(style);
+                                    args[4] = Long.valueOf(fontSize);
+                                    if (style != null) {
+                                        args[13] = copyHeartbeatToolStatusTextStyle(
+                                                styleCopy, style, fontSize);
+                                    }
+                                    Object mask = args[17];
+                                    if (mask instanceof Number) {
+                                        args[17] = Integer.valueOf(
+                                                HeartbeatToolProtocol
+                                                        .explicitToolStatusStyleMask(
+                                                                ((Number) mask).intValue()));
+                                    }
+                                    logHeartbeatToolStatusStyleHit(
+                                            rendererClassName, "String");
+                                } catch (Throwable t) {
+                                    logHeartbeatToolStatusStyleError(
+                                            rendererClassName, "String", t);
+                                }
+                            }
+                            return chain.proceed(args);
+                        }
+                    });
+                    stringHooks++;
                     continue;
                 }
+                if (!"c".equals(method.getName()) || types.length != 17
+                        || !CharSequence.class.isAssignableFrom(types[0])
+                        || types[2] != long.class || types[3] != long.class
+                        || types[12] != styleClass
+                        || types[14] != int.class || types[15] != int.class
+                        || types[16] != int.class) {
+                    continue;
+                }
+                final Constructor<?> annotatedTextConstructor =
+                        types[0].getDeclaredConstructor(String.class);
+                annotatedTextConstructor.setAccessible(true);
                 hook(method).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
                         Object raw = chain.getArg(0);
-                        if (!(raw instanceof String)
-                                || !HeartbeatToolProtocol.hasToolStatusStyleMarker(
-                                        (String) raw)) {
+                        if (!(raw instanceof CharSequence)) return chain.proceed();
+                        String marked = raw.toString();
+                        if (!HeartbeatToolProtocol.hasToolStatusStyleMarker(marked)) {
                             return chain.proceed();
                         }
-                        String marked = (String) raw;
-                        boolean applyStyle =
-                                HeartbeatToolProtocol.isIsolatedToolStatusText(marked);
                         Object[] args = chain.getArgs().toArray();
-                        args[0] =
+                        String clean =
                                 HeartbeatToolProtocol.stripToolStatusStyleMarkers(marked);
-                        if (applyStyle) {
-                            args[2] = Long.valueOf(
-                                    HeartbeatToolProtocol.TOOL_STATUS_GRAY_COLOR);
-                            args[4] = Long.valueOf(
-                                    HeartbeatToolProtocol.TOOL_STATUS_FONT_SIZE);
-                            Object mask = args[17];
-                            if (mask instanceof Number) {
-                                args[17] = Integer.valueOf(
-                                        HeartbeatToolProtocol
-                                                .explicitToolStatusStyleMask(
-                                                        ((Number) mask).intValue()));
+                        try {
+                            args[0] = annotatedTextConstructor.newInstance(clean);
+                            if (HeartbeatToolProtocol.isIsolatedToolStatusText(marked)) {
+                                Object style = args[12];
+                                if (style != null) {
+                                    long fontSize =
+                                            scaledHeartbeatToolStatusFontSize(style);
+                                    args[12] = copyHeartbeatToolStatusTextStyle(
+                                            styleCopy, style, fontSize);
+                                }
+                                logHeartbeatToolStatusStyleHit(
+                                        rendererClassName, "AnnotatedString");
                             }
+                        } catch (Throwable t) {
+                            logHeartbeatToolStatusStyleError(
+                                    rendererClassName, "AnnotatedString", t);
+                        }
+                        return chain.proceed(args);
+                    }
+                });
+                annotatedHooks++;
+            }
+            log("heartbeat tool status Compose hooks string=" + stringHooks
+                    + " annotated=" + annotatedHooks
+                    + " renderer=" + rendererClassName);
+        } catch (Throwable t) {
+            log("heartbeat tool status renderer unavailable "
+                    + rendererClassName + ": " + t);
+        }
+    }
+
+    private static Method findHeartbeatToolStatusStyleCopy(
+            Class<?> styleClass) throws NoSuchMethodException {
+        for (Method method : styleClass.getDeclaredMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            if ("e".equals(method.getName()) && types.length == 13
+                    && types[0] == styleClass
+                    && types[1] == long.class && types[2] == long.class
+                    && types[12] == int.class
+                    && java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+                method.setAccessible(true);
+                return method;
+            }
+        }
+        throw new NoSuchMethodException(styleClass.getName() + ".e(TextStyle copy)");
+    }
+
+    private void hookHeartbeatToolStatusBasicText(
+            ClassLoader cl, String rendererClassName, String methodName,
+            String styleClassName) {
+        try {
+            Class<?> renderer = cl.loadClass(rendererClassName);
+            Class<?> styleClass = cl.loadClass(styleClassName);
+            final Method styleCopy = findHeartbeatToolStatusStyleCopy(styleClass);
+            int hooked = 0;
+            for (Method method : renderer.getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if (!methodName.equals(method.getName()) || types.length != 14
+                        || !CharSequence.class.isAssignableFrom(types[0])
+                        || types[2] != styleClass
+                        || types[4] != int.class || types[5] != boolean.class
+                        || types[6] != int.class || types[7] != int.class
+                        || !Map.class.isAssignableFrom(types[8])
+                        || types[11] != int.class || types[12] != int.class
+                        || types[13] != int.class) {
+                    continue;
+                }
+                final Constructor<?> annotatedTextConstructor =
+                        types[0].getDeclaredConstructor(String.class);
+                annotatedTextConstructor.setAccessible(true);
+                hook(method).intercept(new Hooker() {
+                    @Override public Object intercept(Chain chain) throws Throwable {
+                        Object raw = chain.getArg(0);
+                        if (!(raw instanceof CharSequence)) return chain.proceed();
+                        String rendered = raw.toString();
+                        boolean marked =
+                                HeartbeatToolProtocol.hasToolStatusStyleMarker(rendered);
+                        boolean registered =
+                                HeartbeatToolProtocol.isRegisteredToolStatusText(rendered);
+                        if (!marked && !registered) return chain.proceed();
+                        Object[] args = chain.getArgs().toArray();
+                        try {
+                            if (marked || registered) {
+                                args[0] = annotatedTextConstructor.newInstance(
+                                        HeartbeatToolProtocol
+                                                .stripToolStatusStyleMarkers(rendered));
+                            }
+                            if (registered) {
+                                Object style = args[2];
+                                if (style != null) {
+                                    long fontSize =
+                                            scaledHeartbeatToolStatusFontSize(style);
+                                    args[2] = copyHeartbeatToolStatusTextStyle(
+                                            styleCopy, style, fontSize);
+                                }
+                                logHeartbeatToolStatusStyleHit(
+                                        rendererClassName, "BasicText");
+                            }
+                        } catch (Throwable t) {
+                            logHeartbeatToolStatusStyleError(
+                                    rendererClassName, "BasicText", t);
                         }
                         return chain.proceed(args);
                     }
                 });
                 hooked++;
             }
-            log("heartbeat tool status Compose hooks=" + hooked
-                    + " renderer=" + rendererClassName);
+            log("heartbeat tool status BasicText hooks=" + hooked
+                    + " renderer=" + rendererClassName + "." + methodName);
         } catch (Throwable t) {
-            log("heartbeat tool status renderer unavailable "
-                    + rendererClassName + ": " + t);
+            log("heartbeat tool status BasicText renderer unavailable "
+                    + rendererClassName + "." + methodName + ": " + t);
+        }
+    }
+
+    private static Object copyHeartbeatToolStatusTextStyle(
+            Method styleCopy, Object style, long fontSize) throws Exception {
+        return styleCopy.invoke(null, new Object[]{
+                style,
+                Long.valueOf(HeartbeatToolProtocol.TOOL_STATUS_GRAY_COLOR),
+                Long.valueOf(fontSize),
+                null,
+                null,
+                null,
+                Long.valueOf(0L),
+                Integer.valueOf(0),
+                Integer.valueOf(0),
+                Long.valueOf(0L),
+                null,
+                Integer.valueOf(0),
+                Integer.valueOf(
+                        HeartbeatToolProtocol.TOOL_STATUS_TEXT_STYLE_COPY_MASK)
+        });
+    }
+
+    private static long scaledHeartbeatToolStatusFontSize(Object style) {
+        try {
+            Object spanStyle = readHostField(style, "a");
+            Object packedValue = readHostField(spanStyle, "b");
+            if (packedValue instanceof Number) {
+                long packed = ((Number) packedValue).longValue();
+                float source = Float.intBitsToFloat((int) packed);
+                long unit = packed & 0xFFFFFFFF00000000L;
+                if (unit != 0L && !Float.isNaN(source)
+                        && !Float.isInfinite(source) && source > 0.0f) {
+                    float target = source
+                            * HeartbeatToolProtocol.TOOL_STATUS_FONT_SCALE;
+                    return unit
+                            | (((long) Float.floatToRawIntBits(target))
+                            & 0xFFFFFFFFL);
+                }
+            }
+        } catch (Throwable ignored) {}
+        return HeartbeatToolProtocol.TOOL_STATUS_FONT_SIZE;
+    }
+
+    private static void logHeartbeatToolStatusStyleHit(
+            String rendererClassName, String overload) {
+        if (HEARTBEAT_STATUS_STYLE_HIT_LOGGED.compareAndSet(false, true)) {
+            log("heartbeat tool status style applied renderer="
+                    + rendererClassName + " overload=" + overload);
+        }
+    }
+
+    private static void logHeartbeatToolStatusStyleError(
+            String rendererClassName, String overload, Throwable error) {
+        if (HEARTBEAT_STATUS_STYLE_ERROR_LOGGED.compareAndSet(false, true)) {
+            log("heartbeat tool status style failed renderer="
+                    + rendererClassName + " overload=" + overload + ": " + error);
         }
     }
 
