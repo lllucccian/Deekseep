@@ -341,6 +341,16 @@ final class HeartbeatToolProtocol {
     private static void parsePayload(String payload, List<ToolCall> out) {
         try {
             JSONObject root = new JSONObject(payload);
+            // V1 originally allowed one large {"calls":[...]} batch. Keep accepting it for
+            // already-generated/history content, but prefer the streaming-friendly singular
+            // envelope taught by systemPrompt(): one complete control block per tool call.
+            JSONObject single = root.optJSONObject("call");
+            if (single == null && root.has("tool")) single = root;
+            if (single != null) {
+                ToolCall parsed = parseCall(single);
+                if (parsed != null) out.add(parsed);
+                return;
+            }
             JSONArray array = root.optJSONArray("calls");
             if (array == null) return;
             int count = Math.min(array.length(), MAX_CALLS_PER_BLOCK);
@@ -407,23 +417,34 @@ final class HeartbeatToolProtocol {
                 + "当前设备本地时间：" + localTime + "。当前周期心跳间隔："
                 + interval + " 分钟。当前对话的心跳约定：" + plan + "。"
                 + "当前对话绑定标识：" + scope + "。\n"
-                + "工具只能使用下面的严格控制块；控制块必须是纯 JSON，不得放进 Markdown 代码块：\n"
+                + "每个工具调用必须单独使用一组完整控制块，一组只能包含一个 call。"
+                + "控制块必须是纯 JSON，不得放进 Markdown 代码块。固定格式：\n"
                 + CONTROL_START + "\n"
-                + "{\"calls\":["
-                + "{\"id\":\"唯一短标识\",\"tool\":\"schedule_once\",\"scope\":\""
-                + scope + "\","
-                + "\"at\":\"YYYY-MM-DDTHH:mm:ss+08:00\",\"instruction\":\"届时要做什么\"},"
-                + "{\"id\":\"唯一短标识\",\"tool\":\"set_plan\",\"scope\":\""
-                + scope + "\",\"instruction\":\"每次周期心跳要做什么\"},"
-                + "{\"id\":\"唯一短标识\",\"tool\":\"clear_plan\",\"scope\":\""
-                + scope + "\"},"
-                + "{\"id\":\"唯一短标识\",\"tool\":\"bind_chat\",\"scope\":\""
-                + scope + "\"},"
-                + "{\"id\":\"唯一短标识\",\"tool\":\"set_interval\",\"scope\":\""
-                + scope + "\",\"minutes\":180},"
-                + "{\"id\":\"唯一短标识\",\"tool\":\"cancel_heartbeat\",\"scope\":\""
-                + scope + "\",\"mode\":\"all_once\"}"
-                + "]}\n" + CONTROL_END + "\n"
+                + "{\"call\":{\"id\":\"唯一短标识\",\"tool\":\"schedule_once\","
+                + "\"scope\":\"" + scope + "\","
+                + "\"at\":\"YYYY-MM-DDTHH:mm:ss+08:00\","
+                + "\"instruction\":\"届时要做什么\"}}\n"
+                + CONTROL_END + "\n"
+                + "如需调用多个工具，必须按执行顺序为每个工具重复一整组“开始标记、"
+                + "单个 call JSON、结束标记”；写完一个 call 后立刻写结束标记，"
+                + "再开始下一个。禁止使用 calls 数组，禁止在同一控制块放入两个工具，"
+                + "也禁止等所有工具组织完后才统一闭合。\n"
+                + "call 的值必须按 tool 选择以下一种字段组合：\n"
+                + "schedule_once：{\"id\":\"唯一短标识\",\"tool\":\"schedule_once\","
+                + "\"scope\":\"" + scope + "\","
+                + "\"at\":\"YYYY-MM-DDTHH:mm:ss+08:00\",\"instruction\":\"届时要做什么\"}\n"
+                + "set_plan：{\"id\":\"唯一短标识\",\"tool\":\"set_plan\","
+                + "\"scope\":\"" + scope + "\","
+                + "\"instruction\":\"每次周期心跳要做什么\"}\n"
+                + "clear_plan：{\"id\":\"唯一短标识\",\"tool\":\"clear_plan\","
+                + "\"scope\":\"" + scope + "\"}\n"
+                + "bind_chat：{\"id\":\"唯一短标识\",\"tool\":\"bind_chat\","
+                + "\"scope\":\"" + scope + "\"}\n"
+                + "set_interval：{\"id\":\"唯一短标识\",\"tool\":\"set_interval\","
+                + "\"scope\":\"" + scope + "\",\"minutes\":180}\n"
+                + "cancel_heartbeat：{\"id\":\"唯一短标识\","
+                + "\"tool\":\"cancel_heartbeat\",\"scope\":\"" + scope
+                + "\",\"mode\":\"all_once\"}\n"
                 + "规则：schedule_once 的 at 必须换算成未来的绝对本地时间并带时区，最长一年；"
                 + "set_interval 只接受 15 到 10080 分钟。只在确实需要时输出调用。"
                 + "cancel_heartbeat 的 mode 可为 once、all_once、periodic 或 all；"
