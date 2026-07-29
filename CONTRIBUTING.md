@@ -14,7 +14,7 @@ version assumptions, and respect the source-ownership boundary.
 ## Development Setup
 
 ```bash
-git clone https://github.com/haoyangtu09-art/Deekseep.git
+git clone https://github.com/lllucccian/Deekseep.git
 cd Deekseep
 export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
 bash scripts/build-all.sh

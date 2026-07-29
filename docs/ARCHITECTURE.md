@@ -45,7 +45,7 @@ obfuscated and does not expose a supported plugin API.
 The shared stable core performs the following high-level work:
 
 1. installs activity lifecycle and file-picker result hooks;
-2. records the current host activity and displays the first-run disclosure;
+2. records the current host activity and displays the short first-use note;
 3. hooks completion request construction for optional prompt injection;
 4. hooks online history construction and the version-matched history repository
    so injected prompt wrappers are removed before rendering or persistence;
@@ -75,11 +75,34 @@ surface for:
 - expert controls;
 - chat editing;
 - data export, search, statistics, and backup;
-- help and risk information.
+- help and practical usage information.
+
+The optional chat-appearance renderer follows the same host-version-resistant
+boundary. It attaches a touch-transparent `FrameLayout` to the activity content
+root and tracks the navigation destination. Chat and settings routes keep
+stickers visible, while three persisted bindings independently select the
+wallpaper for chat, sidebar, and settings. DeepSeek's live Compose `DrawerState`
+offset drives a direction-aware, fast-starting ease-out curve rightward on open
+and a complete curved return on close; route transitions apply the same
+decelerating behavior as settings shift the wallpaper left and restore it on
+return. Motion is either derived from one common amount or from three persisted
+signed per-screen offsets. A rotation-aware overscanned canvas prevents exposed
+edges and corners.
+
+Crop-to-fill uses a persisted normalized horizontal/vertical focus point in an
+explicit image matrix, allowing the import-time nine-position chooser and
+continuous editor controls to select which region survives the crop. Optional
+depth processing scales, softens, and desaturates only the wallpaper bitmap; it
+does not modify the host Compose hierarchy. Wallpaper and
+sticker images are sampled to the current window size rather than decoded at
+their original resolution. Sticker positions and sizes are stored as normalized
+values, while editing occurs in a separate interactive preview canvas so the
+live overlay never consumes chat gestures.
 
 The discontinued test editions' direct Compose and host long-press menu
-experiments are not part of 1.7.1 release support. Maintained risky features
-are exposed through the stable builds' gated Experimental Features page.
+experiments are not part of 1.7.1 release support. Maintained optional tools
+are exposed through the stable builds' Experimental Features page and stay off
+by default.
 
 ## DeepSeek Local API Gateway Path
 

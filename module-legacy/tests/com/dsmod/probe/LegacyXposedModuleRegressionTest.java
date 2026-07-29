@@ -11,6 +11,7 @@ public final class LegacyXposedModuleRegressionTest {
 
     private static final class Target {
         String join(String left, String right) { return left + ":" + right; }
+        String fail(RuntimeException signal) { throw signal; }
     }
 
     public static void main(String[] args) throws Throwable {
@@ -60,6 +61,56 @@ public final class LegacyXposedModuleRegressionTest {
                 "around-hook order or return transforms changed: " + param.getResult());
         check("changed".equals(param.args[0]) && "final".equals(param.args[1]),
                 "final arguments were not exposed to traditional after callbacks");
+
+        XposedBridge.resetTestState();
+        final Method failing = Target.class.getDeclaredMethod("fail", RuntimeException.class);
+        failing.setAccessible(true);
+        XposedBridge.originalMethodInvokerForTest =
+                new XposedBridge.OriginalMethodInvoker() {
+                    @Override public Object invoke(Member member, Object receiver,
+                                                   Object[] invokeArgs) throws Throwable {
+                        return ((Method) member).invoke(receiver, invokeArgs);
+                    }
+                };
+        Module exceptionModule = new Module();
+        exceptionModule.hook(failing).intercept(new LegacyXposedModule.Hooker() {
+            @Override public Object intercept(LegacyXposedModule.Chain chain) throws Throwable {
+                return chain.proceed();
+            }
+        });
+        RuntimeException cancellation = new RuntimeException("flow finished");
+        XC_MethodHook.MethodHookParam failingParam = new XC_MethodHook.MethodHookParam();
+        failingParam.method = failing;
+        failingParam.thisObject = new Target();
+        failingParam.args = new Object[] {cancellation};
+        XposedBridge.callbackForTest.dispatchBeforeForTest(failingParam);
+        check(failingParam.getThrowable() == cancellation,
+                "reflection wrapper changed the host exception contract: "
+                        + failingParam.getThrowable());
+
+        XposedBridge.resetTestState();
+        XposedBridge.originalMethodInvokerForTest =
+                new XposedBridge.OriginalMethodInvoker() {
+                    @Override public Object invoke(Member member, Object receiver,
+                                                   Object[] invokeArgs) throws Throwable {
+                        return ((Method) member).invoke(receiver, invokeArgs);
+                    }
+                };
+        Module failOpenModule = new Module();
+        failOpenModule.hook(method).intercept(new LegacyXposedModule.Hooker() {
+            @Override public Object intercept(LegacyXposedModule.Chain chain) throws Throwable {
+                return chain.proceed(new Object[] {"invalid", Integer.valueOf(7)});
+            }
+        });
+        XC_MethodHook.MethodHookParam failOpenParam = new XC_MethodHook.MethodHookParam();
+        failOpenParam.method = method;
+        failOpenParam.thisObject = new Target();
+        failOpenParam.args = new Object[] {"safe", "original"};
+        XposedBridge.callbackForTest.dispatchBeforeForTest(failOpenParam);
+        check(!failOpenParam.hasThrowable(),
+                "incompatible replacement should fail open to the original arguments");
+        check("safe:original".equals(failOpenParam.getResult()),
+                "fail-open invocation did not preserve the original arguments");
         System.out.println("LegacyXposedModuleRegressionTest OK");
     }
 

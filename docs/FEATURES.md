@@ -21,6 +21,48 @@ The bottom of the in-host Deekseep page shows the exact module version, Xposed
 interface/API, compile time, and installed DeepSeek version for compatibility
 screenshots.
 
+## Chat Wallpaper and Stickers
+
+The maintained mainland source builds provide a **Chat appearance** page. One
+system-gallery import can be assigned as the wallpaper or added as one of up to
+12 stickers. The wallpaper supports crop-to-fill, fit, stretch, rotation, and
+opacity. Crop-to-fill offers a nine-position focus chooser immediately after
+import plus continuous horizontal and vertical focus controls, so a landscape
+image can preserve the intended left, middle, or right region. Optional depth
+processing lightly enlarges, softens, and desaturates only the wallpaper,
+giving the unchanged native chat UI a floating foreground feel.
+
+Dynamic motion has its own master switch. With per-screen motion disabled, one
+amount controls the default centered chat, right-shifted sidebar, and
+left-shifted settings positions. Enabling it reveals separate signed offsets
+for all three screens. A direction-aware fast-starting ease-out curve follows
+the main screen right with the live sidebar position and returns completely
+when the drawer closes; entering and leaving settings likewise animate rather
+than snapping. The rotation-aware overscanned canvas avoids blank edges and
+exposed corners throughout either transition. Advanced binding independently
+selects the chat screen, conversation sidebar, and settings graph.
+
+Each sticker stores normalized screen coordinates plus size, rotation, opacity,
+and list order, so the layout scales across window-size changes.
+
+Selected images are validated, limited to 32 MB, and copied under DeepSeek's
+private `files/deekseep_appearance/assets` directory. The saved layout is an
+atomic JSON file in the same feature directory and does not depend on continued
+gallery permission.
+
+At runtime a non-interactive Android View overlay is attached to
+`MainActivity`. Chat and settings routes keep stickers visible; the selected
+advanced bindings decide whether their wallpaper is also visible. Sign-in and
+unrelated routes hide the overlay. The native `DrawerState` pixel offset
+continuously drives the curved rightward sidebar motion in both directions,
+with its settled toggle state as a fallback. Route transitions use a matching
+decelerating animation so settings return cannot snap. The touch
+dispatcher always returns false, so typing, scrolling, message actions, and
+buttons continue to reach the host. Because this compatibility-oriented layer
+is drawn above the obfuscated Compose tree, high wallpaper opacity can reduce
+text readability; the editor provides live focus, depth, opacity, rotation,
+binding, and unified/per-screen motion previews.
+
 ## System Prompt Injection
 
 The settings page imports a text document through Android's Storage Access
@@ -148,10 +190,11 @@ therefore reported separately. Batch deletion is destructive. Back up first.
 ## Experimental Features
 
 Expert unlock/image relay and the local API are grouped in a dedicated subpage.
-On first entry, the user must read an account-ban, instability and data-loss
-disclosure; **Exit** does not enter or record acceptance, while confirmation is
-disabled for five seconds. The subpage has its own Help & Issues entry. See
-[Experimental Features](EXPERIMENTAL_FEATURES.md).
+The first entry shows a short usage note. **Back** returns to the main Deekseep
+page without storing an acknowledgement; **Continue** enters immediately and
+stores a versioned marker. All options remain off until the user enables them.
+The subpage has its own Help & Issues entry. See [Experimental
+Features](EXPERIMENTAL_FEATURES.md).
 
 ## Expert Mode and Image Relay (Experimental)
 
@@ -206,10 +249,10 @@ region, number, account, or server-risk checks.
 ## Local API Gateway (Experimental)
 
 Both stable builds place expert-image relay and the opt-in HTTP gateway in one
-Experimental Features subpage. First entry shows a risk/data-loss/account-ban
-disclaimer whose confirmation unlocks after five seconds; the experimental help is
-separate from the main help. The gateway has an independent manually drawn control
-page. It listens on local/LAN addresses, uses a separate random or
+Experimental Features subpage. First entry shows the same short usage note and
+can continue without a countdown; the experimental help is separate from the
+main help. The gateway has an independent manually drawn control page. It
+listens on local/LAN addresses, uses a separate random or
 user-defined Gateway Key, and converts the already authenticated DeepSeek native
 transport into a user-selected OpenAI Chat/Responses or Anthropic Messages API.
 
@@ -259,7 +302,18 @@ Key actions, foreground-keeper and backend readiness, received/success/failed/
 cancelled/tool counts, queue state, and failure reasons. HTTP and native transport
 remain in the DeepSeek process; the companion service only supplies the wake/health
 heartbeat. Diagnostics contain the complete Key, so they must not be shared
-unredacted. See
+unredacted.
+
+An Advanced settings child page can pin the listener to a stable local port and
+run a bundled, ABI-matched Cloudflare connector for a remotely managed tunnel.
+The user supplies the connector token and one or more already configured custom
+hostnames. The token is encrypted with Android Keystore in the module app and is
+never returned to the DeepSeek process. Localhost and trusted-LAN access continue
+while the public connector runs. The app cannot create a routable public IP,
+bypass carrier CGNAT, or replace the hostname/DNS/service route in the user's
+Cloudflare account.
+
+See
 [DeepSeek Local API](LOCAL_DEEPSEEK_API.md).
 
 The former test-edition direct Compose settings and host long-press menu hooks
@@ -274,8 +328,10 @@ mirror them to shared storage. Expert relay has a separate diagnostic log.
 Raw events can contain full prompts, model output, session identifiers, file
 metadata, and signed paths. Never attach an unreviewed log to a public issue.
 
-## Built-In Risk Disclosure
+## First-Use Note
 
-The first successful injection shows a risk disclosure. Acceptance is stored in
-the host private files directory. This notice supplements, but does not replace,
-the repository [Disclaimer](../DISCLAIMER.md).
+The first successful injection shows a short getting-started note. **Got it**
+stores a versioned marker in the host private files directory, while **Later**
+continues into DeepSeek without storing it. The repository [project
+notice](../DISCLAIMER.md) provides the concise compatibility and privacy
+details.

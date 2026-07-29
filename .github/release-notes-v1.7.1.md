@@ -81,7 +81,7 @@ Agent sandbox/approval controls.
 - CI and `scripts/build-all.sh` now produce exactly the two stable APKs and
   checksums, and reject retired test/probe artifacts.
 
-Read the [Disclaimer](https://github.com/haoyangtu09-art/Deekseep/blob/main/DISCLAIMER.md),
-[Installation guide](https://github.com/haoyangtu09-art/Deekseep/blob/main/docs/INSTALLATION.md),
-and [Experimental Features guide](https://github.com/haoyangtu09-art/Deekseep/blob/main/docs/EXPERIMENTAL_FEATURES.md)
+Read the [Disclaimer](https://github.com/lllucccian/Deekseep/blob/main/DISCLAIMER.md),
+[Installation guide](https://github.com/lllucccian/Deekseep/blob/main/docs/INSTALLATION.md),
+and [Experimental Features guide](https://github.com/lllucccian/Deekseep/blob/main/docs/EXPERIMENTAL_FEATURES.md)
 before installing.

@@ -326,9 +326,20 @@ final class HistoryBridge {
             boolean changed = false;
             for (int i = 0; i < fragments.length(); i++) {
                 JSONObject fragment = fragments.optJSONObject(i);
-                if (fragment == null || !"REQUEST".equals(fragment.optString("type"))) continue;
+                if (fragment == null) continue;
+                String type = fragment.optString("type");
                 String content = fragment.optString("content", "");
-                String safe = stripInjectedSystemPrompts(content);
+                String safe;
+                if ("REQUEST".equals(type)) {
+                    safe = stripInjectedSystemPrompts(content);
+                } else if ("RESPONSE".equals(type)
+                        || "TEMPLATE_RESPONSE".equals(type)) {
+                    safe = HeartbeatToolProtocol.renderConversationToolRows(content);
+                } else if ("THINK".equals(type)) {
+                    safe = HeartbeatToolProtocol.stripControlBlocks(content);
+                } else {
+                    continue;
+                }
                 if (!safe.equals(content)) {
                     fragment.put("content", safe);
                     changed = true;
@@ -348,16 +359,28 @@ final class HistoryBridge {
         int cleaned = 0;
         for (int i = 0; i < fragments.size(); i++) {
             Object fragment = fragments.get(i);
-            if (!"REQUEST".equals(asString(field(fragment, "a")))) continue;
+            String type = asString(field(fragment, "a"));
             String content = asString(field(fragment, "c"));
             if (content == null) continue;
-            String safe = stripInjectedSystemPrompts(content);
+            String safe;
+            if ("REQUEST".equals(type)) {
+                safe = stripInjectedSystemPrompts(content);
+            } else if ("RESPONSE".equals(type)
+                    || "TEMPLATE_RESPONSE".equals(type)) {
+                safe = HeartbeatToolProtocol.renderConversationToolRows(content);
+            } else if ("THINK".equals(type)) {
+                safe = HeartbeatToolProtocol.stripControlBlocks(content);
+            } else {
+                continue;
+            }
             if (safe.equals(content)) continue;
             if (setField(fragment, "c", safe)) {
                 cleaned++;
                 continue;
             }
-            Object copy = copyRequestFragment(fragment, safe);
+            Object copy = "REQUEST".equals(type)
+                    ? copyRequestFragment(fragment, safe)
+                    : copyAssistantFragment(fragment, safe);
             if (copy == null) continue;
             try {
                 fragments.set(i, copy);
@@ -379,6 +402,20 @@ final class HistoryBridge {
             Constructor<?> ctor = fragment.getClass().getDeclaredConstructor(int.class, String.class);
             ctor.setAccessible(true);
             return ctor.newInstance(id.intValue(), content);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Object copyAssistantFragment(Object fragment, String content) {
+        Integer id = asInteger(field(fragment, "b"));
+        Object references = field(fragment, "d");
+        if (fragment == null || id == null || !(references instanceof List)) return null;
+        try {
+            Constructor<?> ctor = fragment.getClass().getDeclaredConstructor(
+                    int.class, String.class, List.class);
+            ctor.setAccessible(true);
+            return ctor.newInstance(id.intValue(), content, references);
         } catch (Throwable ignored) {
             return null;
         }

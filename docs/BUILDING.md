@@ -28,7 +28,7 @@ the current `PATH`, Android command-line tools, and Android Build Tools.
 ## Clone and Build the Stable Release
 
 ```bash
-git clone https://github.com/haoyangtu09-art/Deekseep.git
+git clone https://github.com/lllucccian/Deekseep.git
 cd Deekseep
 bash scripts/build-all.sh
 ```
@@ -123,7 +123,9 @@ uninstall before installing a build signed elsewhere.
 ## Regression Tests
 
 The stable build includes JVM regressions for chat editing, account credentials,
-regional login policy, expert relay, response preservation, native-session
+regional login policy, chat-appearance motion configuration and chat/settings
+route recognition, expert
+relay, response preservation, native-session
 refresh/delete behavior, and the local API protocol/tool bridge:
 
 ```bash

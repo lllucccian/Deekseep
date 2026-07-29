@@ -19,14 +19,48 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 /** 纯原生 View 构建入口按钮与 Deekseep 子页面，不依赖宿主 compose。 */
 public final class DeekseepUi {
 
     static final int BRAND = 0xFF4D6BFE;
+    static final String ENTRY_BUTTON_TAG = "deekseep_settings_entry_button_v1";
     private static volatile Dialog activePageDialog;
     private static volatile Dialog localApiPageDialog;
     private static volatile boolean localApiSettingsFromPage;
+    private static volatile TextView activePromptImportButton;
+    private static volatile TextView activePromptPathText;
+    private static volatile View activePromptResetRow;
+    private static volatile Switch activePromptInjectionSwitch;
+    private static volatile boolean refreshingPromptControls;
+
+    private static void refreshPromptControls() {
+        boolean embedded = Main.isEmbeddedPromptEnabled();
+        if (embedded) Main.setEnabled(true);
+        TextView importButton = activePromptImportButton;
+        if (importButton != null) {
+            importButton.setText(embedded
+                    ? "已开启其他功能，请先关闭后再使用" : "导入提示词");
+            importButton.setEnabled(!embedded);
+            importButton.setAlpha(embedded ? 0.45f : 1f);
+        }
+        TextView path = activePromptPathText;
+        if (path != null) path.setText(embedded ? "" : Main.getPromptDisplayPath());
+        View reset = activePromptResetRow;
+        if (reset != null) {
+            reset.setEnabled(!embedded);
+            reset.setAlpha(embedded ? 0.45f : 1f);
+        }
+        Switch injection = activePromptInjectionSwitch;
+        if (injection != null) {
+            refreshingPromptControls = true;
+            injection.setChecked(embedded || Main.isEnabled());
+            injection.setEnabled(!embedded);
+            injection.setAlpha(embedded ? 0.55f : 1f);
+            refreshingPromptControls = false;
+        }
+    }
 
     static int dp(Context c, float v) {
         return Math.round(TypedValue.applyDimension(
@@ -61,6 +95,7 @@ public final class DeekseepUi {
     /** 右上角的文字入口 "Deekseep"（无背景）。 */
     static TextView createEntryButton(Context ctx, View.OnClickListener onClick) {
         TextView b = new TextView(ctx);
+        b.setTag(ENTRY_BUTTON_TAG);
         b.setText("Deekseep");
         b.setTextColor(isDark(ctx) ? 0xFFECECEC : 0xFF1A1A1A);
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
@@ -105,7 +140,13 @@ public final class DeekseepUi {
         activePageDialog = dlg;
         dlg.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
             public void onDismiss(android.content.DialogInterface ignored) {
-                if (activePageDialog == dlg) activePageDialog = null;
+                if (activePageDialog == dlg) {
+                    activePageDialog = null;
+                    activePromptImportButton = null;
+                    activePromptPathText = null;
+                    activePromptResetRow = null;
+                    activePromptInjectionSwitch = null;
+                }
             }
         });
 
@@ -155,17 +196,16 @@ public final class DeekseepUi {
         importSection.setGravity(Gravity.CENTER_HORIZONTAL);
         importSection.setPadding(dp(act, 16), dp(act, 18), dp(act, 16), dp(act, 14));
 
-        // 偏椭圆按钮
         final TextView importBtn = new TextView(act);
         importBtn.setText("导入提示词");
         importBtn.setTextColor(BRAND);
-        importBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
-        importBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        importBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        importBtn.setTypeface(Typeface.DEFAULT);
         importBtn.setGravity(Gravity.CENTER);
-        importBtn.setPadding(dp(act, 32), dp(act, 10), dp(act, 32), dp(act, 10));
+        importBtn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
         GradientDrawable importBg = new GradientDrawable();
         importBg.setColor(dark ? 0xFF252545 : 0xFFEEF1FF);
-        importBg.setCornerRadius(dp(act, 50));
+        importBg.setCornerRadius(dp(act, 6));
         importBtn.setBackground(importBg);
         importBtn.setClickable(true);
         importBtn.setFocusable(true);
@@ -187,6 +227,10 @@ public final class DeekseepUi {
 
         importBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                if (Main.isEmbeddedPromptEnabled()) {
+                    refreshPromptControls();
+                    return;
+                }
                 Main.onPickComplete = new Runnable() {
                     public void run() {
                         pathText.setText(Main.getPromptDisplayPath());
@@ -227,6 +271,10 @@ public final class DeekseepUi {
 
         resetRow.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                if (Main.isEmbeddedPromptEnabled()) {
+                    refreshPromptControls();
+                    return;
+                }
                 Main.clearPromptFiles();
                 pathText.setText("");
             }
@@ -261,6 +309,12 @@ public final class DeekseepUi {
         sw.setBackground(null);
         sw.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             public void onCheckedChanged(CompoundButton b, boolean checked) {
+                if (refreshingPromptControls) return;
+                if (Main.isEmbeddedPromptEnabled()) {
+                    b.setChecked(true);
+                    Main.setEnabled(true);
+                    return;
+                }
                 Main.setEnabled(checked);
             }
         });
@@ -268,6 +322,11 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         card.addView(toggleRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        activePromptImportButton = importBtn;
+        activePromptPathText = pathText;
+        activePromptResetRow = resetRow;
+        activePromptInjectionSwitch = sw;
+        refreshPromptControls();
 
         // ── 分割线 ──────────────────────────────────────────────────
         card.addView(makeDivider(act, divColor));
@@ -575,7 +634,7 @@ public final class DeekseepUi {
         card.addView(editRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // ── Section 6b: 多账号管理（切换/添加账号）──────────────────────
+        // ── Section 6: 多账号管理（切换/添加账号）────────────────────────
         card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "多账号管理",
                 "添加、切换和移除账号；可严格验真导入 JSON，也可勾选账号导出明文凭证。",
@@ -676,7 +735,7 @@ public final class DeekseepUi {
         // ── Section 10: 实验性功能 ───────────────────────────────────────
         card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "实验性功能",
-                "专家模式图片中继、本地 API 服务及其独立帮助；首次进入需确认风险说明。",
+                "聊天外观、专家模式图片中继、本地 API 服务及其独立帮助；功能默认关闭，可按需开启。",
                 textColor, subColor, new View.OnClickListener() {
                     public void onClick(View v) { showExperimentalEntry(act); }
                 }));
@@ -715,15 +774,15 @@ public final class DeekseepUi {
         int w = root.getResources().getDisplayMetrics().widthPixels;
         root.setTranslationX(w);
         dlg.show();
-        root.animate().translationX(0).setDuration(260)
-                .setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        root.animate().translationX(0).setDuration(360)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
 
     /** 向右滑出后 dismiss。 */
     static void slideOutAndDismiss(final Dialog dlg, final View root) {
         int w = root.getWidth() > 0 ? root.getWidth()
                 : root.getResources().getDisplayMetrics().widthPixels;
-        root.animate().translationX(w).setDuration(220)
+        root.animate().translationX(w).setDuration(300)
                 .setInterpolator(new android.view.animation.AccelerateInterpolator())
                 .withEndAction(new Runnable() {
                     public void run() { try { dlg.dismiss(); } catch (Throwable ignored) {} }
@@ -738,7 +797,7 @@ public final class DeekseepUi {
         }
     }
 
-    /** First-entry gate for features that can affect accounts, data, files, and long-lived APIs. */
+    /** Friendly one-time note before optional expert relay and local API controls. */
     private static void showExperimentalDisclaimer(final Activity act) {
         if (act == null || act.isFinishing()) return;
         final boolean dark = isDark(act);
@@ -747,8 +806,8 @@ public final class DeekseepUi {
         final int subColor = dark ? 0xFFB5B5B9 : 0xFF666666;
         final Dialog dialog = new Dialog(act);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setCancelable(false);
-        dialog.setCanceledOnTouchOutside(false);
+        dialog.setCancelable(true);
+        dialog.setCanceledOnTouchOutside(true);
 
         LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -759,7 +818,8 @@ public final class DeekseepUi {
         root.setBackground(rootBg);
 
         TextView title = new TextView(act);
-        title.setText("实验性功能免责声明");
+        title.setText(UiLanguage.text(act,
+                "实验性功能使用提示", "About experimental features"));
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(textColor);
@@ -772,12 +832,21 @@ public final class DeekseepUi {
             }
         };
         TextView message = new TextView(act);
-        message.setText("以下功能会深度修改 DeepSeek 的模型能力、网络请求和后台运行方式，属于高风险的大工程，不保证稳定，也不保证在宿主升级后继续可用。\n\n"
-                + "• 账号风险：修改客户端能力和以当前账号提供 API 可能触发服务条款或风控，严重时可能导致账号限制或封禁。\n"
-                + "• 数据风险：实验性 Hook、图片中继、隐藏 API 会话和工具循环出现异常时，可能造成聊天记录、缓存或工作区文件损坏、覆盖或丢失。\n"
-                + "• 隐私与执行风险：专家模式图片可能先交给视觉模型生成描述；本地 API 密钥一旦泄露，其他程序可使用当前账号发起请求。Agent 工具还可能创建、修改文件或执行命令。\n"
-                + "• 使用限制：不要在重要账号上启用，也不要在保存有重要聊天记录或唯一数据副本的设备上测试。请先备份数据库和重要文件，并保留客户端的沙箱、确认和权限隔离。\n\n"
-                + "功能可能随时失败、产生不完整结果或导致数据丢失。继续表示你已理解上述风险并自行承担后果。");
+        String noteZh =
+                "这些功能默认关闭，按需开启即可。使用前请留意：\n\n"
+                + "• 聊天外观只修改本机显示层；若宿主更新后出现错位，关闭对应外观开关即可。\n"
+                + "• 专家图片中继会先通过视觉模型生成图片描述，结果和可用性取决于 DeepSeek 服务。\n"
+                + "• 本地 API 可监听本机或可信局域网；请妥善保存 API Key，不要公开分享。\n"
+                + "• 涉及聊天、文件或 Agent 工具时，建议先备份重要内容，并保留客户端的确认和权限设置。\n\n"
+                + "如果 DeepSeek 更新后出现异常，关闭对应开关即可。";
+        String noteEn =
+                "These features are off by default and can be enabled only when needed. Before using them:\n\n"
+                + "• Chat appearance changes only the local display layer. Turn off the related appearance option if a host update causes misalignment.\n"
+                + "• Expert image relay first creates an image description with a vision model; results and availability depend on the DeepSeek service.\n"
+                + "• The local API can listen on this device or a trusted LAN. Keep its API key private.\n"
+                + "• For chat, file, or Agent tools, back up important content and keep client confirmation and permission controls enabled.\n\n"
+                + "If a DeepSeek update causes a problem, simply turn off the related option.";
+        message.setText(UiLanguage.text(act, noteZh, noteEn));
         message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         message.setTextColor(subColor);
         message.setLineSpacing(dp(act, 2), 1f);
@@ -789,11 +858,9 @@ public final class DeekseepUi {
 
         LinearLayout buttons = new LinearLayout(act);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
-        final TextView exit = popupButton(act, "退出", textColor,
+        final TextView exit = popupButton(act, "返回", textColor,
                 dark ? 0xFF38383C : 0xFFF0F1F4);
-        final TextView confirm = popupButton(act, "确认（5）", 0xFFFFFFFF, BRAND);
-        confirm.setEnabled(false);
-        confirm.setAlpha(0.45f);
+        final TextView confirm = popupButton(act, "了解并进入", 0xFFFFFFFF, BRAND);
         LinearLayout.LayoutParams exitLp = new LinearLayout.LayoutParams(0, dp(act, 44), 1f);
         exitLp.rightMargin = dp(act, 10);
         buttons.addView(exit, exitLp);
@@ -807,7 +874,6 @@ public final class DeekseepUi {
         });
         confirm.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                if (!confirm.isEnabled()) return;
                 if (!Main.acceptExperimentalDisclaimer()) {
                     showCustomConfirm(act, "无法保存确认状态",
                             "DeepSeek 私有目录暂时不可写，因此没有进入实验性功能。请完整重启应用后重试。",
@@ -818,23 +884,6 @@ public final class DeekseepUi {
                 showExperimentalPage(act);
             }
         });
-        final int[] remaining = {5};
-        final Runnable countdown = new Runnable() {
-            @Override public void run() {
-                if (!dialog.isShowing()) return;
-                remaining[0]--;
-                if (remaining[0] <= 0) {
-                    confirm.setText(UiLanguage.text(act, "确认并进入", "Confirm and enter"));
-                    confirm.setEnabled(true);
-                    confirm.setAlpha(1f);
-                } else {
-                    confirm.setText(UiLanguage.text(act,
-                            "确认（" + remaining[0] + "）",
-                            "Confirm (" + remaining[0] + ")"));
-                    confirm.postDelayed(this, 1000L);
-                }
-            }
-        };
 
         UiLanguage.localizeTree(act, root);
         dialog.setContentView(root);
@@ -844,13 +893,12 @@ public final class DeekseepUi {
             window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             android.view.WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.dimAmount = 0.52f;
+            attrs.dimAmount = 0.36f;
             window.setAttributes(attrs);
             int width = act.getResources().getDisplayMetrics().widthPixels - dp(act, 32);
             window.setLayout(Math.max(dp(act, 280), width),
                     ViewGroup.LayoutParams.WRAP_CONTENT);
         }
-        confirm.postDelayed(countdown, 1000L);
     }
 
     private static void showExperimentalPage(final Activity act) {
@@ -912,9 +960,18 @@ public final class DeekseepUi {
         scroll.addView(card, cardLp);
 
         TextView warning = infoBox(act,
-                "这些功能可能触发账号风控、造成聊天或文件数据丢失，也可能在 DeepSeek 更新后失效。请勿用于重要账号或保存重要聊天记录的设备。",
-                dark ? 0xFFFFC98B : 0xFF8A4B08, dark);
+                "功能默认关闭。建议一次只开启需要的选项；操作重要数据前先备份，DeepSeek 更新后如有异常可随时关闭。",
+                subColor, dark);
         card.addView(warning, insetParams(act, 12, 12));
+        card.addView(makeDivider(act, divColor));
+
+        card.addView(toolActionRow(act, "聊天外观",
+                "背景、页面贴纸和气泡；支持全屏/半屏、无固定上限缩放、截断、镜像或边缘像素延展、取景、旋转、景深与曲线位移。",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        ChatAppearanceUi.show(act);
+                    }
+                }));
         card.addView(makeDivider(act, divColor));
 
         LinearLayout expertRow = new LinearLayout(act);
@@ -956,6 +1013,61 @@ public final class DeekseepUi {
         card.addView(expertRow);
 
         card.addView(makeDivider(act, divColor));
+        LinearLayout heartbeatRow = new LinearLayout(act);
+        heartbeatRow.setOrientation(LinearLayout.HORIZONTAL);
+        heartbeatRow.setGravity(Gravity.CENTER_VERTICAL);
+        heartbeatRow.setPadding(dp(act, 16), dp(act, 14), dp(act, 12), dp(act, 14));
+        LinearLayout heartbeatLabels = new LinearLayout(act);
+        heartbeatLabels.setOrientation(LinearLayout.VERTICAL);
+        TextView heartbeatTitle = new TextView(act);
+        heartbeatTitle.setText("AI 主动消息");
+        heartbeatTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        heartbeatTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        heartbeatTitle.setTextColor(textColor);
+        heartbeatLabels.addView(heartbeatTitle);
+        final TextView heartbeatDesc = new TextView(act);
+        heartbeatDesc.setText(proactiveHeartbeatDescription(act));
+        heartbeatDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        heartbeatDesc.setTextColor(subColor);
+        heartbeatLabels.addView(heartbeatDesc);
+        heartbeatLabels.setClickable(true);
+        heartbeatLabels.setFocusable(true);
+        heartbeatLabels.setContentDescription(UiLanguage.text(act,
+                "修改主动消息间隔", "Change proactive-message interval"));
+        heartbeatLabels.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                showProactiveHeartbeatIntervalDialog(act, heartbeatDesc);
+            }
+        });
+        LinearLayout.LayoutParams heartbeatLabelsLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        heartbeatLabelsLp.rightMargin = dp(act, 12);
+        heartbeatRow.addView(heartbeatLabels, heartbeatLabelsLp);
+        final Switch heartbeatSwitch = new Switch(act);
+        heartbeatSwitch.setChecked(Main.isProactiveHeartbeatEnabled());
+        heartbeatSwitch.setThumbTintList(new android.content.res.ColorStateList(states,
+                new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
+        heartbeatSwitch.setTrackTintList(new android.content.res.ColorStateList(states,
+                new int[]{0xFFADBFFF, dark ? 0xFF555555 : 0xFFBFBFBF}));
+        heartbeatSwitch.setBackground(null);
+        heartbeatSwitch.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(
+                            CompoundButton button, boolean checked) {
+                        if (reverting) return;
+                        if (Main.setProactiveHeartbeatEnabled(act, checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                        android.widget.Toast.makeText(act, "主动消息设置保存失败",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                });
+        heartbeatRow.addView(heartbeatSwitch);
+        card.addView(heartbeatRow);
+
+        card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "本地 API 服务",
                 "配置 OpenAI / Anthropic 格式、后台保活、API Key、监听地址与请求统计。",
                 textColor, subColor, new View.OnClickListener() {
@@ -963,7 +1075,7 @@ public final class DeekseepUi {
                 }));
         card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "帮助与问题",
-                "仅包含专家模式图片中继和本地 API 的说明、风险与排障。",
+                "包含聊天外观、专家模式图片中继和本地 API 的完整说明、注意事项与排障。",
                 textColor, subColor, new View.OnClickListener() {
                     @Override public void onClick(View v) { showExperimentalHelpPage(act); }
                 }));
@@ -990,6 +1102,82 @@ public final class DeekseepUi {
                 return false;
             }
         });
+    }
+
+    private static String proactiveHeartbeatDescription(Context context) {
+        String interval = String.format(java.util.Locale.getDefault(), UiLanguage.text(context,
+                        "当前间隔：%d 分钟。点按此处修改；模型主动消息会写入绑定对话，"
+                                + "并在前后台都发送系统通知。聊天中可直接约定每次心跳要做什么，"
+                                + "也可让 AI 安排或取消指定时间的一次性心跳。",
+                        "Current interval: %d minutes. Tap here to change it. Proactive model "
+                                + "messages are added to the bound chat and always produce a "
+                                + "system notification. In chat, you can agree on what each "
+                                + "heartbeat should do or ask the AI to schedule or cancel a "
+                                + "one-time heartbeat for a specific time."),
+                Main.proactiveHeartbeatIntervalMinutes());
+        String binding = !Main.hasProactiveHeartbeatBinding()
+                ? UiLanguage.text(context,
+                        "尚未绑定；请在目标对话中告诉 AI 心跳要做什么。",
+                        "Not bound yet; tell the AI what heartbeats should do in the target chat.")
+                : Main.proactiveHeartbeatBoundToCurrentConversation()
+                        ? UiLanguage.text(context,
+                                "已绑定当前对话。",
+                                "Bound to the current chat.")
+                        : UiLanguage.text(context,
+                                "已绑定一个对话；在目标对话中重新约定即可切换。",
+                                "Bound to a chat; make a new heartbeat agreement in the target chat to switch.");
+        return interval + " " + binding;
+    }
+
+    private static void showProactiveHeartbeatIntervalDialog(
+            final Activity act, final TextView description) {
+        final android.widget.EditText input = new android.widget.EditText(act);
+        input.setSingleLine(true);
+        input.setSelectAllOnFocus(true);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        input.setText(String.valueOf(Main.proactiveHeartbeatIntervalMinutes()));
+        input.setHint(UiLanguage.text(act, "例如 30、180、1440",
+                "For example 30, 180, or 1440"));
+        FrameLayout container = new FrameLayout(act);
+        container.setPadding(dp(act, 20), 0, dp(act, 20), 0);
+        container.addView(input, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        new android.app.AlertDialog.Builder(act)
+                .setTitle(UiLanguage.text(act,
+                        "设置主动消息间隔", "Set proactive-message interval"))
+                .setMessage(UiLanguage.text(act,
+                        "请输入 15 到 10080 分钟（最长 7 天）。从保存时重新计时；"
+                                + "系统省电策略可能让实际触发略有延迟。",
+                        "Enter 15 to 10080 minutes (up to 7 days). Timing restarts when "
+                                + "you save; Android battery policies may delay delivery slightly."))
+                .setView(container)
+                .setNegativeButton(UiLanguage.text(act, "取消", "Cancel"), null)
+                .setPositiveButton(UiLanguage.text(act, "保存", "Save"),
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(
+                                    android.content.DialogInterface ignored, int which) {
+                                try {
+                                    int minutes = Integer.parseInt(
+                                            input.getText().toString().trim());
+                                    if (!Main.setProactiveHeartbeatInterval(act, minutes)) {
+                                        throw new IllegalArgumentException("out of range");
+                                    }
+                                    description.setText(
+                                            proactiveHeartbeatDescription(act));
+                                    Toast.makeText(act, UiLanguage.text(act,
+                                            "主动消息间隔已保存",
+                                            "Proactive-message interval saved"),
+                                            Toast.LENGTH_SHORT).show();
+                                } catch (Throwable error) {
+                                    Toast.makeText(act, UiLanguage.text(act,
+                                            "请输入 15 到 10080 之间的整数分钟",
+                                            "Enter a whole number from 15 to 10080 minutes"),
+                                            Toast.LENGTH_LONG).show();
+                                }
+                            }
+                        })
+                .show();
     }
 
     private static void showLocalApiEntry(final Activity act) {
@@ -1113,7 +1301,7 @@ public final class DeekseepUi {
         card.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable cardBackground = new GradientDrawable();
         cardBackground.setColor(cardColor);
-        cardBackground.setCornerRadius(dp(act, 12));
+        cardBackground.setCornerRadius(dp(act, 8));
         card.setBackground(cardBackground);
         FrameLayout.LayoutParams cardLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1185,14 +1373,14 @@ public final class DeekseepUi {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         final TextView protocolValue = new TextView(act);
         protocolValue.setText(localApiProtocolDisplayName() + "  \u203A");
-        protocolValue.setTextColor(BRAND);
+        protocolValue.setTextColor(textColor);
         protocolValue.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        protocolValue.setTypeface(Typeface.DEFAULT_BOLD);
+        protocolValue.setTypeface(Typeface.DEFAULT);
         protocolValue.setGravity(Gravity.CENTER);
-        protocolValue.setPadding(dp(act, 12), dp(act, 9), dp(act, 10), dp(act, 9));
+        protocolValue.setPadding(dp(act, 12), dp(act, 8), dp(act, 10), dp(act, 8));
         GradientDrawable protocolValueBg = new GradientDrawable();
-        protocolValueBg.setCornerRadius(dp(act, 10));
-        protocolValueBg.setColor(dark ? 0xFF303039 : 0xFFF0F3FF);
+        protocolValueBg.setCornerRadius(dp(act, 6));
+        protocolValueBg.setColor(dark ? 0xFF2A2A2E : 0xFFF0F1F4);
         protocolValue.setBackground(protocolValueBg);
         protocolValue.setClickable(true);
         protocolRow.addView(protocolValue);
@@ -1234,7 +1422,7 @@ public final class DeekseepUi {
         customKey.setPadding(dp(act, 12), dp(act, 10), dp(act, 12), dp(act, 10));
         GradientDrawable editBg = new GradientDrawable();
         editBg.setColor(dark ? 0xFF202024 : 0xFFF4F6FA);
-        editBg.setCornerRadius(dp(act, 10));
+        editBg.setCornerRadius(dp(act, 6));
         editBg.setStroke(dp(act, 1), dark ? 0xFF48484E : 0xFFD8DCE5);
         customKey.setBackground(editBg);
         card.addView(customKey, insetParams(act, 0, 8));
@@ -1275,6 +1463,37 @@ public final class DeekseepUi {
         card.addView(sectionTitle(act, "实时监听与请求统计", textColor));
         final TextView runtime = infoBox(act, Main.localApiRuntimeStatus(), textColor, dark);
         card.addView(runtime, insetParams(act, 0, 16));
+
+        card.addView(makeDivider(act, divColor));
+        LinearLayout advancedRow = new LinearLayout(act);
+        advancedRow.setOrientation(LinearLayout.HORIZONTAL);
+        advancedRow.setGravity(Gravity.CENTER_VERTICAL);
+        advancedRow.setPadding(dp(act, 16), dp(act, 15), dp(act, 12), dp(act, 15));
+        advancedRow.setClickable(true);
+        advancedRow.setFocusable(true);
+        LinearLayout advancedLabels = new LinearLayout(act);
+        advancedLabels.setOrientation(LinearLayout.VERTICAL);
+        TextView advancedTitle = new TextView(act);
+        advancedTitle.setText("高级设置");
+        advancedTitle.setTextColor(textColor);
+        advancedTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        advancedTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        advancedLabels.addView(advancedTitle);
+        TextView advancedDescription = new TextView(act);
+        advancedDescription.setText("Cloudflare 自有域名、公网 IP、固定端口与连接诊断");
+        advancedDescription.setTextColor(subColor);
+        advancedDescription.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        advancedLabels.addView(advancedDescription);
+        advancedRow.addView(advancedLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView advancedChevron = new TextView(act);
+        advancedChevron.setText("\u203A");
+        advancedChevron.setTextColor(subColor);
+        advancedChevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
+        advancedChevron.setGravity(Gravity.CENTER);
+        advancedRow.addView(advancedChevron, new LinearLayout.LayoutParams(
+                dp(act, 28), ViewGroup.LayoutParams.WRAP_CONTENT));
+        card.addView(advancedRow);
 
         final TextView feedback = new TextView(act);
         feedback.setTextColor(BRAND);
@@ -1371,6 +1590,11 @@ public final class DeekseepUi {
                 feedback.setText(UiLanguage.dynamic(act, "已生成并启用新的随机 Key"));
             }
         });
+        advancedRow.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                LocalApiAdvancedUi.show(act);
+            }
+        });
 
         UiLanguage.localizeTree(act, root);
         dialog.setContentView(root);
@@ -1440,11 +1664,9 @@ public final class DeekseepUi {
         option.setPadding(dp(act, 14), dp(act, 12), dp(act, 14), dp(act, 12));
         option.setClickable(true);
         GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(act, 12));
-        background.setColor(selected ? (dark ? 0xFF303B68 : 0xFFE9EDFF)
-                : (dark ? 0xFF36363A : 0xFFF3F4F7));
-        background.setStroke(dp(act, 1), selected ? BRAND
-                : (dark ? 0xFF4A4A50 : 0xFFD8DCE5));
+        background.setCornerRadius(dp(act, 6));
+        background.setColor(selected ? (dark ? 0xFF2F2F33 : 0xFFEFEFF2)
+                : (dark ? 0xFF232326 : 0xFFF7F7F9));
         option.setBackground(background);
         return option;
     }
@@ -1462,12 +1684,12 @@ public final class DeekseepUi {
         root.setPadding(dp(act, 18), dp(act, 16), dp(act, 18), dp(act, 18));
         GradientDrawable rootBg = new GradientDrawable();
         rootBg.setColor(dark ? 0xFF2A2A2D : 0xFFFFFFFF);
-        rootBg.setCornerRadius(dp(act, 18));
+        rootBg.setCornerRadius(dp(act, 10));
         root.setBackground(rootBg);
 
         TextView title = new TextView(act);
         title.setText(UiLanguage.text(act, "选择 Deekseep 语言", "Choose Deekseep language"));
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(dark ? 0xFFECECEC : 0xFF1A1A1A);
         title.setPadding(0, 0, 0, dp(act, 12));
@@ -1550,11 +1772,11 @@ public final class DeekseepUi {
         root.setPadding(dp(act, 18), dp(act, 16), dp(act, 18), dp(act, 18));
         GradientDrawable rootBg = new GradientDrawable();
         rootBg.setColor(dark ? 0xFF2A2A2D : 0xFFFFFFFF);
-        rootBg.setCornerRadius(dp(act, 18));
+        rootBg.setCornerRadius(dp(act, 10));
         root.setBackground(rootBg);
         TextView title = new TextView(act);
         title.setText("选择 API 格式");
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(dark ? 0xFFECECEC : 0xFF1A1A1A);
         title.setPadding(0, 0, 0, dp(act, 12));
@@ -1619,7 +1841,7 @@ public final class DeekseepUi {
         info.setPadding(dp(context, 12), dp(context, 12), dp(context, 12), dp(context, 12));
         GradientDrawable background = new GradientDrawable();
         background.setColor(dark ? 0xFF202024 : 0xFFF4F6FA);
-        background.setCornerRadius(dp(context, 10));
+        background.setCornerRadius(dp(context, 6));
         info.setBackground(background);
         return info;
     }
@@ -1654,7 +1876,7 @@ public final class DeekseepUi {
         panel.setPadding(dp(act, 20), dp(act, 20), dp(act, 20), dp(act, 16));
         GradientDrawable panelBg = new GradientDrawable();
         panelBg.setColor(cardColor);
-        panelBg.setCornerRadius(dp(act, 16));
+        panelBg.setCornerRadius(dp(act, 10));
         panel.setBackground(panelBg);
         FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1686,7 +1908,7 @@ public final class DeekseepUi {
         info.setPadding(dp(act, 12), dp(act, 12), dp(act, 12), dp(act, 12));
         GradientDrawable infoBg = new GradientDrawable();
         infoBg.setColor(dark ? 0xFF202024 : 0xFFF4F6FA);
-        infoBg.setCornerRadius(dp(act, 10));
+        infoBg.setCornerRadius(dp(act, 6));
         info.setBackground(infoBg);
         LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -1768,12 +1990,12 @@ public final class DeekseepUi {
         button.setText(UiLanguage.dynamic(context, label));
         button.setTextColor(color);
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setTypeface(Typeface.DEFAULT);
         button.setGravity(Gravity.CENTER);
-        button.setPadding(dp(context, 12), dp(context, 9), dp(context, 12), dp(context, 9));
+        button.setPadding(dp(context, 12), dp(context, 8), dp(context, 12), dp(context, 8));
         GradientDrawable background = new GradientDrawable();
-        background.setColor(dark ? 0xFF38383D : 0xFFF0F2F7);
-        background.setCornerRadius(dp(context, 30));
+        background.setColor(dark ? 0xFF2A2A2E : 0xFFF0F2F7);
+        background.setCornerRadius(dp(context, 6));
         button.setBackground(background);
         button.setClickable(true);
         button.setFocusable(true);
@@ -1830,10 +2052,20 @@ public final class DeekseepUi {
 
     private static void showExperimentalHelpPage(final Activity act) {
         final String[][] items = {
+            {"【功能】聊天背景、贴纸与气泡",
+                "从“实验性功能 → 聊天外观”导入图片后，可设为背景、页面贴纸或两侧气泡顶部贴纸。背景可选全屏、上/中/下半屏，裁剪、完整显示或拉伸，并支持取景、旋转、不透明度、景深和界面绑定。横向取景、纵向取景与旋转位于预览图正下方的独立折叠区，可一边调节一边查看效果。连续缩放条每次松手会回到中点，可反复缩放且没有固定上限；也可点“精确倍率”直接输入。缩小后，截断模式让范围外保持透明，镜像模式会反射图片边缘补齐，边缘像素延展会把最外圈像素一直铺到画布边界。动态位移可统一设置，也可分别设置聊天、侧栏和设置界面。大陆版与 Google Play 版共用同一配置和渲染链路。"},
+            {"【问题】为什么半屏背景仍显示在别处，或者缩小后出现空白？",
+                "解决办法：半屏有上方、中间和下方三个位置，先确认“显示范围”选项；容器会在半屏边界处裁切旋转和位移后的图片。选择“截断”时，缩小后留下透明区域是预期效果；需要反射补齐时改为“镜像延展”，需要沿用图片边缘颜色时改为“边缘像素延展”。横图还可在预览图下方展开横向/纵向取景，决定主体保留位置。"},
+            {"【问题】为什么背景缩放条松手后回到中间？",
+                "解决办法：这是无固定上限缩放的设计。中点代表本次缩放的起点，向左或向右连续调整，松手后自动把当前倍率作为新的起点；可以反复拖动继续放大或缩小。需要准确倍率时点“精确倍率”输入大于 0 的数值，1 表示原始适配大小。"},
+            {"【问题】为什么背景图或贴纸没有显示，或者看起来遮住界面？",
+                "解决办法：确认聊天外观总开关已打开，并在背景图“高级选项”中勾选当前界面；贴纸会在聊天与设置页保留，登录页等其他路由会自动隐藏。背景层不会拦截点击，但不透明度过高会降低文字可读性，可调低背景不透明度。"},
             {"【功能】专家模式图片上传",
                 "开启后，专家模式可选择相册图片。图片会先保存到 DeepSeek 私有目录，并由视觉模型生成客观描述，再把描述交给专家模型；同一会话后续轮会继续捕获图片上下文。视觉识别结果和服务器能力不作保证。"},
             {"【功能】本地 API 服务",
                 "首次进入会校验 DeepSeek 已设为不限制电池优化且允许后台活动，未通过时不会启动监听。OpenAI 格式提供 /v1/models、/v1/chat/completions 和 /v1/responses；Anthropic 格式提供 /v1/messages 与 /v1/messages/count_tokens。两种格式均支持普通 JSON、SSE、深度思考和 Agent 工具结果回传。"},
+            {"【功能】AI 主动消息",
+                "开启后，模块会按你设置的分钟间隔唤醒 DeepSeek，并使用绑定对话的近期上下文生成自然的主动消息。点按功能说明即可修改间隔，范围为 15 分钟到 7 天。请在想绑定的对话中直接说“以后心跳时来找我闲聊”；在另一个对话重新约定会切换周期心跳的绑定，不会建立全局约定。也可以说“5 天后晚上 6:37 来找我”安排只属于当前对话的一次性心跳，或让 AI 取消单次、周期或全部心跳。AI 会调用真实的本地调度能力，内部执行指令不会显示；模型回复会写入任务所属对话，无论 DeepSeek 是否在前台，模块应用都会同时发送系统通知，点按通知会回到该对话。关闭周期心跳不会删除已经确认的一次性任务，除非明确要求 AI 一并取消。该功能默认关闭，通知需要在模块应用中授权，系统省电策略可能让时间略有延迟。"},
             {"【问题】为什么专家模式第一轮能发图，后续轮却提示不支持？",
                 "解决办法：新版会按会话捕获每一轮完整图片 fragment，并在发送点识别专家模型。安装后先冷启动，再新建专家会话测试；服务器若调整模型能力仍可能拒绝，此时可关闭功能改用普通视觉模型。"},
             {"【问题】为什么本地 API 返回 401、503 或连接被拒绝？",
@@ -1848,11 +2080,11 @@ public final class DeekseepUi {
                 "解决办法：这两个命令由 Claude Code 本地处理，不会请求 /v1/messages；API 只能隔离命令成功后的下一次请求。新版会同时按 Claude 会话 UUID 和首条用户消息指纹隔离隐藏分支。若命令后旧内容仍显示，先确认只输入命令并单独按一次回车；某些粘贴/补全场景第一次回车只是确认候选。清屏后询问一个仅旧对话知道的随机词即可判断是否真的串上下文。"},
             {"【问题】为什么请求开始后不会立刻显示 thinking？",
                 "解决办法：这是修正后的正常顺序。服务会先完成排队、PoW 和原生请求启动，再发送 Anthropic message_start 与 thinking；这样等待本地处理时不会伪装成模型已经开始思考。"},
-            {"【风险】怎样降低账号、聊天和文件损失风险？",
-                "不要使用重要账号或保存唯一聊天记录的设备；开启前备份数据库和工作区文件，不共享 API Key，保留 Agent 沙箱与操作确认。遇到宿主更新、异常重复工具调用或数据不同步时立即关闭实验性开关。"}
+            {"【建议】怎样更稳妥地使用这些功能？",
+                "按需开启，一次只启用需要的选项；编辑重要内容前先备份，不共享 API Key，并保留 Agent 沙箱与操作确认。宿主更新后如有异常，可关闭对应开关并重启 DeepSeek。"}
         };
         showHelpItemsPage(act, "实验性功能 · 帮助与问题",
-                "这里只收录专家模式图片中继和本地 API 的说明。点一下条目展开。", items);
+                "这里收录聊天外观、专家模式图片中继和本地 API 的完整说明。点一下条目展开。", items);
     }
 
     private static void showHelpItemsPage(final Activity act, String pageTitle,
@@ -2012,8 +2244,514 @@ public final class DeekseepUi {
         info.setTextColor(subColor);
         info.setGravity(Gravity.CENTER);
         info.setPadding(dp(act, 16), dp(act, 14), dp(act, 16), dp(act, 18));
+        final long[] clickWindow = new long[]{0L};
+        final int[] clickCount = new int[]{0};
+        info.setClickable(true);
+        info.setFocusable(true);
+        info.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) {
+                long now = System.currentTimeMillis();
+                clickCount[0] = (now - clickWindow[0] <= 1200L)
+                        ? clickCount[0] + 1 : 1;
+                clickWindow[0] = now;
+                if (clickCount[0] >= 3) {
+                    clickCount[0] = 0;
+                    android.widget.Toast.makeText(act,
+                            "被你发现彩蛋了喵～", android.widget.Toast.LENGTH_SHORT).show();
+                    showEasterEggPage(act);
+                }
+            }
+        });
         card.addView(info, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    /** Hidden page reached only through the three-tap footer easter egg on every channel. */
+    private static void showEasterEggPage(final Activity act) {
+        if (act == null || act.isFinishing()) return;
+        if (!BuildInfo.GOOGLE_PLAY) Main.ensureEmbeddedPromptInstalled(act);
+        final boolean dark = isDark(act);
+        final int bg = dark ? 0xFF1B1B1D : 0xFFF5F6F8;
+        final int bar = dark ? 0xFF232326 : 0xFFFFFFFF;
+        final int cardColor = dark ? 0xFF2A2A2D : 0xFFFFFFFF;
+        final int text = dark ? 0xFFECECEC : 0xFF1A1A1A;
+        final int sub = dark ? 0xFFAAAAAF : 0xFF70757D;
+        final int divider = dark ? 0xFF3A3A3D : 0xFFEEEEEE;
+        final Dialog dialog = new Dialog(act, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        final LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(bg);
+
+        LinearLayout top = new LinearLayout(act);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setBackgroundColor(bar);
+        int statusTop = statusBarHeight(act);
+        top.setPadding(dp(act, 8), statusTop, dp(act, 16), 0);
+        root.addView(top, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 56) + statusTop));
+        TextView back = new TextView(act);
+        back.setText("\u2039");
+        back.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+        back.setTextColor(text);
+        back.setGravity(Gravity.CENTER);
+        back.setPadding(dp(act, 8), 0, dp(act, 8), 0);
+        top.addView(back, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(act, 40)));
+        TextView title = new TextView(act);
+        title.setText("隐藏彩蛋");
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(text);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titleParams.leftMargin = dp(act, 8);
+        top.addView(title, titleParams);
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(act);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout card = new LinearLayout(act);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(cardColor);
+        cardBg.setCornerRadius(dp(act, 12));
+        card.setBackground(cardBg);
+        FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardParams.setMargins(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 20));
+        scroll.addView(card, cardParams);
+
+        TextView note = new TextView(act);
+        note.setText("此页面功能仅供本地测试。液态玻璃尚未完成，可能导致显示异常甚至应用闪退。");
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        note.setTextColor(sub);
+        note.setLineSpacing(dp(act, 2), 1f);
+        note.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 12));
+        card.addView(note);
+
+        LinearLayout glassRow = new LinearLayout(act);
+        glassRow.setOrientation(LinearLayout.HORIZONTAL);
+        glassRow.setGravity(Gravity.CENTER_VERTICAL);
+        glassRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 12), dp(act, 13));
+        LinearLayout glassLabels = new LinearLayout(act);
+        glassLabels.setOrientation(LinearLayout.VERTICAL);
+        glassLabels.addView(labelText(act, "启用全局液态玻璃", 15, text, true));
+        glassLabels.addView(labelText(act,
+                "仅测试版本可启用；功能尚未完成，可能异常或闪退",
+                12, sub, false));
+        glassRow.addView(glassLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final Switch glass = new Switch(act);
+        tintSwitch(glass, dark);
+        glass.setChecked(ChatAppearance.load().liquidGlassEnabled);
+        glass.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                ChatAppearance.Config config = ChatAppearance.load();
+                config.liquidGlassEnabled = checked;
+                if (!ChatAppearance.save(config)) {
+                    button.setChecked(!checked);
+                    android.widget.Toast.makeText(act, "液态玻璃设置保存失败",
+                            android.widget.Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+        glassRow.addView(glass);
+        card.addView(glassRow);
+        card.addView(makeDivider(act, divider));
+
+        LinearLayout shakeRow = new LinearLayout(act);
+        shakeRow.setOrientation(LinearLayout.HORIZONTAL);
+        shakeRow.setGravity(Gravity.CENTER_VERTICAL);
+        shakeRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 12), dp(act, 13));
+        LinearLayout shakeLabels = new LinearLayout(act);
+        shakeLabels.setOrientation(LinearLayout.VERTICAL);
+        shakeLabels.addView(labelText(act, "陀螺仪背景", 15, text, true));
+        shakeLabels.addView(labelText(act,
+                "晃动手机时背景轻微漂移并回弹；需先设置背景图",
+                12, sub, false));
+        shakeRow.addView(shakeLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final boolean[] spatialToggleSync = new boolean[1];
+        final Switch[] spatialToggleRef = new Switch[1];
+        final TextView[] spatialStateRef = new TextView[1];
+        final Switch shake = new Switch(act);
+        tintSwitch(shake, dark);
+        shake.setChecked(ChatAppearance.load().shakeParallaxEnabled);
+        shake.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                if (spatialToggleSync[0]) return;
+                ChatAppearance.Config config = ChatAppearance.load();
+                config.shakeParallaxEnabled = checked;
+                if (checked) config.spatialDepthEnabled = false;
+                if (!ChatAppearance.save(config)) {
+                    spatialToggleSync[0] = true;
+                    button.setChecked(!checked);
+                    spatialToggleSync[0] = false;
+                    android.widget.Toast.makeText(act, "陀螺仪背景设置保存失败",
+                            android.widget.Toast.LENGTH_SHORT).show();
+                } else if (checked && spatialToggleRef[0] != null) {
+                    spatialToggleSync[0] = true;
+                    spatialToggleRef[0].setChecked(false);
+                    spatialToggleSync[0] = false;
+                    if (spatialStateRef[0] != null) {
+                        spatialStateRef[0].setText(
+                                "已关闭 · 点按进入专属设置");
+                    }
+                }
+            }
+        });
+        shakeRow.addView(shake);
+        card.addView(shakeRow);
+        card.addView(makeDivider(act, divider));
+
+        LinearLayout spatialRow = new LinearLayout(act);
+        spatialRow.setOrientation(LinearLayout.HORIZONTAL);
+        spatialRow.setGravity(Gravity.CENTER_VERTICAL);
+        spatialRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 12), dp(act, 13));
+        LinearLayout spatialLabels = new LinearLayout(act);
+        spatialLabels.setOrientation(LinearLayout.VERTICAL);
+        spatialLabels.addView(labelText(
+                act, "空间动效（实验）", 15, text, true));
+        final TextView spatialStateLabel = labelText(
+                act,
+                ChatAppearance.load().spatialDepthEnabled
+                        ? "已开启 · 点按进入专属设置"
+                        : "已关闭 · 点按进入专属设置",
+                12, sub, false);
+        spatialStateRef[0] = spatialStateLabel;
+        spatialLabels.addView(spatialStateLabel);
+        spatialRow.addView(spatialLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final Switch spatial = new Switch(act);
+        spatialToggleRef[0] = spatial;
+        tintSwitch(spatial, dark);
+        spatial.setChecked(ChatAppearance.load().spatialDepthEnabled);
+        spatial.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(
+                            CompoundButton button, boolean checked) {
+                        if (spatialToggleSync[0]) return;
+                        ChatAppearance.Config config = ChatAppearance.load();
+                        config.spatialDepthEnabled = checked;
+                        if (checked) config.shakeParallaxEnabled = false;
+                        if (!ChatAppearance.save(config)) {
+                            spatialToggleSync[0] = true;
+                            button.setChecked(!checked);
+                            spatialToggleSync[0] = false;
+                            android.widget.Toast.makeText(
+                                    act, "空间动效设置保存失败",
+                                    android.widget.Toast.LENGTH_SHORT).show();
+                        } else if (checked) {
+                            spatialToggleSync[0] = true;
+                            shake.setChecked(false);
+                            spatialToggleSync[0] = false;
+                        }
+                    }
+                });
+        spatialRow.addView(labelText(act, "›", 24, sub, false));
+        spatialRow.setClickable(true);
+        spatialRow.setFocusable(true);
+        spatialRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {
+                SpatialMotionUi.show(
+                        act, new SpatialMotionUi.StateListener() {
+                            @Override public void onSpatialStateChanged(
+                                    boolean enabled) {
+                                spatialToggleSync[0] = true;
+                                spatial.setChecked(enabled);
+                                if (enabled) shake.setChecked(false);
+                                spatialToggleSync[0] = false;
+                                spatialStateLabel.setText(enabled
+                                        ? "已开启 · 点按进入专属设置"
+                                        : "已关闭 · 点按进入专属设置");
+                            }
+                        });
+            }
+        });
+        card.addView(spatialRow);
+        card.addView(makeDivider(act, divider));
+
+        LinearLayout strengthRow = new LinearLayout(act);
+        strengthRow.setOrientation(LinearLayout.HORIZONTAL);
+        strengthRow.setGravity(Gravity.CENTER_VERTICAL);
+        strengthRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 16), dp(act, 13));
+        LinearLayout strengthLabels = new LinearLayout(act);
+        strengthLabels.setOrientation(LinearLayout.VERTICAL);
+        strengthLabels.addView(labelText(act, "动效强度", 15, text, true));
+        final TextView strengthValue = labelText(
+                act, spatialStrengthLabel(
+                        act, ChatAppearance.load().spatialStrength),
+                12, sub, false);
+        strengthLabels.addView(strengthValue);
+        strengthRow.addView(strengthLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView strengthChevron = labelText(act, "›", 24, sub, false);
+        strengthRow.addView(strengthChevron);
+        strengthRow.setClickable(true);
+        strengthRow.setFocusable(true);
+        strengthRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {
+                final String[] values = {"weak", "standard", "strong"};
+                final String[] labels = {
+                        UiLanguage.text(act, "弱", "Weak"),
+                        UiLanguage.text(act, "标准", "Standard"),
+                        UiLanguage.text(act, "稍强", "Slightly stronger")
+                };
+                String current = ChatAppearance.load().spatialStrength;
+                int selected = "weak".equals(current)
+                        ? 0 : ("strong".equals(current) ? 2 : 1);
+                new android.app.AlertDialog.Builder(act)
+                        .setTitle(UiLanguage.text(
+                                act, "动效强度", "Motion strength"))
+                        .setSingleChoiceItems(labels, selected,
+                                new android.content.DialogInterface.OnClickListener() {
+                                    @Override public void onClick(
+                                            android.content.DialogInterface dialog,
+                                            int which) {
+                                        if (which < 0 || which >= values.length) return;
+                                        ChatAppearance.Config config =
+                                                ChatAppearance.load();
+                                        config.spatialStrength = values[which];
+                                        if (ChatAppearance.save(config)) {
+                                            strengthValue.setText(
+                                                    spatialStrengthLabel(
+                                                            act, values[which]));
+                                            dialog.dismiss();
+                                        } else {
+                                            Toast.makeText(act,
+                                                    "动效强度设置保存失败",
+                                                    Toast.LENGTH_SHORT).show();
+                                        }
+                                    }
+                                })
+                        .setNegativeButton(
+                                UiLanguage.text(act, "取消", "Cancel"), null)
+                        .show();
+            }
+        });
+
+        LinearLayout reduceRow = new LinearLayout(act);
+        reduceRow.setOrientation(LinearLayout.HORIZONTAL);
+        reduceRow.setGravity(Gravity.CENTER_VERTICAL);
+        reduceRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 12), dp(act, 13));
+        LinearLayout reduceLabels = new LinearLayout(act);
+        reduceLabels.setOrientation(LinearLayout.VERTICAL);
+        reduceLabels.addView(labelText(act, "减少动态效果", 15, text, true));
+        reduceLabels.addView(labelText(act,
+                "关闭传感器视差，保留背景防露边处理",
+                12, sub, false));
+        reduceRow.addView(reduceLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final Switch reduceMotion = new Switch(act);
+        final boolean[] reduceMotionSync = new boolean[1];
+        tintSwitch(reduceMotion, dark);
+        reduceMotion.setChecked(
+                ChatAppearance.load().spatialReduceMotion);
+        reduceMotion.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(
+                            CompoundButton button, boolean checked) {
+                        if (reduceMotionSync[0]) return;
+                        ChatAppearance.Config config =
+                                ChatAppearance.load();
+                        config.spatialReduceMotion = checked;
+                        if (!ChatAppearance.save(config)) {
+                            reduceMotionSync[0] = true;
+                            button.setChecked(!checked);
+                            reduceMotionSync[0] = false;
+                            Toast.makeText(act,
+                                    "减少动态效果设置保存失败",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+        reduceRow.addView(reduceMotion);
+
+        LinearLayout recenterRow = new LinearLayout(act);
+        recenterRow.setOrientation(LinearLayout.HORIZONTAL);
+        recenterRow.setGravity(Gravity.CENTER_VERTICAL);
+        recenterRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 12), dp(act, 13));
+        LinearLayout recenterLabels = new LinearLayout(act);
+        recenterLabels.setOrientation(LinearLayout.VERTICAL);
+        recenterLabels.addView(labelText(
+                act, "自动重新校准", 15, text, true));
+        recenterLabels.addView(labelText(act,
+                "稳定约 650ms 后缓慢修正小范围零点误差",
+                12, sub, false));
+        recenterRow.addView(recenterLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final Switch autoRecenter = new Switch(act);
+        final boolean[] autoRecenterSync = new boolean[1];
+        tintSwitch(autoRecenter, dark);
+        autoRecenter.setChecked(
+                ChatAppearance.load().spatialAutoRecenter);
+        autoRecenter.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(
+                            CompoundButton button, boolean checked) {
+                        if (autoRecenterSync[0]) return;
+                        ChatAppearance.Config config =
+                                ChatAppearance.load();
+                        config.spatialAutoRecenter = checked;
+                        if (!ChatAppearance.save(config)) {
+                            autoRecenterSync[0] = true;
+                            button.setChecked(!checked);
+                            autoRecenterSync[0] = false;
+                            Toast.makeText(act,
+                                    "自动重新校准设置保存失败",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+        recenterRow.addView(autoRecenter);
+
+        LinearLayout directionRow = new LinearLayout(act);
+        directionRow.setOrientation(LinearLayout.HORIZONTAL);
+        directionRow.setGravity(Gravity.CENTER_VERTICAL);
+        directionRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 12), dp(act, 13));
+        LinearLayout directionLabels = new LinearLayout(act);
+        directionLabels.setOrientation(LinearLayout.VERTICAL);
+        directionLabels.addView(labelText(
+                act, "反转动效方向", 15, text, true));
+        directionLabels.addView(labelText(act,
+                "统一反转背景图的上下左右视差方向",
+                12, sub, false));
+        directionRow.addView(directionLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        final Switch reverseDirection = new Switch(act);
+        final boolean[] reverseDirectionSync = new boolean[1];
+        tintSwitch(reverseDirection, dark);
+        reverseDirection.setChecked(
+                ChatAppearance.load().spatialDirectionMultiplier < 0f);
+        reverseDirection.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(
+                            CompoundButton button, boolean checked) {
+                        if (reverseDirectionSync[0]) return;
+                        ChatAppearance.Config config =
+                                ChatAppearance.load();
+                        config.spatialDirectionMultiplier =
+                                checked ? -1f : 1f;
+                        if (!ChatAppearance.save(config)) {
+                            reverseDirectionSync[0] = true;
+                            button.setChecked(!checked);
+                            reverseDirectionSync[0] = false;
+                            Toast.makeText(act,
+                                    "动效方向设置保存失败",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+        directionRow.addView(reverseDirection);
+
+        LinearLayout manualRecenterRow = new LinearLayout(act);
+        manualRecenterRow.setOrientation(LinearLayout.VERTICAL);
+        manualRecenterRow.setPadding(
+                dp(act, 16), dp(act, 13), dp(act, 16), dp(act, 13));
+        manualRecenterRow.addView(labelText(
+                act, "立即重新校准", 15, text, true));
+        manualRecenterRow.addView(labelText(act,
+                "将当前持机姿态设为视觉中心",
+                12, sub, false));
+        manualRecenterRow.setClickable(true);
+        manualRecenterRow.setFocusable(true);
+        manualRecenterRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {
+                ChatAppearance.recenterSpatialMotion();
+                Toast.makeText(act, "已请求重新校准",
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        if (!BuildInfo.GOOGLE_PLAY) {
+            LinearLayout promptRow = new LinearLayout(act);
+            promptRow.setOrientation(LinearLayout.HORIZONTAL);
+            promptRow.setGravity(Gravity.CENTER_VERTICAL);
+            promptRow.setPadding(dp(act, 16), dp(act, 13), dp(act, 12), dp(act, 13));
+            LinearLayout promptLabels = new LinearLayout(act);
+            promptLabels.setOrientation(LinearLayout.VERTICAL);
+            promptLabels.addView(labelText(act, "一键破甲", 15, text, true));
+            promptLabels.addView(labelText(act,
+                    "懂你意思喵～",
+                    12, sub, false));
+            promptRow.addView(promptLabels, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            final Switch prompt = new Switch(act);
+            tintSwitch(prompt, dark);
+            // The bundled prompt is opt-in and must start disabled on a fresh install.
+            prompt.setChecked(Main.isEmbeddedPromptEnabled());
+            prompt.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                    if (!Main.setEmbeddedPromptEnabled(act, checked)) {
+                        button.setChecked(!checked);
+                        android.widget.Toast.makeText(act, "内置提示词启用失败",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    } else {
+                        refreshPromptControls();
+                    }
+                }
+            });
+            promptRow.addView(prompt);
+            card.addView(promptRow);
+        }
+
+        back.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { slideOutAndDismiss(dialog, root); }
+        });
+        dialog.setContentView(root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+            window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(bg));
+        }
+        openWithSlide(dialog, root);
+        dialog.setOnKeyListener(new Dialog.OnKeyListener() {
+            @Override public boolean onKey(android.content.DialogInterface d, int code,
+                                           android.view.KeyEvent event) {
+                if (code == android.view.KeyEvent.KEYCODE_BACK
+                        && event.getAction() == android.view.KeyEvent.ACTION_UP) {
+                    slideOutAndDismiss(dialog, root);
+                    return true;
+                }
+                return false;
+            }
+        });
+    }
+
+    private static TextView labelText(Activity act, String value, float size,
+                                      int color, boolean bold) {
+        TextView view = new TextView(act);
+        view.setText(value);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
+        view.setTextColor(color);
+        if (bold) view.setTypeface(Typeface.DEFAULT_BOLD);
+        return view;
+    }
+
+    private static String spatialStrengthLabel(
+            Context context, String value) {
+        if ("weak".equals(value)) {
+            return UiLanguage.text(
+                    context, "弱（0.55×）", "Weak (0.55×)");
+        }
+        if ("strong".equals(value)) {
+            return UiLanguage.text(
+                    context, "稍强（1.25×）", "Slightly stronger (1.25×)");
+        }
+        return UiLanguage.text(
+                context, "标准（1.0×）", "Standard (1.0×)");
+    }
+
+    private static void tintSwitch(Switch sw, boolean dark) {
+        int[][] states = new int[][]{new int[]{android.R.attr.state_checked},
+                new int[]{-android.R.attr.state_checked}};
+        sw.setThumbTintList(new android.content.res.ColorStateList(states,
+                new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
+        sw.setTrackTintList(new android.content.res.ColorStateList(states,
+                new int[]{0xFFADBFFF, dark ? 0xFF555555 : 0xFFBFBFBF}));
+        sw.setBackground(null);
     }
 
     private static String installedVersion(Context context, String packageName) {

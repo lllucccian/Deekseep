@@ -10,9 +10,9 @@ track on 2026-07-12, then moved into the canonical stable source. The current
 send-point capture design for history image restoration builds successfully but
 still requires device validation. None of these experimental paths promises
 that the service will accept expert features on every account or future app
-version. It is now entered through the dedicated risk-gated
-[Experimental Features](EXPERIMENTAL_FEATURES.md) page; the old test APK is no
-longer published.
+version. It is now available from the optional [Experimental
+Features](EXPERIMENTAL_FEATURES.md) page and remains off by default; the old
+test APK is no longer published.
 
 ## Problem
 

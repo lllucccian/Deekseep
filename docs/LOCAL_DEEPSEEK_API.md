@@ -1,6 +1,6 @@
 # DeepSeek 本地 API 使用说明
 
-两个稳定 1.7.1 构建都可以把当前已登录的 DeepSeek Android 原生发送链路转换为在本机和可信局域网
+两个稳定构建都可以把当前已登录的 DeepSeek Android 原生发送链路转换为在本机和可信局域网
 监听的 OpenAI 或 Anthropic 兼容 API。OpenAI 模式支持 Chat Completions 与
 Responses；Anthropic 模式支持 Messages 与 token count。两种模式都支持普通响应、SSE、
 深度思考和 Agent 工具循环，不会把 DeepSeek 的 Cookie、token 或 PoW 数据交给调用方。
@@ -11,8 +11,8 @@ Responses；Anthropic 模式支持 Messages 与 token count。两种模式都支
 ## 1. 启用与连接
 
 1. 打开 DeepSeek 设置中的 **Deekseep**。
-2. 点击 **实验性功能**。首次进入会显示独立风险说明；确认键倒计时 5 秒后才可点击，选择
-   **退出**只会留在 Deekseep 主页面。确认状态按免责声明版本保存，之后不再重复弹出。
+2. 点击 **实验性功能**。首次进入会显示简短使用提示；选择 **返回**会留在 Deekseep
+   主页面，选择 **了解并进入**可立即继续。确认状态按提示版本保存，之后不再重复弹出。
 3. 在实验性功能页点击 **本地 API 服务**。首次进入会出现模块自绘的后台运行检查。
 4. 在系统电池页面把 DeepSeek 设为“不限制/允许高耗电”，并允许后台活动。返回后模块自动
    检查 `isIgnoringBatteryOptimizations` 与 `isBackgroundRestricted`；没有同时通过时不会启动监听。
@@ -24,13 +24,16 @@ Responses；Anthropic 模式支持 Messages 与 token count。两种模式都支
 
 OpenAI 的默认 base URL 是 `http://127.0.0.1:8765/v1`；Anthropic 的默认 base URL 是
 `http://127.0.0.1:8765`，不能额外附加 `/v1`。如果端口被占用，网关会依次尝试
-`8766` 至 `8780`，所以客户端应以控制页显示的 URL 为准。网关绑定 `0.0.0.0`；同一 Wi-Fi/LAN
+`8766` 至 `8780`，所以客户端应以控制页显示的 URL 为准。在“高级设置”中保存固定端口后，
+网关只监听该端口；端口被占用时会明确启动失败，不会悄悄切换到另一个端口。网关绑定
+`0.0.0.0`；同一 Wi-Fi/LAN
 中的设备可使用控制页显示的 `http://设备私有IPv4:端口`。地址选择优先 Wi-Fi、热点和以太网，
 忽略 VPN/tun 与蜂窝接口。彻底结束 DeepSeek 进程后监听也会停止，下一次启动时按开关恢复。
 
 业务路由即使来自局域网也必须携带 API Key；只有 `/healthz`、`/health` 和 `/` 不要求认证。
-此服务没有 TLS、IP 白名单或公网防护，API Key 等同当前 DeepSeek 账号的调用权限。只应在可信
-局域网中使用，不要做路由器端口转发，也不要把 URL、Key 或连接信息文件发给他人。
+HTTP 网关本身没有 TLS 或 IP 白名单，API Key 等同当前 DeepSeek 账号的调用权限。默认只应在可信
+局域网中使用，不要把 URL、Key 或连接信息文件发给他人。确需公网访问时，优先使用下一节的
+Cloudflare Tunnel，由 Cloudflare 终止公网 HTTPS；直接端口转发必须另配 HTTPS 反向代理。
 
 电池“不限制”是启用前提，但在部分 Android/OEM 系统上并不足以阻止 Cached Apps Freezer。从 r16
 起模块额外运行私有的 `specialUse` 前台服务，持有局部唤醒锁并每 5 秒向 DeepSeek 发送带控制令牌的
@@ -48,6 +51,50 @@ API Key 可以在控制页保存为 8–256 位无空格 ASCII 字符，也可�
 Authorization: Bearer <API_KEY>
 X-API-Key: <API_KEY>
 ```
+
+## 1.1 自有域名与公网 IP
+
+本地 API 页底部的 **高级设置**提供两种持久地址：
+
+### Cloudflare 自有域名（推荐）
+
+APK 内置 Android NDK 版 `cloudflared`，覆盖 `arm64-v8a`、`armeabi-v7a`、`x86_64`
+和 `x86`。连接器运行在模块自己的前台保活进程中；本地 `127.0.0.1` 和局域网
+`0.0.0.0` 监听仍同时可用。
+
+1. 在 Cloudflare Zero Trust 创建 **remotely-managed Tunnel**。
+2. 在 Tunnel 的 **Published application routes** 中添加自己的一个或多个完整域名。
+3. 每个域名的 Service 都填写高级页显示的源站，例如 `http://127.0.0.1:8765`。
+4. 从连接器安装命令中复制 Tunnel token，粘贴到高级页；域名每行填写一个，保存后开启
+   “持久公网入口”。
+5. OpenAI 客户端使用 `https://域名/v1`；Anthropic 客户端使用 `https://域名`。
+
+一个 Tunnel 可以让多个域名指向同一源站。域名/DNS/Service 的真实绑定保存在 Cloudflare，
+APP 保存域名列表只用于显示和复制，不能代替 Cloudflare 端的 Published application route。
+不要给普通 API 客户端套需要浏览器交互登录的 Cloudflare Access 策略。
+
+Tunnel token 不会写入 DeepSeek 数据目录：模块用 Android Keystore 的 AES-GCM 密钥加密后保存。
+运行连接器时，才在模块的 `noBackupFilesDir` 生成仅本 UID 可读的临时 token 文件；连接器停止后
+立即删除。命令行和诊断日志都不包含 token 正文。
+
+由于未修改的 DeepSeek Manifest 可能看不到后来安装的模块 Provider，高级页会复用现有的无界面
+跳板取得一个 Binder；token 不会放进跳转 URI。模块在每次 Binder 操作时核验真实调用 UID 必须
+属于 `com.deepseek.chat`，其他应用即使拿到 Binder 也不能读取或修改配置。
+
+Cloudflare Tunnel 需要向边缘发起出站连接，通常使用 UDP 或 TCP 7844。某些运营商、校园网或
+企业网络会拦截该端口；高级页可以在“自动、HTTP/2、QUIC”之间切换，并显示 cloudflared 的真实
+预检查错误。切换传输也失败时，需要更换网络或调整防火墙，APP 无法把 7844 隧道伪装成普通
+HTTPS 443。
+
+### 公网 IP / 路由器端口转发
+
+网关已经监听 `0.0.0.0`，无需再“绑定”一个外部 IP。只有设备所在网络确实有可入站的公网
+IPv4/IPv6 时，才能在路由器上把公网端口转发到手机的固定监听端口，并让域名 A/AAAA 记录指向
+该公网 IP。运营商 CGNAT 下不能靠 APP 生成公网 IP。高级页的“外部根地址”只负责保存和复制
+最终 URL，不会修改路由器、DNS 或系统网卡。
+
+直接使用 `http://公网IP:端口` 会明文传输 API Key；公开网络必须使用可信的 HTTPS 反向代理，
+或者改用 Cloudflare Tunnel。
 
 ## 2. 支持的接口
 
@@ -417,6 +464,10 @@ Responses 语义一致，`tools` 和 `tool_choice` 不会由 previous ID 自动�
 /data/data/com.deepseek.chat/files/deekseep_local_api_sessions.json
 ```
 
+Cloudflare 连接器日志位于模块私有目录，具体路径会显示在高级页，文件名为
+`deekseep_cloudflared.log`。日志会轮转并自动遮盖疑似 token；它包含域名、Cloudflare 边缘 IP
+和网络错误，分享前仍应检查。
+
 主日志超过 2 MiB 后只保留一份轮转文件。连接信息可能同时尝试写入
 `/storage/emulated/0/Deekseep_API.txt`，但 Android 分区存储可能阻止该副本；控制页始终是获取
 当前 URL 和 Key 的首选位置。连接文件、状态文件和启动日志包含完整 API Key，分享前必须删除；
@@ -437,12 +488,16 @@ Responses 语义一致，`tools` 和 `tool_choice` 不会由 previous ID 自动�
 
 ## 12. 当前边界
 
-- 支持本机和私有 IPv4 局域网访问，但不提供 TLS、公网暴露或访问控制列表；
+- 支持本机、私有 IPv4 局域网，以及可选的 Cloudflare 自有域名；HTTP 网关本身仍不实现 TLS
+  或访问控制列表，公网 TLS 由 Cloudflare 或用户自己的反向代理提供；
+- Cloudflare 域名、DNS 和 Published application route 必须在 Cloudflare 端真实配置；APP
+  中填写域名不会自动取得该域名的控制权；
+- Cloudflare 边缘连接依赖出站 7844，网络阻断时无法仅靠 APP 修复；
 - 当前 API 输入以文本和工具 item 为主，不接受 OpenAI 多模态图片/data URL；
 - token usage 是按文本长度估算，不是服务端计费 token；
 - `max_tokens`、temperature 等兼容字段不能保证改变 DeepSeek 原生采样行为；
-- HTTP 网关和原生 transport 仍位于 DeepSeek 进程；模块前台服务只做保活/恢复心跳，不对外监听，
-  也不能在 DeepSeek 被用户强制停止的状态下替代宿主生成内容；
+- HTTP 网关和原生 transport 仍位于 DeepSeek 进程；模块前台服务负责保活/恢复心跳，并可运行
+  cloudflared 出站连接器，但不能在 DeepSeek 被用户强制停止的状态下替代宿主生成内容；
 - Anthropic thinking 的签名由本地网关生成，只用于本地会话回放，不是 Anthropic 云端签名；
 - Anthropic server tools 只对明确支持的原生搜索做映射，Claude Code 的客户端工具由 Claude Code 执行；
 - 无法绕过 DeepSeek 登录失效、账号风控、服务端能力或内容策略。

@@ -94,7 +94,10 @@ if bad_english:
     raise SystemExit(1)
 
 ui_sources = [
-    "DeekseepUi.java", "AccountUi.java", "AccountManager.java",
+    "DeekseepUi.java", "ChatAppearance.java", "ChatAppearanceUi.java",
+    "SpatialMotionUi.java",
+    "ImageCutoutUi.java",
+    "AccountUi.java", "AccountManager.java",
     "AccountCredentialCodec.java", "ChatEditorUi.java", "ChatSearchUi.java",
     "DeekseepTools.java", "SettingsActivity.java", "LocalApiKeepAliveService.java",
 ]

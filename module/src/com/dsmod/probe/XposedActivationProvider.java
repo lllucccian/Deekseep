@@ -27,6 +27,11 @@ public final class XposedActivationProvider extends ContentProvider {
     static final String METHOD_SET_LOCAL_API_KEEPALIVE = "SetLocalApiKeepAlive";
     static final String METHOD_GET_LOCAL_API_KEEPALIVE = "GetLocalApiKeepAlive";
     static final String METHOD_ACK_LOCAL_API_KEEPALIVE = "AckLocalApiKeepAlive";
+    static final String METHOD_CONFIGURE_PUBLIC_TUNNEL = "ConfigureLocalApiPublicTunnel";
+    static final String METHOD_SET_PUBLIC_TUNNEL = "SetLocalApiPublicTunnel";
+    static final String METHOD_GET_PUBLIC_TUNNEL = "GetLocalApiPublicTunnel";
+    static final String METHOD_SET_PINGGY_TUNNEL = "SetLocalApiPinggyTunnel";
+    static final String METHOD_GET_PINGGY_TUNNEL = "GetLocalApiPinggyTunnel";
 
     private static final String METHOD_SEND_BINDER = "SendBinder";
     private static final String SERVICE_DESCRIPTOR = "io.github.libxposed.service.IXposedService";
@@ -63,6 +68,21 @@ public final class XposedActivationProvider extends ContentProvider {
         }
         if (METHOD_ACK_LOCAL_API_KEEPALIVE.equals(method)) {
             return acknowledgeLocalApiKeepAlive(extras);
+        }
+        if (METHOD_CONFIGURE_PUBLIC_TUNNEL.equals(method)) {
+            return configurePublicTunnel(extras);
+        }
+        if (METHOD_SET_PUBLIC_TUNNEL.equals(method)) {
+            return setPublicTunnel(extras);
+        }
+        if (METHOD_GET_PUBLIC_TUNNEL.equals(method)) {
+            return getPublicTunnel();
+        }
+        if (METHOD_SET_PINGGY_TUNNEL.equals(method)) {
+            return setPinggyTunnel(extras);
+        }
+        if (METHOD_GET_PINGGY_TUNNEL.equals(method)) {
+            return getPinggyTunnel();
         }
         return null;
     }
@@ -114,6 +134,71 @@ public final class XposedActivationProvider extends ContentProvider {
         if (!enabled) LocalApiKeepAliveService.setEnabled(context, false);
         result.putBoolean("accepted", true);
         return result;
+    }
+
+    private Bundle configurePublicTunnel(Bundle extras) {
+        Context context = getContext();
+        int callingUid = Binder.getCallingUid();
+        if (context == null || !uidOwnsPackage(context, callingUid, TARGET_PACKAGE)) {
+            Log.w(TAG, "rejected public tunnel configuration from uid=" + callingUid);
+            Bundle result = new Bundle();
+            result.putBoolean("accepted", false);
+            result.putString("error", "caller is not DeepSeek");
+            return result;
+        }
+        return PublicTunnelManager.configure(context, extras);
+    }
+
+    private Bundle setPublicTunnel(Bundle extras) {
+        Context context = getContext();
+        int callingUid = Binder.getCallingUid();
+        if (context == null || !uidOwnsPackage(context, callingUid, TARGET_PACKAGE)) {
+            Log.w(TAG, "rejected public tunnel control from uid=" + callingUid);
+            Bundle result = new Bundle();
+            result.putBoolean("accepted", false);
+            result.putString("error", "caller is not DeepSeek");
+            return result;
+        }
+        boolean enabled = extras != null && extras.getBoolean("enabled", false);
+        return PublicTunnelManager.setRequested(context, enabled);
+    }
+
+    private Bundle getPublicTunnel() {
+        Context context = getContext();
+        int callingUid = Binder.getCallingUid();
+        if (context == null || !uidOwnsPackage(context, callingUid, TARGET_PACKAGE)) {
+            Bundle result = new Bundle();
+            result.putBoolean("accepted", false);
+            result.putString("error", "caller is not DeepSeek");
+            return result;
+        }
+        return PublicTunnelManager.status(context);
+    }
+
+    private Bundle setPinggyTunnel(Bundle extras) {
+        Context context = getContext();
+        int callingUid = Binder.getCallingUid();
+        if (context == null || !uidOwnsPackage(context, callingUid, TARGET_PACKAGE)) {
+            Log.w(TAG, "rejected Pinggy tunnel control from uid=" + callingUid);
+            Bundle result = new Bundle();
+            result.putBoolean("accepted", false);
+            result.putString("error", "caller is not DeepSeek");
+            return result;
+        }
+        boolean enabled = extras != null && extras.getBoolean("enabled", false);
+        return PinggyTunnelManager.setRequested(context, enabled);
+    }
+
+    private Bundle getPinggyTunnel() {
+        Context context = getContext();
+        int callingUid = Binder.getCallingUid();
+        if (context == null || !uidOwnsPackage(context, callingUid, TARGET_PACKAGE)) {
+            Bundle result = new Bundle();
+            result.putBoolean("accepted", false);
+            result.putString("error", "caller is not DeepSeek");
+            return result;
+        }
+        return PinggyTunnelManager.status(context);
     }
 
     private Bundle receiveFrameworkBinder(final IBinder binder) {
@@ -168,6 +253,17 @@ public final class XposedActivationProvider extends ContentProvider {
                     + ", channel=" + channel);
             return false;
         }
+        persistTargetHeartbeat(context, extras, channel, callingUid);
+        return true;
+    }
+
+    static void recordTrustedTargetHeartbeat(Context context, Bundle extras, String channel) {
+        if (context == null) return;
+        persistTargetHeartbeat(context, extras, channel, -1);
+    }
+
+    private static void persistTargetHeartbeat(Context context, Bundle extras,
+                                               String channel, int callingUid) {
         SharedPreferences.Editor edit = prefs(context).edit()
                 .putLong(KEY_TARGET_AT, System.currentTimeMillis());
         if (extras != null) {
@@ -180,7 +276,6 @@ public final class XposedActivationProvider extends ContentProvider {
         Log.i(TAG, "DeepSeek target heartbeat accepted, uid=" + callingUid
                 + ", channel=" + channel);
         notifyStateChanged();
-        return true;
     }
 
     private static boolean uidOwnsPackage(Context context, int uid, String wanted) {

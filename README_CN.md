@@ -4,19 +4,19 @@
 
 [English](README.md) | 简体中文
 
-[![最新版本](https://img.shields.io/github/v/release/haoyangtu09-art/Deekseep?display_name=tag&sort=semver)](https://github.com/haoyangtu09-art/Deekseep/releases/latest)
-[![GitHub 下载量](https://img.shields.io/github/downloads/haoyangtu09-art/Deekseep/total?label=Downloads)](https://github.com/haoyangtu09-art/Deekseep/releases)
+[![最新版本](https://img.shields.io/github/v/release/lllucccian/Deekseep?display_name=tag&sort=semver)](https://github.com/lllucccian/Deekseep/releases/latest)
+[![GitHub 下载量](https://img.shields.io/github/downloads/lllucccian/Deekseep/total?label=Downloads)](https://github.com/lllucccian/Deekseep/releases)
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3ddc84)](#环境要求)
 [![libxposed API 102](https://img.shields.io/badge/libxposed-API%20102-2f6feb)](#环境要求)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> [!WARNING]
-> 本模块会修改官方 DeepSeek Android App 的运行行为。请先备份重要数据，并自行承担使用风险。
+> [!NOTE]
+> Deekseep 是独立增强模块。请先确认安装包与 DeepSeek 版本匹配；使用聊天、账号或实验性工具前，建议备份重要数据。
 
 ## 兼容情况速览
 
-> [!IMPORTANT]
-> Deekseep LSPosed 1.7.2 按具体 App 构建适配。中国大陆版与 Google Play 版使用不同的混淆符号映射，安装包不能混用。
+> [!TIP]
+> Deekseep LSPosed 1.7.2 按具体 App 构建适配，请根据中国大陆版或 Google Play 版的 `versionCode` 选择对应安装包。
 
 - 中国大陆官方版：DeepSeek 2.2.2（`versionCode 233`），支持稳定 API 102 版和 Legacy 版。
 - Google Play 版：DeepSeek 2.2.2（`versionCode 236`），只支持单独标注的 Google Play API 102 安装包。
@@ -27,9 +27,9 @@
 
 ## 推荐下载
 
-### [下载 Deekseep LSPosed 1.7.2——推荐稳定 API 102 版](https://github.com/haoyangtu09-art/Deekseep/releases/download/v1.7.2/deekseep-stable-api102-v1.7.2.apk)
+### [下载 Deekseep LSPosed 1.7.2——推荐稳定 API 102 版](https://github.com/lllucccian/Deekseep/releases/download/v1.7.2/deekseep-stable-api102-v1.7.2.apk)
 
-这个默认推荐包适用于中国大陆版 DeepSeek 2.2.2（`233`）和当前版 LSPosed。Google Play 用户必须前往 [1.7.2 Release](https://github.com/haoyangtu09-art/Deekseep/releases/tag/v1.7.2) 下载 `deekseep-google-play-2.2.2-v1.7.2.apk`。安装前务必核对 DeepSeek 的 `versionCode`。
+这个默认推荐包适用于中国大陆版 DeepSeek 2.2.2（`233`）和当前版 LSPosed。Google Play 用户必须前往 [1.7.2 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.2) 下载 `deekseep-google-play-2.2.2-v1.7.2.apk`。安装前务必核对 DeepSeek 的 `versionCode`。
 
 ## 项目截图
 
@@ -42,7 +42,7 @@
 <details>
 <summary>查看更多项目截图</summary>
 
-| 数据工具、语言与模块信息 | 实验性功能及风险提示 |
+| 数据工具、语言与模块信息 | 实验性功能及使用提示 |
 |---|---|
 | <img src="docs/images/data-tools-preview.jpg" alt="Deekseep LSPosed 数据工具与模块信息" width="320"> | <img src="docs/images/experimental-features-preview.jpg" alt="Deekseep LSPosed 实验性功能页面" width="320"> |
 
@@ -60,6 +60,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 - 导入系统提示词，并在不改动可见输入框的情况下写入发送请求。
 - 编辑本地会话标题、用户消息、模型回复、思考内容、思考时间和消息图片；支持新建本地会话，并搜索问题、回复和思考文本。
+- 当前受支持的源码构建均可导入图片作为聊天背景或贴纸；背景支持裁剪取景、旋转、不透明度、可选景深，以及统一或分界面位移。动态效果采用先快后慢的缓出曲线：打开侧栏时随主界面向右、进入设置时向左，并在关闭或返回时平滑复位；高级选项可绑定聊天、侧栏或设置界面。贴纸会保留在聊天与设置页，并可拖动及调整大小、旋转、层级和不透明度。
 - 将聊天导出为 Markdown，查看本地统计，手动或按保留数量自动备份数据库，并可选启用聊天批量选择与删除。
 - 在已知的客户端 `CONTENT_FILTER` 替换事件发生时保留设备已经收到的文本；无法恢复服务器从未下发的内容。
 
@@ -76,7 +77,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 ### 开发者与 API 工具
 
 - 可选启动带独立 Gateway Key 的本机/可信局域网服务，通过 DeepSeek 原生传输提供 OpenAI Chat Completions/Responses 或 Anthropic Messages 兼容接口。
-- 支持流式输出、工具结果续写、Codex 和 Claude Code 工具循环、深度思考参数、原生联网搜索与实时请求诊断。本地 API 位于带风险门槛的“实验性功能”页中，默认关闭。
+- 支持流式输出、工具结果续写、Codex 和 Claude Code 工具循环、深度思考参数、原生联网搜索与实时请求诊断；高级设置可固定监听端口，并用自有 Cloudflare Tunnel 令牌连接一个或多个已配置域名。本地 API 位于可选的“实验性功能”页中，默认关闭。
 
 ### 界面与兼容增强
 
@@ -104,7 +105,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 4. 安装模块 APK，并在 LSPosed/Xposed 管理器中启用。
 5. 作用域只勾选 `com.deepseek.chat`；现代版不需要勾选模块自身应用。
 6. 强制停止 DeepSeek 后重新打开。通常不需要重启整台设备；只有框架在目标 App 重启后仍未重新加载模块时再重启设备。
-7. 阅读并确认首次风险提示，然后进入 DeepSeek 设置，打开 Deekseep LSPosed 注入的 Deekseep 入口。
+7. 阅读简短的首次使用说明并点击“我知道了”，然后进入 DeepSeek 设置，打开 Deekseep LSPosed 注入的 Deekseep 入口。
 
 现代版和 Legacy 版共用包名 `com.dsmod.probe`，但开发签名不同。切换接口时应先停用并卸载旧模块 APK，再安装另一个版本；这不会卸载 DeepSeek。更多细节见[安装指南](docs/INSTALLATION.md)。
 
@@ -124,7 +125,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 | `deekseep-test-legacy-v1.7.apk` | 面向传统 Xposed/FPA 的历史实验 | 传统 Xposed API 82+ | 1.7.0 后已停止维护和发布，不推荐使用；精确宿主兼容性及额外日志情况待确认。 |
 | `deekseep-api102-load-probe-v0.1.apk` | 检查 API 102 是否能为 `com.deepseek.chat` 加载 | libxposed API 102 | 历史诊断探针，只报告加载并可能写入标记，不包含正常模块功能。 |
 
-这些历史包仍保留在 [1.7.0 Release](https://github.com/haoyangtu09-art/Deekseep/releases/tag/v1.7.0) 供核对。自 1.7.1 起，稳定 Release 不再包含测试版和诊断版。不要为同一个 DeepSeek 进程同时启用多个 Deekseep LSPosed 版本。
+这些历史包仍保留在 [1.7.0 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.0) 供核对。自 1.7.1 起，稳定 Release 不再包含测试版和诊断版。不要为同一个 DeepSeek 进程同时启用多个 Deekseep LSPosed 版本。
 
 </details>
 
@@ -147,26 +148,24 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 - 多账号功能异常：先备份当前账号数据，每次只测试一次添加或导入，并在验证成功前保留原活动账号。不要公开上传导出的账号 JSON。
 - 图片功能异常：确认系统图片选择器能读取文件，并先测试单张图片。专家图片中继属于实验功能，可能受服务器权限、模型路由、PoW 或宿主内部变化影响。
 - 收集日志：只复现一次，截取模块诊断中首次错误附近的少量行。必须删除 Token、Cookie、Authorization、账号信息、邮箱、手机号、设备标识、私有服务器地址、提示词、回复、文件链接和其他隐私信息。
-- 提交 Issue：先搜索已有问题，再通过 [Bug 报告](https://github.com/haoyangtu09-art/Deekseep/issues/new?template=bug_report.yml)或[兼容性报告](https://github.com/haoyangtu09-art/Deekseep/issues/new?template=compatibility_report.yml)填写精确版本与最小脱敏日志。
+- 提交 Issue：先搜索已有问题，再通过 [Bug 报告](https://github.com/lllucccian/Deekseep/issues/new?template=bug_report.yml)或[兼容性报告](https://github.com/lllucccian/Deekseep/issues/new?template=compatibility_report.yml)填写精确版本与最小脱敏日志。
 
 更多排查方法见[故障排查文档](docs/TROUBLESHOOTING.md)。
 
-## 风险说明
+## 使用前提示
 
-- DeepSeek 更新可能更改混淆类名，使 Hook 随时失效。
-- 安装与渠道或 versionCode 不匹配的模块可能导致 App 崩溃或功能无效。
-- 账号工具、聊天编辑、删除、图片处理和实验性 API 可能影响本地数据或账号行为。
-- 使用第三方运行时模块可能带来账号、服务条款、隐私和数据丢失风险。
-- 请先备份重要数据，只在非重要聊天中测试，不要假定未来 DeepSeek 版本会继续兼容。
+- 按 DeepSeek 渠道和 `versionCode` 选择匹配的 APK。
+- 编辑、删除会话或切换账号前，建议先备份重要聊天。
+- 账号导出、API Key 和诊断日志请勿公开分享。
 
-安装前请阅读完整的[免责声明](DISCLAIMER.md)。实验性功能还会显示独立的[五秒首次进入风险提示](docs/EXPERIMENTAL_FEATURES.md)。
+更多信息见简明的[项目说明](DISCLAIMER.md)。实验性功能只显示一次使用提示，并且在你主动开启前保持关闭。
 
 ## 开发计划
 
 仓库中的本地 API 实现计划目前记录了以下状态：
 
 - 已完成：OpenAI 与 Anthropic 双格式、国内版两个稳定接口、Google Play 2.2.2 精确映射，以及带门槛的实验性功能页。
-- 计划中：socket 到宿主 Flow 的明确取消确认、API 图片输入、Responses 状态持久化和幂等键、脱敏诊断包、安全端口配置，以及更广的 Anthropic/Claude Code 回归测试。
+- 计划中：socket 到宿主 Flow 的明确取消确认、API 图片输入、Responses 状态持久化和幂等键、脱敏诊断包，以及更广的 Anthropic/Claude Code 回归测试。
 - 未排期：其他 DeepSeek 版本适配。每次 App 更新都需要重新确认兼容性，并可能需要新的符号映射。
 
 详情见[本地 API 实现状态与计划](docs/LOCAL_DEEPSEEK_API_GATEWAY_PLAN.md)。计划项在真正实现并发布前不属于当前功能。
@@ -175,11 +174,11 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 欢迎贡献新版本兼容测试、Google Play 映射、聚焦的 Hook 修复、文档改进、Bug 报告、翻译、界面截图和安装测试。
 
-参与前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，搜索现有 [Issues](https://github.com/haoyangtu09-art/Deekseep/issues)，并写明 DeepSeek 渠道、App 版本、versionCode、Android 版本及 LSPosed/Xposed 环境。聚焦的修改可以通过 [Pull Requests](https://github.com/haoyangtu09-art/Deekseep/pulls)提交。
+参与前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，搜索现有 [Issues](https://github.com/lllucccian/Deekseep/issues)，并写明 DeepSeek 渠道、App 版本、versionCode、Android 版本及 LSPosed/Xposed 环境。聚焦的修改可以通过 [Pull Requests](https://github.com/lllucccian/Deekseep/pulls)提交。
 
-## 免责声明
+## 项目说明
 
-Deekseep LSPosed 是独立第三方项目，不属于 DeepSeek 官方。DeepSeek 名称及相关商标归其合法权利人所有。是否安装模块以及由此产生的账号、兼容性、隐私和数据风险由用户自行判断和承担。完整内容见 [DISCLAIMER.md](DISCLAIMER.md)。
+Deekseep LSPosed 是独立第三方项目，不属于 DeepSeek 官方。产品名称及相关商标归其合法权利人所有。兼容性、数据和隐私说明见简明的[项目说明](DISCLAIMER.md)。
 
 ## 许可证
 

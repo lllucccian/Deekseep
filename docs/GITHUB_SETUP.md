@@ -4,8 +4,8 @@ This document lists repository-page changes that the owner can make manually aft
 
 ## Confirmed repository facts
 
-- Current remote repository: `haoyangtu09-art/Deekseep`
-- Current public URL: <https://github.com/haoyangtu09-art/Deekseep>
+- Current remote repository: `lllucccian/Deekseep`
+- Current public URL: <https://github.com/lllucccian/Deekseep>
 - Primary repository language reported by GitHub: Java
 - Other reported repository languages: Shell and Python
 - License: MIT
@@ -111,7 +111,7 @@ Before proposing Deekseep LSPosed to an LSPosed module repository, confirm:
 - the supported DeepSeek channels, versions, and version codes are explicit;
 - the module icon and listing artwork are original or otherwise legally usable;
 - checksums and APK filenames are stable and unambiguous;
-- privacy, logging, account, database, and experimental-feature risks are disclosed;
+- concise compatibility, backup, privacy, and optional-feature notes are present;
 - the submitted APK has been tested in the claimed LSPosed interface and target App build.
 
 This checklist does not mean the project has already been submitted or accepted.
@@ -122,25 +122,25 @@ The authenticated owner and current repository were confirmed during the audit. 
 
 ```bash
 gh auth status
-gh repo view haoyangtu09-art/Deekseep
+gh repo view lllucccian/Deekseep
 ```
 
 Optional repository rename:
 
 ```bash
-gh repo rename Deekseep-LSPosed --repo haoyangtu09-art/Deekseep
+gh repo rename Deekseep-LSPosed --repo lllucccian/Deekseep
 ```
 
 Optional description update:
 
 ```bash
-gh repo edit haoyangtu09-art/Deekseep --description "Deekseep LSPosed is an independent LSPosed/Xposed module adding account, chat, image, interface, and local API tools to the DeepSeek Android app."
+gh repo edit lllucccian/Deekseep --description "Deekseep LSPosed is an independent LSPosed/Xposed module adding account, chat, image, interface, and local API tools to the DeepSeek Android app."
 ```
 
 Optional topic update:
 
 ```bash
-gh repo edit haoyangtu09-art/Deekseep --add-topic deekseep --add-topic deepseek --add-topic lsposed --add-topic libxposed --add-topic xposed --add-topic android --add-topic android-module --add-topic xposed-module --add-topic root --add-topic java --add-topic termux
+gh repo edit lllucccian/Deekseep --add-topic deekseep --add-topic deepseek --add-topic lsposed --add-topic libxposed --add-topic xposed --add-topic android --add-topic android-module --add-topic xposed-module --add-topic root --add-topic java --add-topic termux
 ```
 
 Run the rename command only after deciding to rename the remote repository. GitHub may redirect old links, but external package indexes, badges, automation, and documentation should still be checked afterward.

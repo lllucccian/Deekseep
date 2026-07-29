@@ -13,6 +13,9 @@ Current release: **1.7.2**.
 It contains the broadest maintained stable feature set, including the advanced
 chat editor with live refresh, persistent blank local conversations, direct
 user/AI row appending, gallery image persistence and existing-image reuse,
+the current-source chat wallpaper and multi-sticker layout editor with
+crop focus, background-only depth, and curved unified/per-screen
+sidebar/settings motion,
 1.7.1 reasoning creation, repair and duration support,
 reasoning-aware native chat search, local data tools, sidebar multi-select, and
 the current expert image relay port. It also includes independent opt-in switches

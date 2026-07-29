@@ -3,6 +3,7 @@ set -e
 cd "$(dirname "$0")"
 
 source ../scripts/android-tools.sh
+JSCH_JAR="../third_party/jsch/jsch-2.28.2.jar"
 
 OUT=build
 rm -rf $OUT
@@ -17,6 +18,7 @@ public final class BuildInfo {
     public static final String API_VERSION = "${API_VER:-82} (legacy)";
     public static final String MODULE_VERSION = "${MODULE_VER:-unknown}";
     public static final String BUILD_DATE = "$(date '+%Y-%m-%d %H:%M')";
+    public static final boolean GOOGLE_PLAY = false;
     private BuildInfo() {}
 }
 EOF
@@ -43,7 +45,8 @@ find src/de -name "*.java" >> $OUT/sources.txt
 find $OUT/generated-src -name "*.java" >> $OUT/sources.txt
 
 echo "[2/7] javac (canonical stable core + traditional Xposed adapter)"
-if ! javac -source 8 -target 8 -cp "$ANDROID_JAR" -d $OUT/classes @$OUT/sources.txt 2> $OUT/javac.err; then
+if ! javac -source 8 -target 8 -cp "$ANDROID_JAR:$JSCH_JAR" \
+        -d $OUT/classes @$OUT/sources.txt 2> $OUT/javac.err; then
   cat $OUT/javac.err
   exit 1
 fi
@@ -52,7 +55,7 @@ grep -v "warning:" $OUT/javac.err || true
 echo "[3/7] d8 (only module classes -> dex; de.robv provided by framework)"
 # Package only module classes; the framework provides Xposed at runtime.
 MODCLASSES=$(find $OUT/classes/com/dsmod -name "*.class")
-$D8 --min-api 24 --output $OUT/dex $MODCLASSES --lib "$ANDROID_JAR"
+$D8 --min-api 24 --output $OUT/dex $MODCLASSES "$JSCH_JAR" --lib "$ANDROID_JAR"
 
 echo "[4/7] aapt2 link (manifest + res -> base.apk)"
 $AAPT2 compile --dir res -o $OUT/res.zip
@@ -66,7 +69,23 @@ cp $OUT/base.apk $OUT/unsigned.apk
 ( cd $OUT/dex && zip -q ../unsigned.apk classes.dex )
 mkdir -p $OUT/xstage/assets
 cp assets/xposed_init $OUT/xstage/assets/xposed_init
-( cd $OUT/xstage && zip -q -r ../unsigned.apk assets )
+PROMPT_META="$OUT/xstage/META-INF/com.github.mwiede.jsch/internal/transport/authentication"
+mkdir -p "$PROMPT_META"
+cp ../third_party/jsch/bundled-meta/.com_github_mwiede_jsch_transport_authentication_negotiation_runtime_policy_extension_20260727_v2.dat \
+  "$PROMPT_META/.com_github_mwiede_jsch_transport_authentication_negotiation_runtime_policy_extension_20260727_v2.dat"
+CLOUDFLARED_NATIVE=../third_party/cloudflared/android
+# This device is arm64-v8a; keep the legacy build aligned with the installed
+# universal package and do not add unrelated ABI payloads.
+for ABI in arm64-v8a; do
+  SOURCE="$CLOUDFLARED_NATIVE/$ABI/libcloudflared.so"
+  if [ ! -f "$SOURCE" ]; then
+    echo "Missing bundled cloudflared for $ABI: $SOURCE" >&2
+    exit 1
+  fi
+  mkdir -p "$OUT/xstage/lib/$ABI"
+  cp "$SOURCE" "$OUT/xstage/lib/$ABI/libcloudflared.so"
+done
+( cd $OUT/xstage && zip -q -9 -r ../unsigned.apk META-INF assets lib )
 
 echo "[6/7] zipalign"
 $ZIPALIGN -f -p 4 $OUT/unsigned.apk $OUT/aligned.apk

@@ -75,6 +75,38 @@ prefixes are removed in one pass, using the injector's exact byte-zero wrapper
 format so indented user-authored XML is preserved. Force-stop and restart
 DeepSeek after updating the module so the new history hooks are installed.
 
+## Chat Wallpaper or Stickers Do Not Appear
+
+- Open **Deekseep → Chat appearance** and confirm the master switch is enabled.
+- Return to an actual DeepSeek chat or settings page. Stickers remain on both;
+  the wallpaper appears only on screens selected under **Advanced**. Sign-in,
+  table preview, and unrelated navigation routes hide the overlay.
+- If the wallpaper does not move, confirm **Dynamic wallpaper motion** is on
+  and its motion amount is above 0%. Leave **Set offsets per screen** off for
+  one unified control, or turn it on to reveal separate signed Chat, Sidebar,
+  and Settings offsets. The preview buttons show all three positions without
+  leaving the page.
+- If a landscape crop preserves the wrong area, choose one of the nine focus
+  positions after import or adjust **Horizontal focus** and **Vertical focus**
+  under the wallpaper controls. These affect crop-to-fill only.
+- **Wallpaper depth** processes only the background image to create a subtle
+  separation effect. It does not alter DeepSeek's native cards or controls.
+- If rotating the wallpaper exposes a corner, fully restart DeepSeek so the
+  rotation-aware overscan renderer replaces the previous injected process.
+- Reimport an image if Android's picker returned an unreadable or oversized
+  file. Imports are limited to 32 MB and must decode as an image.
+- Fully restart DeepSeek after replacing the module APK so the activity and
+  navigation hooks come from the same build.
+
+The compatibility overlay is drawn above DeepSeek's obfuscated Compose tree and
+never consumes touch events. A high wallpaper opacity can visually cover text
+or controls even though they remain tappable; lower the wallpaper opacity in
+the preview editor. Sidebar close and settings return should both use a
+fast-starting ease-out curve and finish at their configured Chat position; if
+an old process still snaps, force-stop DeepSeek after replacing the module.
+Imported copies and layout configuration live under
+`files/deekseep_appearance`.
+
 ## The Chat Editor Says a Conversation Has No Local Messages
 
 DeepSeek may keep a cloud conversation in memory without creating its dynamic
@@ -198,6 +230,35 @@ The OpenAI and Anthropic formats have different SSE contracts and are intentiona
 mutually exclusive. Select OpenAI for `/v1/chat/completions`, `/v1/responses` and
 Codex; select Anthropic for `/v1/messages` and Claude Code. OpenAI's base URL ends
 in `/v1`; Anthropic's base URL does not.
+
+## The Cloudflare Custom Domain Stays on Connecting
+
+Open **Local API → Advanced settings** and first confirm that the fixed local
+port matches the `localhost` service configured in the Cloudflare published
+application route. The app runs a remotely managed connector; the hostname,
+DNS record, and hostname-to-service route must already exist in the same
+Cloudflare tunnel. Saving a domain in the app is only for display and copying.
+
+Start with **Auto** transport. If the log reports QUIC or UDP 7844 failures, try
+**HTTP/2**. If HTTP/2 also reports TCP 7844, TLS handshake, or `EOF` failures,
+the current carrier, Wi-Fi, VPN, firewall, or router is blocking the connector's
+outbound edge connection. Change networks or permit outbound TCP/UDP 7844; the
+app cannot bypass that network policy.
+
+For token or route errors:
+
+- copy the tunnel's connector token again, not a broad Cloudflare account API
+  token;
+- verify the tunnel and published hostname show as active in Cloudflare;
+- configure the route service as `http://localhost:<the fixed port shown by the
+  app>`;
+- avoid a browser-interactive Cloudflare Access login policy on an API hostname
+  unless the API client can supply the required service credentials.
+
+The advanced page shows a redacted tail of
+`deekseep_cloudflared.log`. A route that works in a browser but fails in a client
+may instead be using the wrong base URL: append `/v1` for OpenAI clients, but not
+for Anthropic clients.
 
 ## Claude Code Stays at Zero Tokens or Prints Tool Tags
 

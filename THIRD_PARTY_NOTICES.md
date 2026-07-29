@@ -32,3 +32,18 @@ an Android/Java adaptation of the same prompt and parsing state machine.
 
 The complete license and snapshot notes are included under
 [third_party/omniroute-tool-bridge](third_party/omniroute-tool-bridge/README.md).
+
+## Cloudflare cloudflared
+
+The APK packages unmodified Android executables from the Termux build of
+Cloudflare's open-source `cloudflared` connector. Android selects one executable
+for the current ABI at installation time.
+
+- Project: Cloudflare cloudflared
+- Version: 2026.6.0
+- Source: https://github.com/cloudflare/cloudflared/tree/2026.6.0
+- Android packaging recipe: https://github.com/termux/termux-packages/tree/master/packages/cloudflared
+- License: Apache License 2.0
+
+The complete license, binary checksums, and reproducible fetch information are
+included under [third_party/cloudflared](third_party/cloudflared/NOTICE.md).

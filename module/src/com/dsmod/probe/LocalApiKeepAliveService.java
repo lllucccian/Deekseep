@@ -83,6 +83,16 @@ public final class LocalApiKeepAliveService extends Service {
                         String state = getResultData();
                         lastAckElapsed = SystemClock.elapsedRealtime();
                         lastGatewayRunning = state != null && state.endsWith("|running");
+                        android.os.Bundle details = getResultExtras(false);
+                        int gatewayPort = details == null
+                                ? 0 : details.getInt("gateway_port", 0);
+                        boolean enabled = state != null && state.startsWith("enabled|");
+                        PublicTunnelManager.onGatewayState(
+                                LocalApiKeepAliveService.this, enabled,
+                                lastGatewayRunning, gatewayPort);
+                        PinggyTunnelManager.onGatewayState(
+                                LocalApiKeepAliveService.this, enabled,
+                                lastGatewayRunning, gatewayPort);
                         if (state != null && state.startsWith("disabled|")) {
                             requestedPrefs(LocalApiKeepAliveService.this).edit()
                                     .putBoolean(KEY_REQUESTED, false).apply();
@@ -193,6 +203,8 @@ public final class LocalApiKeepAliveService extends Service {
         lastGatewayRunning = false;
         startedElapsed = 0L;
         handler.removeCallbacks(heartbeat);
+        PublicTunnelManager.shutdown(this);
+        PinggyTunnelManager.shutdown(this);
         releaseWakeLock();
         try { stopForeground(true); } catch (Throwable ignored) {}
         Log.i(TAG, "local API foreground keepalive stopped");
@@ -233,8 +245,12 @@ public final class LocalApiKeepAliveService extends Service {
                 .setContentTitle(UiLanguage.text(this,
                         "DeepSeek 本地 API 正在运行", "DeepSeek Local API is running"))
                 .setContentText(UiLanguage.text(this,
-                        "正在保持后台监听与流式响应稳定",
-                        "Keeping background listening and streaming responses stable"))
+                        PublicTunnelManager.isConnected() || PinggyTunnelManager.isConnected()
+                                ? "本地、局域网与公网入口均在运行"
+                                : "正在保持后台监听与流式响应稳定",
+                        PublicTunnelManager.isConnected() || PinggyTunnelManager.isConnected()
+                                ? "Local, LAN, and public endpoints are active"
+                                : "Keeping background listening and streaming responses stable"))
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)

@@ -4,19 +4,22 @@ An independent LSPosed/Xposed module that adds account, chat, image, interface, 
 
 English | [简体中文](README_CN.md)
 
-[![Latest Release](https://img.shields.io/github/v/release/haoyangtu09-art/Deekseep?display_name=tag&sort=semver)](https://github.com/haoyangtu09-art/Deekseep/releases/latest)
-[![GitHub Downloads](https://img.shields.io/github/downloads/haoyangtu09-art/Deekseep/total?label=Downloads)](https://github.com/haoyangtu09-art/Deekseep/releases)
+[![Latest Release](https://img.shields.io/github/v/release/lllucccian/Deekseep?display_name=tag&sort=semver)](https://github.com/lllucccian/Deekseep/releases/latest)
+[![GitHub Downloads](https://img.shields.io/github/downloads/lllucccian/Deekseep/total?label=Downloads)](https://github.com/lllucccian/Deekseep/releases)
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3ddc84)](#requirements)
 [![libxposed API 102](https://img.shields.io/badge/libxposed-API%20102-2f6feb)](#requirements)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> [!WARNING]
-> This module modifies the behavior of the official DeepSeek Android app. Back up important data and use it at your own risk.
+> [!NOTE]
+> Deekseep is an independent enhancement module. Check that the APK matches
+> your DeepSeek version, and back up important data before using chat, account,
+> or experimental tools.
 
 ## Compatibility at a glance
 
-> [!IMPORTANT]
-> Deekseep LSPosed 1.7.2 is build-specific. Mainland China and Google Play packages use different obfuscation maps and are not interchangeable.
+> [!TIP]
+> Deekseep LSPosed 1.7.2 is build-specific. Choose the package labelled for
+> your Mainland China or Google Play `versionCode`.
 
 - Mainland China official build: DeepSeek 2.2.2 (`versionCode 233`) — supported by the stable API 102 and Legacy APKs.
 - Google Play build: DeepSeek 2.2.2 (`versionCode 236`) — supported only by the separately labelled Google Play API 102 APK.
@@ -27,9 +30,9 @@ English | [简体中文](README_CN.md)
 
 ## Download
 
-### [Download Deekseep LSPosed 1.7.2 — recommended stable API 102](https://github.com/haoyangtu09-art/Deekseep/releases/download/v1.7.2/deekseep-stable-api102-v1.7.2.apk)
+### [Download Deekseep LSPosed 1.7.2 — recommended stable API 102](https://github.com/lllucccian/Deekseep/releases/download/v1.7.2/deekseep-stable-api102-v1.7.2.apk)
 
-This recommended APK is for the mainland China DeepSeek 2.2.2 build (`233`) on current LSPosed. Google Play users must download `deekseep-google-play-2.2.2-v1.7.2.apk` from the [1.7.2 release](https://github.com/haoyangtu09-art/Deekseep/releases/tag/v1.7.2). Verify the DeepSeek `versionCode` before installing.
+This recommended APK is for the mainland China DeepSeek 2.2.2 build (`233`) on current LSPosed. Google Play users must download `deekseep-google-play-2.2.2-v1.7.2.apk` from the [1.7.2 release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.2). Verify the DeepSeek `versionCode` before installing.
 
 ## Screenshot
 
@@ -42,7 +45,7 @@ The screenshot shows the English in-app settings for prompt injection, response-
 <details>
 <summary>More project screenshots</summary>
 
-| Data tools, language, and module information | Experimental features and risk notice |
+| Data tools, language, and module information | Experimental features and usage note |
 |---|---|
 | <img src="docs/images/data-tools-preview.jpg" alt="Deekseep LSPosed data tools and module information" width="320"> | <img src="docs/images/experimental-features-preview.jpg" alt="Deekseep LSPosed Experimental Features page" width="320"> |
 
@@ -60,6 +63,7 @@ This is an independent third-party project. It is not part of, affiliated with, 
 
 - Import a system prompt and inject it into outgoing requests without changing the visible input box.
 - Edit local conversation titles, user messages, model responses, reasoning text, reasoning duration, and message images. Create local conversations and search across prompts, answers, and reasoning.
+- Current supported source builds can import images as chat wallpaper or stickers. Wallpaper supports crop focus, rotation, opacity, optional depth, and either unified or per-screen offsets. Its motion uses a fast-starting ease-out curve, follows the main screen right with the sidebar, moves left in settings, and smoothly returns in both directions. Advanced binding selects chat/sidebar/settings visibility. Stickers remain on chat and settings screens and can be moved, resized, rotated, layered, or faded.
 - Export conversations as Markdown, view local statistics, create manual and rotating automatic database backups, and optionally batch-select conversations for deletion.
 - Preserve text already delivered to the device when the known client-side `CONTENT_FILTER` replacement event occurs. This cannot recover text the server never sent.
 
@@ -76,7 +80,7 @@ This is an independent third-party project. It is not part of, affiliated with, 
 ### Developer and API tools
 
 - Run an opt-in, Gateway-Key-protected local/trusted-LAN service that exposes OpenAI Chat Completions/Responses or Anthropic Messages-compatible endpoints through DeepSeek's native transport.
-- Use streaming, tool-result continuation, Codex and Claude Code tool loops, deep-thinking parameters, native web search, and live request diagnostics. The gateway is under the gated Experimental Features page and is disabled by default.
+- Use streaming, tool-result continuation, Codex and Claude Code tool loops, deep-thinking parameters, native web search, and live request diagnostics. Advanced settings can pin the listener port and connect an existing custom hostname through a user-owned Cloudflare Tunnel token. The gateway is under the optional Experimental Features page and is disabled by default.
 
 ### Interface and compatibility tools
 
@@ -104,7 +108,7 @@ The repository does not distribute the official DeepSeek APK, a rooting solution
 4. Install the module APK and enable it in the LSPosed/Xposed manager.
 5. Select only `com.deepseek.chat` as the module scope. Do not add the modern module application itself to scope.
 6. Force-stop DeepSeek, then open it again. A full device reboot is normally unnecessary; use one only if your framework does not reload the module after restarting the target app.
-7. Accept the first-run risk disclosure, open DeepSeek Settings, and select the injected Deekseep entry for Deekseep LSPosed.
+7. Read the short first-use note, select **Got it**, then open DeepSeek Settings and choose the injected Deekseep entry.
 
 Modern and Legacy APKs share the package ID `com.dsmod.probe` but use different development signing keys. When switching interfaces, disable and uninstall the old module APK before installing the other one; this does not uninstall DeepSeek. See the full [installation guide](docs/INSTALLATION.md).
 
@@ -124,7 +128,7 @@ The default download above is the stable API 102 build for mainland `233`. Other
 | `deekseep-test-legacy-v1.7.apk` | Historical experiments for traditional Xposed/FPA | Traditional Xposed API 82+ | Discontinued after 1.7.0, not maintained, and not recommended. Exact host compatibility and additional logging need confirmation. |
 | `deekseep-api102-load-probe-v0.1.apk` | Diagnose whether API 102 loads for `com.deepseek.chat` | libxposed API 102 | Historical diagnostic-only probe. It reports load activity and may write a marker; it contains none of the normal module features. |
 
-The historical APKs remain on the [1.7.0 release](https://github.com/haoyangtu09-art/Deekseep/releases/tag/v1.7.0) for reference. Starting with 1.7.1, test and diagnostic APKs are excluded from stable releases. Never enable multiple Deekseep LSPosed variants for the same DeepSeek process.
+The historical APKs remain on the [1.7.0 release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.0) for reference. Starting with 1.7.1, test and diagnostic APKs are excluded from stable releases. Never enable multiple Deekseep LSPosed variants for the same DeepSeek process.
 
 </details>
 
@@ -147,26 +151,25 @@ The historical APKs remain on the [1.7.0 release](https://github.com/haoyangtu09
 - Multi-account tools fail: back up current account data, test one add/import operation at a time, and retain the original active account until validation succeeds. Never post exported account JSON publicly.
 - Image tools fail: verify the system photo picker can read the file and test one image first. Expert image relay is experimental and can fail because of server permissions, model routing, proof-of-work, or changed host internals.
 - Collecting logs: reproduce once, then copy only a short excerpt around the first error from the module's diagnostics. Remove tokens, cookies, authorization data, account information, email addresses, phone numbers, device identifiers, private server addresses, prompts, responses, file URLs, and any other private data.
-- Opening an issue: search existing reports, then use the [Bug report](https://github.com/haoyangtu09-art/Deekseep/issues/new?template=bug_report.yml) or [Compatibility report](https://github.com/haoyangtu09-art/Deekseep/issues/new?template=compatibility_report.yml) form with exact versions and a minimal redacted log.
+- Opening an issue: search existing reports, then use the [Bug report](https://github.com/lllucccian/Deekseep/issues/new?template=bug_report.yml) or [Compatibility report](https://github.com/lllucccian/Deekseep/issues/new?template=compatibility_report.yml) form with exact versions and a minimal redacted log.
 
 More cases are covered in [Troubleshooting](docs/TROUBLESHOOTING.md).
 
-## Risk notice
+## Before using optional tools
 
-- DeepSeek updates can rename obfuscated classes and break hooks without notice.
-- A mismatched package can crash the app or leave module functions inactive.
-- Account tools, chat editing, deletion, image workflows, and experimental APIs can affect local data or account behavior.
-- Third-party runtime modification can carry account, service-policy, privacy, and data-loss risks.
-- Back up important data, test on nonessential conversations, and do not assume support for future DeepSeek versions.
+- Match the APK to the listed DeepSeek channel and `versionCode`.
+- Back up important chats before editing, deleting, or switching accounts.
+- Keep account exports, API keys, and diagnostic logs private.
 
-Read the complete [Disclaimer](DISCLAIMER.md) before installing. Experimental functions have an additional [five-second first-entry disclosure](docs/EXPERIMENTAL_FEATURES.md).
+The concise [project notice](DISCLAIMER.md) has more detail. Experimental
+features show a one-time usage note and remain off until you enable them.
 
 ## Roadmap
 
 The public API implementation plan currently records these statuses:
 
 - Completed: OpenAI and Anthropic formats, stable mainland interfaces, the exact Google Play 2.2.2 mapping, and the gated Experimental Features page.
-- Planned: explicit socket-to-host cancellation confirmation, API image input, persistent Responses state with idempotency keys, a redacted diagnostic bundle, configurable safe ports, and broader Anthropic/Claude Code regression coverage.
+- Planned: explicit socket-to-host cancellation confirmation, API image input, persistent Responses state with idempotency keys, a redacted diagnostic bundle, and broader Anthropic/Claude Code regression coverage.
 - Not scheduled: support for additional DeepSeek versions. Each host update requires compatibility confirmation and may require a new mapping.
 
 See the [local API implementation plan](docs/LOCAL_DEEPSEEK_API_GATEWAY_PLAN.md). Planned work is not part of the current feature set until it is implemented and released.
@@ -175,11 +178,14 @@ See the [local API implementation plan](docs/LOCAL_DEEPSEEK_API_GATEWAY_PLAN.md)
 
 Contributions are welcome for new-version compatibility testing, Google Play mapping updates, focused hook repairs, documentation, bug reports, translations, interface screenshots, and installation testing.
 
-Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md), search the [Issues](https://github.com/haoyangtu09-art/Deekseep/issues), and describe the exact DeepSeek channel, app version, version code, Android version, and LSPosed/Xposed environment. Focused changes can be proposed through [Pull Requests](https://github.com/haoyangtu09-art/Deekseep/pulls).
+Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md), search the [Issues](https://github.com/lllucccian/Deekseep/issues), and describe the exact DeepSeek channel, app version, version code, Android version, and LSPosed/Xposed environment. Focused changes can be proposed through [Pull Requests](https://github.com/lllucccian/Deekseep/pulls).
 
-## Disclaimer
+## Project notice
 
-Deekseep LSPosed is an independent third-party project and is not part of DeepSeek. The DeepSeek name and related trademarks belong to their respective rights holders. Users are responsible for deciding whether to install the module and accept the resulting account, compatibility, privacy, and data risks. See [DISCLAIMER.md](DISCLAIMER.md) for the full notice.
+Deekseep LSPosed is an independent third-party project and is not part of
+DeepSeek. Product names and trademarks belong to their respective owners. See
+the concise [project notice](DISCLAIMER.md) for compatibility, data, and
+privacy notes.
 
 ## License
 

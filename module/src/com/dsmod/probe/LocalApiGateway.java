@@ -64,6 +64,7 @@ final class LocalApiGateway {
     static final String PROTOCOL_OPENAI = "openai";
     static final String PROTOCOL_ANTHROPIC = "anthropic";
     private static final String PROTOCOL_FILE_NAME = "deekseep_local_api_protocol";
+    private static final String PORT_FILE_NAME = "deekseep_local_api_port";
     private static final long SSE_HEARTBEAT_MS = 5_000L;
     /**
      * Native Flow patches are normally token-sized, but a resumed/cumulative patch can contain
@@ -111,6 +112,13 @@ final class LocalApiGateway {
         final boolean responsesApi;
         /** Opaque, hashed client conversation identity (for example Claude Code's session UUID). */
         final String clientSessionScope;
+        /**
+         * Internal-only native conversation target. Ordinary local-API requests leave these null
+         * and continue to use an isolated reusable session. Proactive heartbeat requests set both
+         * values so DeepSeek stores the generated turn in the chat that scheduled it.
+         */
+        final String nativeConversationId;
+        final Integer nativeParentMessageId;
         /** Canonical OpenAI Responses text.format requested by the caller, or null for text. */
         final JSONObject outputTextFormat;
         /** Shared by an initial generation and its optional tool-format repair generation. */
@@ -130,7 +138,7 @@ final class LocalApiGateway {
                     System.currentTimeMillis() + COMPLETION_REQUEST_BUDGET_MS,
                     Collections.<String, String>emptyMap(),
                     Collections.<String>emptySet(),
-                    Collections.<String>emptySet(), null, null);
+                    Collections.<String>emptySet(), null, null, null, null);
         }
 
         private CompletionRequest(String requestId, String requestedModel, String nativeModel,
@@ -140,7 +148,8 @@ final class LocalApiGateway {
                           Map<String, String> knownToolCalls,
                           Set<String> completedToolCalls,
                           Set<String> repeatableCompletedToolCalls,
-                          String clientSessionScope, JSONObject outputTextFormat) {
+                          String clientSessionScope, JSONObject outputTextFormat,
+                          String nativeConversationId, Integer nativeParentMessageId) {
             this.requestId = requestId;
             this.requestedModel = requestedModel;
             this.nativeModel = nativeModel;
@@ -154,6 +163,8 @@ final class LocalApiGateway {
             this.responsesApi = responsesApi;
             this.clientSessionScope = clientSessionScope;
             this.outputTextFormat = outputTextFormat;
+            this.nativeConversationId = nativeConversationId;
+            this.nativeParentMessageId = nativeParentMessageId;
             this.deadlineAtMs = deadlineAtMs;
             this.knownToolCalls = knownToolCalls == null || knownToolCalls.isEmpty()
                     ? Collections.<String, String>emptyMap()
@@ -173,7 +184,8 @@ final class LocalApiGateway {
                     replacement, reasoning, search, maxOutputTokens, toolPlan,
                     previousResponseId, responsesApi, deadlineAtMs,
                     knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
-                    clientSessionScope, outputTextFormat);
+                    clientSessionScope, outputTextFormat,
+                    nativeConversationId, nativeParentMessageId);
         }
 
         CompletionRequest withToolHistory(ToolHistory history) {
@@ -182,7 +194,8 @@ final class LocalApiGateway {
                     prompt, reasoning, search, maxOutputTokens, toolPlan,
                     previousResponseId, responsesApi, deadlineAtMs,
                     history.knownCalls, history.completedCalls, history.repeatableCalls,
-                    clientSessionScope, outputTextFormat);
+                    clientSessionScope, outputTextFormat,
+                    nativeConversationId, nativeParentMessageId);
         }
 
         CompletionRequest withClientSessionScope(String scope) {
@@ -193,7 +206,8 @@ final class LocalApiGateway {
                     prompt, reasoning, search, maxOutputTokens, toolPlan,
                     previousResponseId, responsesApi, deadlineAtMs,
                     knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
-                    normalized, outputTextFormat);
+                    normalized, outputTextFormat,
+                    nativeConversationId, nativeParentMessageId);
         }
 
         CompletionRequest withOutputTextFormat(JSONObject format) {
@@ -201,7 +215,19 @@ final class LocalApiGateway {
                     prompt, reasoning, search, maxOutputTokens, toolPlan,
                     previousResponseId, responsesApi, deadlineAtMs,
                     knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
-                    clientSessionScope, format);
+                    clientSessionScope, format,
+                    nativeConversationId, nativeParentMessageId);
+        }
+
+        CompletionRequest withNativeConversation(String sid, Integer parentMessageId) {
+            String normalized = sid == null || sid.length() == 0 ? null : sid;
+            Integer parent = parentMessageId != null && parentMessageId.intValue() > 0
+                    ? parentMessageId : null;
+            return new CompletionRequest(requestId, requestedModel, nativeModel, basePrompt,
+                    prompt, reasoning, search, maxOutputTokens, toolPlan,
+                    previousResponseId, responsesApi, deadlineAtMs,
+                    knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
+                    clientSessionScope, outputTextFormat, normalized, parent);
         }
 
         boolean toolsActive() {
@@ -306,6 +332,8 @@ final class LocalApiGateway {
     private static volatile ThreadPoolExecutor workers;
     private static volatile boolean running;
     private static volatile int port;
+    private static volatile int preferredPort = DEFAULT_PORT;
+    private static volatile boolean strictPreferredPort;
     private static volatile String apiKey;
     private static volatile String protocolMode = PROTOCOL_OPENAI;
     private static volatile Context appContext;
@@ -334,6 +362,7 @@ final class LocalApiGateway {
             if (running && serverSocket != null && !serverSocket.isClosed()) return;
             apiKey = loadOrCreateKey(appContext);
             protocolMode = loadProtocolMode(appContext);
+            loadPreferredPort(appContext);
             try {
                 ServerSocket server = bindServer();
                 serverSocket = server;
@@ -359,6 +388,7 @@ final class LocalApiGateway {
                 writeRuntimeState();
             } catch (Throwable t) {
                 running = false;
+                port = 0;
                 closeQuietly(serverSocket);
                 serverSocket = null;
                 writeConnectionInfo(false, String.valueOf(t));
@@ -371,6 +401,7 @@ final class LocalApiGateway {
     static void stop() {
         synchronized (LOCK) {
             running = false;
+            port = 0;
             closeQuietly(serverSocket);
             serverSocket = null;
             ThreadPoolExecutor pool = workers;
@@ -393,14 +424,44 @@ final class LocalApiGateway {
     }
 
     static String rootEndpoint() {
-        int p = port > 0 ? port : DEFAULT_PORT;
-        return "http://127.0.0.1:" + p;
+        return "http://127.0.0.1:" + port();
+    }
+
+    static int port() {
+        return port > 0 ? port : preferredPort;
+    }
+
+    static int preferredPort() {
+        return preferredPort;
+    }
+
+    static int preferredPort(Context context) {
+        if (context != null) loadPreferredPort(context.getApplicationContext());
+        return preferredPort;
+    }
+
+    /** @return null on success, otherwise a user-facing validation error. */
+    static String setPreferredPort(Context context, int requestedPort) {
+        if (requestedPort < 1024 || requestedPort > 65535) {
+            return UiLanguage.text(context, "监听端口必须在 1024 到 65535 之间",
+                    "Listener port must be between 1024 and 65535");
+        }
+        Context c = context == null ? appContext : context.getApplicationContext();
+        if (c == null) {
+            return UiLanguage.text("DeepSeek 上下文尚未就绪",
+                    "DeepSeek context is not ready");
+        }
+        preferredPort = requestedPort;
+        strictPreferredPort = true;
+        writePrivateText(new File(c.getFilesDir(), PORT_FILE_NAME),
+                String.valueOf(requestedPort));
+        return null;
     }
 
     static String lanRootEndpoint() {
         String address = firstLanAddress();
         return address == null ? null : "http://" + address + ":"
-                + (port > 0 ? port : DEFAULT_PORT);
+                + port();
     }
 
     static String lanEndpoint() {
@@ -549,8 +610,11 @@ final class LocalApiGateway {
 
     private static ServerSocket bindServer() throws IOException {
         IOException last = null;
-        for (int i = 0; i < MAX_PORT_TRIES; i++) {
-            int candidate = DEFAULT_PORT + i;
+        int tries = strictPreferredPort ? 1 : MAX_PORT_TRIES;
+        int base = preferredPort >= 1024 && preferredPort <= 65535
+                ? preferredPort : DEFAULT_PORT;
+        for (int i = 0; i < tries && base + i <= 65535; i++) {
+            int candidate = base + i;
             ServerSocket server = new ServerSocket();
             try {
                 server.setReuseAddress(true);
@@ -4507,6 +4571,20 @@ final class LocalApiGateway {
         String stored = readPrivateText(new File(context.getFilesDir(), PROTOCOL_FILE_NAME));
         return PROTOCOL_ANTHROPIC.equalsIgnoreCase(stored)
                 ? PROTOCOL_ANTHROPIC : PROTOCOL_OPENAI;
+    }
+
+    private static void loadPreferredPort(Context context) {
+        String stored = readPrivateText(new File(context.getFilesDir(), PORT_FILE_NAME));
+        strictPreferredPort = false;
+        preferredPort = DEFAULT_PORT;
+        if (stored == null || stored.length() == 0) return;
+        try {
+            int value = Integer.parseInt(stored);
+            if (value >= 1024 && value <= 65535) {
+                preferredPort = value;
+                strictPreferredPort = true;
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static boolean isValidStoredKey(String value) {

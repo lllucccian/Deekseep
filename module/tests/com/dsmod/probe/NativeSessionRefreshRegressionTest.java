@@ -6,6 +6,10 @@ import java.util.List;
 
 /** Verifies that a delayed server directory refresh cannot evict an editor-created session. */
 public final class NativeSessionRefreshRegressionTest {
+    private static final class SnapshotList<E> extends ArrayList<E> {
+        SnapshotList() {}
+    }
+
     private static void require(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);
     }
@@ -45,6 +49,14 @@ public final class NativeSessionRefreshRegressionTest {
         require(canonicalState.get(0) == newlySyncedCloud
                         && canonicalState.get(1) == local,
                 "native pinned/time ordering was not retained");
+
+        SnapshotList<Object> snapshot = new SnapshotList<>();
+        snapshot.add(local);
+        List copied = Main.copyListForHook(snapshot, SnapshotList.class);
+        require(copied instanceof SnapshotList,
+                "hook list copying erased the host's concrete SnapshotStateList type");
+        require(copied != snapshot && copied.size() == 1 && copied.get(0) == local,
+                "concrete hook list copy did not preserve its contents");
 
         System.out.println("PASS: delayed native refresh preserves editor-local sessions");
     }

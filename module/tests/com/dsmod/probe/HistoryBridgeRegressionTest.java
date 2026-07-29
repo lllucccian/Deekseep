@@ -110,11 +110,28 @@ public final class HistoryBridgeRegressionTest {
     }
 
     private static void testJsonSanitizerPreservesOtherFragments() throws Exception {
-        String json = "[{\"id\":1,\"type\":\"FILE\",\"content\":\"metadata\"},"
-                + "{\"id\":2,\"type\":\"REQUEST\",\"content\":\"<system>\\np\\n</system>\\n\\nhello\"}]";
+        String control = HeartbeatToolProtocol.CONTROL_START
+                + "\n{\"calls\":[{\"id\":\"once_001\",\"tool\":\"schedule_once\","
+                + "\"scope\":\"conversation-1234\","
+                + "\"at\":\"2026-08-02T18:37:00+08:00\","
+                + "\"instruction\":\"来找用户\"}]}\n"
+                + HeartbeatToolProtocol.CONTROL_END;
+        String json = new JSONArray()
+                .put(new JSONObject().put("id", 1).put("type", "FILE")
+                        .put("content", "metadata"))
+                .put(new JSONObject().put("id", 2).put("type", "REQUEST")
+                        .put("content", "<system>\np\n</system>\n\nhello"))
+                .put(new JSONObject().put("id", 3).put("type", "RESPONSE")
+                        .put("content", "安排好了\n" + control))
+                .toString();
         JSONArray safe = new JSONArray(HistoryBridge.sanitizeFragmentsJson(json));
         check("metadata".equals(safe.getJSONObject(0).getString("content")), "FILE fragment changed");
         check("hello".equals(safe.getJSONObject(1).getString("content")), "REQUEST was not cleaned");
+        String response = safe.getJSONObject(2).getString("content");
+        check(response.contains("安排好了") && !response.contains("schedule_once")
+                        && !response.contains("DEEKSEEP_LOCAL_TOOLS")
+                        && response.contains(HeartbeatToolProtocol.TOOL_STATUS_ICON),
+                "hidden heartbeat tool call reached persisted response JSON");
     }
 
     private static void testPw0SnapshotAndParentChain() throws Exception {
