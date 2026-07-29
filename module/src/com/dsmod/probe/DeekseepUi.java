@@ -1068,6 +1068,14 @@ public final class DeekseepUi {
         card.addView(heartbeatRow);
 
         card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "Agent",
+                "问答、当前时间、截图与基础界面操作；可逐项关闭工具，并选择应用内、Root 或 Shizuku 后端。",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        AgentSettingsUi.show(act);
+                    }
+                }));
+        card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "本地 API 服务",
                 "配置 OpenAI / Anthropic 格式、后台保活、API Key、监听地址与请求统计。",
                 textColor, subColor, new View.OnClickListener() {

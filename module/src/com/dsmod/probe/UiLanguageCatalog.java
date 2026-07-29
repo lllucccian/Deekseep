@@ -444,6 +444,8 @@ final class UiLanguageCatalog {
         add("点亮专家模式的思考、搜索和文件能力；图片会先由视觉模型识别，再把描述中继给专家模型。切换后需重进应用或重选模型。",
                 "Enable expert reasoning, search, and file capabilities. Images are recognized by the vision model first, then their descriptions are relayed to the expert model. Reopen the app or reselect the model after changing this.");
         add("AI 主动消息", "AI proactive messages");
+        add("问答、当前时间、截图与基础界面操作；可逐项关闭工具，并选择应用内、Root 或 Shizuku 后端。",
+                "Questions, local time, screenshots, and basic UI actions. Each tool can be disabled, with in-app, Root, or Shizuku execution.");
         add("陀螺仪背景", "Gyroscope wallpaper");
         add("晃动手机时背景轻微漂移并回弹；需先设置背景图",
                 "The wallpaper drifts slightly and springs back as the phone moves; set a wallpaper first");

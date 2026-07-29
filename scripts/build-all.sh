@@ -53,25 +53,25 @@ if [ -z "$CERT_API102" ] || [ "$CERT_API102" != "$CERT_UNIVERSAL" ]; then
 fi
 
 cp "$ROOT/module/ds-probe-api102.apk" \
-    "$DIST/deekseep-api102-only-v1.7.3.apk"
+    "$DIST/deekseep-api102-only-v1.7.4.apk"
 cp "$ROOT/module-universal/ds-probe-universal.apk" \
-    "$DIST/deekseep-universal-api82-100-101-102-v1.7.3.apk"
+    "$DIST/deekseep-universal-api82-100-101-102-v1.7.4.apk"
 
 if find "$DIST" -maxdepth 1 -type f \( -name '*test*' -o -name '*probe*' \) | grep -q .; then
-    echo "Refusing to publish retired test/diagnostic APKs in the 1.7.3 release" >&2
+    echo "Refusing to publish retired test/diagnostic APKs in the 1.7.4 release" >&2
     exit 1
 fi
 
 for manifest in "$ROOT/module/AndroidManifest.xml" \
         "$ROOT/module-universal/AndroidManifest.xml"; do
-    if ! grep -q 'android:versionName="1.7.3"' "$manifest"; then
-        echo "Release manifest is not version 1.7.3: $manifest" >&2
+    if ! grep -q 'android:versionName="1.7.4"' "$manifest"; then
+        echo "Release manifest is not version 1.7.4: $manifest" >&2
         exit 1
     fi
 done
 
-API102_APK="$DIST/deekseep-api102-only-v1.7.3.apk"
-UNIVERSAL_APK="$DIST/deekseep-universal-api82-100-101-102-v1.7.3.apk"
+API102_APK="$DIST/deekseep-api102-only-v1.7.4.apk"
+UNIVERSAL_APK="$DIST/deekseep-universal-api82-100-101-102-v1.7.4.apk"
 unzip -l "$API102_APK" | grep -q 'META-INF/xposed/java_init.list'
 unzip -l "$API102_APK" | grep -q 'META-INF/xposed/module.prop'
 if unzip -l "$API102_APK" | grep -q 'assets/xposed_init'; then

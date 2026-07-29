@@ -37,6 +37,7 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -246,6 +247,13 @@ public class Main extends XposedModule {
     private static final Object AGENT_UI_ACTION_LOCK = new Object();
     private static final String AGENT_SCREENSHOT_DIR =
             "/data/data/com.deepseek.chat/files/deekseep_agent";
+    private static final String ACTION_AGENT_COMMAND =
+            "com.dsmod.probe.action.AGENT_COMMAND";
+    private static final String EXTRA_AGENT_COMMAND = "agent_command_json";
+    private static final String EXTRA_AGENT_COMMAND_BASE64 =
+            "agent_command_base64";
+    private static final ConcurrentHashMap<String, Object>
+            AGENT_SCREENSHOT_UPLOAD_TOKENS = new ConcurrentHashMap<>();
     private static volatile long agentUiActionNotBefore;
     private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_HIT_LOGGED =
             new AtomicBoolean();
@@ -4308,8 +4316,37 @@ public class Main extends XposedModule {
                             .equals(action);
                     boolean proactiveAction = ProactiveHeartbeatReceiver.ACTION_REQUEST
                             .equals(action);
-                    if (!heartbeatAction && !controlAction && !proactiveAction) {
+                    boolean agentCommandAction = ACTION_AGENT_COMMAND.equals(action);
+                    if (!heartbeatAction && !controlAction && !proactiveAction
+                            && !agentCommandAction) {
                         return chain.proceed();
+                    }
+                    if (agentCommandAction) {
+                        if (!LocalApiKeepAliveService.CONTROL_TOKEN.equals(
+                                intent.getStringExtra(
+                                        LocalApiKeepAliveService.EXTRA_CONTROL_TOKEN))) {
+                            log("rejected unauthenticated Agent command");
+                            return null;
+                        }
+                        Context context = chain.getArg(0) instanceof Context
+                                ? (Context) chain.getArg(0) : null;
+                        String command = intent.getStringExtra(
+                                EXTRA_AGENT_COMMAND);
+                        if (command == null || command.length() == 0) {
+                            String encoded = intent.getStringExtra(
+                                    EXTRA_AGENT_COMMAND_BASE64);
+                            if (encoded != null && encoded.length() <= 32 * 1024) {
+                                try {
+                                    command = new String(
+                                            android.util.Base64.decode(
+                                                    encoded,
+                                                    android.util.Base64.DEFAULT),
+                                            java.nio.charset.StandardCharsets.UTF_8);
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                        handleAgentCommand(context, command);
+                        return null;
                     }
                     if (proactiveAction) {
                         if (!ProactiveHeartbeatReceiver.TOKEN.equals(
@@ -4519,7 +4556,9 @@ public class Main extends XposedModule {
                     String prompt = HistoryBridge.wrapSystemPrompt(
                             HeartbeatToolProtocol.systemPrompt(
                                     now, heartbeatPlanForConversation(conversationId),
-                                    proactiveHeartbeatIntervalMinutes(), conversationId),
+                                    proactiveHeartbeatIntervalMinutes(), conversationId,
+                                    AgentToolConfig.effectiveTools(
+                                            isProactiveHeartbeatEnabled())),
                             event);
                     if (conversationId.length() > 0
                             && module.dispatchProactiveThroughNativeUi(
@@ -4714,58 +4753,7 @@ public class Main extends XposedModule {
                     Object state = invokeNoArg(readHostField(current, "i"), "getValue");
                     if (!isIdleGenerationState(state)) return;
 
-                    ClassLoader cl = viewModel.getClass().getClassLoader();
-                    Field emptyField = HostCompat.load(cl, "jm7").getDeclaredField("b");
-                    emptyField.setAccessible(true);
-                    Object emptyAttachments = emptyField.get(null);
-                    if (emptyAttachments == null) return;
-                    Method sendMethod = null;
-                    if (HostCompat.isV230()) {
-                        Class<?> persistentList = HostCompat.load(cl, "h1");
-                        for (Method method : viewModel.getClass().getDeclaredMethods()) {
-                            Class<?>[] types = method.getParameterTypes();
-                            if ("R".equals(method.getName())
-                                    && java.lang.reflect.Modifier.isStatic(
-                                    method.getModifiers())
-                                    && types.length == 5
-                                    && types[0] == viewModel.getClass()
-                                    && types[1] == String.class
-                                    && types[2] == persistentList
-                                    && types[3] == String.class
-                                    && types[4] == int.class) {
-                                sendMethod = method;
-                                break;
-                            }
-                        }
-                    } else {
-                        for (Method method : viewModel.getClass().getDeclaredMethods()) {
-                            Class<?>[] types = method.getParameterTypes();
-                            if ("Q".equals(method.getName()) && types.length == 4
-                                    && types[0] == String.class
-                                    && types[2] == String.class) {
-                                sendMethod = method;
-                                break;
-                            }
-                        }
-                    }
-                    if (sendMethod == null) return;
-                    sendMethod.setAccessible(true);
-                    // za1.Q(String, h1, String, yq7): the first String is the
-                    // actual user prompt; the third is an optional audio id.
-                    // Passing these in the opposite order makes DeepSeek send
-                    // "proactive_heartbeat" as the prompt and treat the event
-                    // payload as an audio id, which the server rejects with 422.
-                    if (HostCompat.isV230()) {
-                        // cc1.R is the Kotlin default bridge for the 2.3.0 send pipeline.
-                        // Bit 8 supplies the absent audio id while preserving the prompt and
-                        // immutable attachment list.
-                        sendMethod.invoke(null, viewModel, prompt,
-                                emptyAttachments, null, 8);
-                    } else {
-                        sendMethod.invoke(viewModel, prompt,
-                                emptyAttachments, null, null);
-                    }
-                    invoked.set(true);
+                    invoked.set(invokeNativeUiTextSend(viewModel, prompt));
                 } catch (Throwable error) {
                     log("native proactive stream start failed sid=" + pending.sid
                             + ": " + safeThrowableMessage(error));
@@ -4790,6 +4778,68 @@ public class Main extends XposedModule {
             return false;
         }
         log("native proactive stream started id=" + requestId + " sid=" + sid);
+        return true;
+    }
+
+    /**
+     * Sends a normal, visible user text through the host's own composer pipeline. The mappings are
+     * shared by proactive heartbeats and Agent question answers so 2.2.x and 2.3.0 cannot silently
+     * diverge.
+     */
+    private static boolean invokeNativeUiTextSend(
+            Object viewModel, String prompt) throws Exception {
+        if (viewModel == null || prompt == null || prompt.trim().length() == 0) return false;
+        ClassLoader cl = viewModel.getClass().getClassLoader();
+        Field emptyField = HostCompat.load(cl, "jm7").getDeclaredField("b");
+        emptyField.setAccessible(true);
+        Object emptyAttachments = emptyField.get(null);
+        if (emptyAttachments == null) return false;
+        return invokeNativeUiTextSend(viewModel, prompt, emptyAttachments);
+    }
+
+    private static boolean invokeNativeUiTextSend(
+            Object viewModel, String prompt, Object attachments) throws Exception {
+        if (viewModel == null || prompt == null || prompt.trim().length() == 0
+                || attachments == null) return false;
+        ClassLoader cl = viewModel.getClass().getClassLoader();
+        Method sendMethod = null;
+        if (HostCompat.isV230()) {
+            Class<?> persistentList = HostCompat.load(cl, "h1");
+            for (Method method : viewModel.getClass().getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if ("R".equals(method.getName())
+                        && java.lang.reflect.Modifier.isStatic(method.getModifiers())
+                        && types.length == 5
+                        && types[0] == viewModel.getClass()
+                        && types[1] == String.class
+                        && types[2] == persistentList
+                        && types[3] == String.class
+                        && types[4] == int.class) {
+                    sendMethod = method;
+                    break;
+                }
+            }
+        } else {
+            for (Method method : viewModel.getClass().getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if ("Q".equals(method.getName()) && types.length == 4
+                        && types[0] == String.class
+                        && types[2] == String.class) {
+                    sendMethod = method;
+                    break;
+                }
+            }
+        }
+        if (sendMethod == null) return false;
+        sendMethod.setAccessible(true);
+        // za1.Q(String, h1, String, yq7): the first String is the actual user prompt and the
+        // third is an optional audio id. 2.3.0 cc1.R is the Kotlin default bridge; bit 8 supplies
+        // the absent audio id while retaining the prompt and immutable attachment list.
+        if (HostCompat.isV230()) {
+            sendMethod.invoke(null, viewModel, prompt, attachments, null, 8);
+        } else {
+            sendMethod.invoke(viewModel, prompt, attachments, null, null);
+        }
         return true;
     }
 
@@ -5154,10 +5204,82 @@ public class Main extends XposedModule {
         return HeartbeatToolProtocol.cleanInstruction(value);
     }
 
+    /**
+     * Local command seam for repeatable device tests. It is consumed by the already hooked
+     * DeepSeek receiver and accepts the same narrow, validated call schema as model output.
+     */
+    private static void handleAgentCommand(Context context, String json) {
+        if (json == null || json.trim().length() == 0 || json.length() > 16 * 1024) {
+            log("ignored empty/oversized Agent command");
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(json);
+            String visibleText = root.optString("visible_text", "").trim();
+            String scope = HeartbeatToolProtocol.cleanScope(
+                    root.optString("scope", ""));
+            if (scope.length() == 0) {
+                scope = currentAgentConversationScope();
+            }
+            if (visibleText.length() > 0) {
+                if (visibleText.length() > 4000) {
+                    visibleText = visibleText.substring(0, 4000);
+                }
+                queueVisibleAgentAnswer(context, scope, visibleText);
+                log("Agent command queued visible text sid=" + scope);
+                return;
+            }
+            JSONObject call = root.optJSONObject("call");
+            if (call == null) call = root;
+            if (scope.length() == 0
+                    && HeartbeatToolProtocol.TOOL_ASK_USER.equals(
+                    call.optString("tool", ""))) {
+                // Preview-only scope lets the shell command verify the bottom sheet on a blank
+                // new-chat screen. A real model call always carries the server conversation id.
+                scope = "agent-command-preview";
+            }
+            if (!call.has("scope")) call.put("scope", scope);
+            if (!call.has("id")) {
+                call.put("id", "cmd_" + Long.toHexString(
+                        System.currentTimeMillis()));
+            }
+            String framed = HeartbeatToolProtocol.CONTROL_START
+                    + "\n{\"call\":" + call.toString() + "}\n"
+                    + HeartbeatToolProtocol.CONTROL_END;
+            HeartbeatToolProtocol.Result parsed =
+                    HeartbeatToolProtocol.parse(framed);
+            int completed = executeHeartbeatToolCalls(
+                    context, parsed.calls, true);
+            log("Agent command executed calls=" + parsed.calls.size()
+                    + " completed=" + completed + " sid=" + scope);
+        } catch (Throwable error) {
+            log("Agent command failed: " + safeThrowableMessage(error));
+        }
+    }
+
+    private static String currentAgentConversationScope() {
+        String latest = HeartbeatToolProtocol.cleanScope(
+                lastInteractiveConversationId);
+        if (latest.length() > 0) return latest;
+        String sidebar = HeartbeatToolProtocol.cleanScope(sidebarCurrentSid);
+        if (sidebar.length() > 0) return sidebar;
+        for (Map.Entry<String, WeakReference<Object>> entry
+                : ACTIVE_CHAT_VIEW_MODELS.entrySet()) {
+            WeakReference<Object> reference = entry.getValue();
+            Object viewModel = reference == null ? null : reference.get();
+            if (viewModel == null) continue;
+            Object session = invokeNoArg(viewModel, "G");
+            String scope = HeartbeatToolProtocol.cleanScope(
+                    String.valueOf(readHostField(session, "a")));
+            if (scope.length() > 0 && scope.equals(entry.getKey())) return scope;
+        }
+        return "";
+    }
+
     private static int executeHeartbeatToolCalls(
             Context context, List<HeartbeatToolProtocol.ToolCall> calls,
             boolean announce) {
-        if (!isProactiveHeartbeatEnabled() || calls == null || calls.isEmpty()) return 0;
+        if (!AgentToolConfig.load().enabled || calls == null || calls.isEmpty()) return 0;
         Context effective = context != null ? context : currentHostContext();
         if (effective == null) return 0;
         int completed = 0;
@@ -5167,6 +5289,16 @@ public class Main extends XposedModule {
                 boolean success = false;
                 String scope = HeartbeatToolProtocol.cleanScope(call.scope);
                 if (scope.length() == 0) continue;
+                if (!AgentToolConfig.allows(call.tool)) {
+                    log("local tool blocked by Agent settings tool=" + call.tool);
+                    continue;
+                }
+                if (AgentToolConfig.isHeartbeatTool(call.tool)
+                        && !isProactiveHeartbeatEnabled()) {
+                    log("heartbeat tool blocked because proactive messages are disabled tool="
+                            + call.tool);
+                    continue;
+                }
                 if (HeartbeatToolProtocol.TOOL_SCHEDULE_ONCE.equals(call.tool)) {
                     long triggerAt = parseHeartbeatToolTime(
                             call.at, System.currentTimeMillis());
@@ -5254,6 +5386,8 @@ public class Main extends XposedModule {
                 } else if (HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME.equals(call.tool)) {
                     // The exact device time is already rendered into this call's activity row.
                     success = true;
+                } else if (HeartbeatToolProtocol.TOOL_ASK_USER.equals(call.tool)) {
+                    success = queueAgentQuestion(effective, call, announce);
                 } else if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)
                         || HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(call.tool)
                         || HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(call.tool)
@@ -5272,9 +5406,147 @@ public class Main extends XposedModule {
         return completed;
     }
 
+    private static boolean queueAgentQuestion(
+            final Context context, final HeartbeatToolProtocol.ToolCall call,
+            final boolean announce) {
+        final Activity activity = currentHostActivity();
+        if (activity == null || activity.isFinishing()
+                || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed())) {
+            if (announce) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "当前没有可显示问题的 DeepSeek 界面",
+                            "There is no active DeepSeek screen for the question"));
+            return false;
+        }
+        return AgentQuestionUi.enqueue(
+                activity, call, new AgentQuestionUi.AnswerListener() {
+                    @Override public void onAnswer(
+                            String scope, String visibleAnswer) {
+                        queueVisibleAgentAnswer(context, scope, visibleAnswer);
+                    }
+                });
+    }
+
+    /**
+     * The tool block can finish slightly before DeepSeek marks the assistant stream idle. Retry
+     * the native composer for a short bounded window instead of dropping a fast user selection.
+     */
+    private static void queueVisibleAgentAnswer(
+            Context context, String scope, String visibleAnswer) {
+        String safeScope = HeartbeatToolProtocol.cleanScope(scope);
+        String safeAnswer = visibleAnswer == null ? "" : visibleAnswer.trim();
+        if (safeScope.length() == 0 || safeAnswer.length() == 0) return;
+        Context source = context == null ? currentHostContext() : context;
+        Context application = source == null ? null : source.getApplicationContext();
+        Context safeContext = application == null ? source : application;
+        Handler handler = currentMainHandler();
+        if (handler == null) {
+            if (safeContext != null) showHeartbeatToolToast(safeContext,
+                    UiLanguage.text(safeContext,
+                            "答案发送失败：主界面尚未就绪",
+                            "Could not send the answer: the UI is not ready"));
+            return;
+        }
+        handler.post(new VisibleAgentAnswerAttempt(
+                safeContext, safeScope, safeAnswer, 0));
+    }
+
+    private static final class VisibleAgentAnswerAttempt implements Runnable {
+        private static final int MAX_ATTEMPTS = 150;
+        private static final long RETRY_MS = 300L;
+
+        final Context context;
+        final String scope;
+        final String answer;
+        final int attempt;
+
+        VisibleAgentAnswerAttempt(
+                Context context, String scope, String answer, int attempt) {
+            this.context = context;
+            this.scope = scope;
+            this.answer = answer;
+            this.attempt = attempt;
+        }
+
+        @Override public void run() {
+            boolean sent = false;
+            boolean retryable = true;
+            try {
+                WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                Object viewModel = reference == null ? null : reference.get();
+                if (reference != null && viewModel == null) {
+                    ACTIVE_CHAT_VIEW_MODELS.remove(scope, reference);
+                }
+                if (viewModel != null) {
+                    Object session = invokeNoArg(viewModel, "G");
+                    String currentScope = String.valueOf(readHostField(session, "a"));
+                    if (!scope.equals(currentScope)) {
+                        retryable = false;
+                    } else {
+                        Object state = invokeNoArg(
+                                readHostField(session, "i"), "getValue");
+                        if (isIdleGenerationState(state)) {
+                            sent = invokeNativeUiTextSend(viewModel, answer);
+                            retryable = !sent;
+                        }
+                    }
+                }
+            } catch (Throwable error) {
+                log("Agent visible answer send failed sid=" + scope
+                        + " attempt=" + attempt + ": "
+                        + safeThrowableMessage(error));
+            }
+            if (sent) {
+                log("Agent visible answer sent sid=" + scope
+                        + " chars=" + answer.length());
+                return;
+            }
+            if (retryable && attempt + 1 < MAX_ATTEMPTS) {
+                Handler handler = currentMainHandler();
+                if (handler != null) {
+                    handler.postDelayed(new VisibleAgentAnswerAttempt(
+                            context, scope, answer, attempt + 1), RETRY_MS);
+                    return;
+                }
+            }
+            if (context != null) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "答案未发送：请保持在原对话并等待当前回复结束",
+                            "Answer not sent: stay in the original chat and wait "
+                                    + "for the current response to finish"));
+            log("Agent visible answer abandoned sid=" + scope
+                    + " attempts=" + (attempt + 1));
+        }
+    }
+
     private static boolean queueAgentUiTool(
             final Context context, final HeartbeatToolProtocol.ToolCall call,
             final boolean announce) {
+        AgentToolConfig.Snapshot config = AgentToolConfig.load();
+        if (!AgentToolConfig.BACKEND_IN_APP.equals(config.backend)
+                && AgentToolConfig.PERMISSION_ALL.equals(config.permission)) {
+            AgentDeviceBridge.execute(
+                    context, call, new AgentDeviceBridge.StatusCallback() {
+                        @Override public void onStatus(
+                                AgentDeviceBridge.Status status) {
+                            log("privileged Agent tool result tool=" + call.tool
+                                    + " ok=" + status.connected
+                                    + " detail=" + status.detail);
+                            if (status.connected
+                                    && HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN
+                                    .equals(call.tool)) {
+                                queueAgentScreenshotUpload(
+                                        context, call.scope,
+                                        new File(AGENT_SCREENSHOT_DIR,
+                                                "latest_screen.png"));
+                            }
+                            if (!status.connected && announce) {
+                                showHeartbeatToolToast(context, status.detail);
+                            }
+                        }
+                    });
+            return true;
+        }
         final Activity activity = currentHostActivity();
         final Handler handler = currentMainHandler();
         if (activity == null || handler == null || activity.isFinishing()
@@ -5324,7 +5596,7 @@ public class Main extends XposedModule {
             Activity activity, Context context,
             HeartbeatToolProtocol.ToolCall call) {
         if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)) {
-            return captureAgentScreenshot(activity, context, call.id);
+            return captureAgentScreenshot(activity, context, call);
         }
         if (HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)) {
             activity.onBackPressed();
@@ -5413,7 +5685,8 @@ public class Main extends XposedModule {
     }
 
     private static boolean captureAgentScreenshot(
-            Activity activity, Context context, String callId) {
+            Activity activity, Context context,
+            HeartbeatToolProtocol.ToolCall call) {
         Window window = activity.getWindow();
         final View decor = window == null ? null : window.getDecorView();
         if (decor == null || decor.getWidth() <= 0 || decor.getHeight() <= 0) {
@@ -5428,29 +5701,77 @@ public class Main extends XposedModule {
         final Bitmap bitmap;
         try {
             bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            canvas.scale(scale, scale);
-            decor.draw(canvas);
         } catch (Throwable error) {
-            log("agent screenshot render failed: " + error);
+            log("agent screenshot allocation failed: " + error);
             return false;
         }
         Context source = context == null ? activity : context;
         Context application = source.getApplicationContext();
         final Context safeContext = application == null ? source : application;
-        final String safeCallId = callId == null ? "" : callId;
+        final String safeCallId = call == null || call.id == null ? "" : call.id;
+        final String safeScope = call == null
+                ? "" : HeartbeatToolProtocol.cleanScope(call.scope);
+        if (Build.VERSION.SDK_INT >= 26) {
+            Handler handler = currentMainHandler();
+            if (handler == null) {
+                bitmap.recycle();
+                return false;
+            }
+            try {
+                PixelCopy.request(window, bitmap,
+                        new PixelCopy.OnPixelCopyFinishedListener() {
+                            @Override public void onPixelCopyFinished(int result) {
+                                if (result == PixelCopy.SUCCESS) {
+                                    writeAgentScreenshotAsync(
+                                            safeContext, bitmap,
+                                            safeCallId, safeScope);
+                                    return;
+                                }
+                                try { bitmap.recycle(); } catch (Throwable ignored) {}
+                                log("agent screenshot PixelCopy failed code=" + result);
+                                showHeartbeatToolToast(safeContext,
+                                        UiLanguage.text(safeContext,
+                                                "截图失败：窗口画面暂不可用",
+                                                "Capture failed: the window surface "
+                                                        + "is not available"));
+                            }
+                        }, handler);
+                return true;
+            } catch (Throwable error) {
+                try { bitmap.recycle(); } catch (Throwable ignored) {}
+                log("agent screenshot PixelCopy request failed: " + error);
+                return false;
+            }
+        }
+        try {
+            Canvas canvas = new Canvas(bitmap);
+            canvas.scale(scale, scale);
+            decor.draw(canvas);
+        } catch (Throwable error) {
+            try { bitmap.recycle(); } catch (Throwable ignored) {}
+            log("agent screenshot legacy render failed: " + error);
+            return false;
+        }
+        writeAgentScreenshotAsync(
+                safeContext, bitmap, safeCallId, safeScope);
+        return true;
+    }
+
+    private static void writeAgentScreenshotAsync(
+            final Context context, final Bitmap bitmap,
+            final String callId, final String scope) {
         Thread writer = new Thread(new Runnable() {
             @Override public void run() {
-                saveAgentScreenshot(safeContext, bitmap, safeCallId);
+                saveAgentScreenshot(
+                        context, bitmap, callId, scope);
             }
         }, "Deekseep-Agent-Screenshot");
         writer.setDaemon(true);
         writer.start();
-        return true;
     }
 
     private static void saveAgentScreenshot(
-            Context context, Bitmap bitmap, String callId) {
+            Context context, Bitmap bitmap, String callId, String scope) {
         boolean privateSaved = false;
         Uri galleryUri = null;
         OutputStream output = null;
@@ -5502,6 +5823,11 @@ public class Main extends XposedModule {
                     "Screenshot saved to Pictures/DeekseepAgent")
                     : UiLanguage.text(context,
                     "截图保存失败", "Could not save screenshot"));
+            if (privateSaved && scope != null && scope.length() > 0) {
+                queueAgentScreenshotUpload(
+                        context, scope, new File(
+                                AGENT_SCREENSHOT_DIR, "latest_screen.png"));
+            }
         } catch (Throwable error) {
             log("agent screenshot save failed call=" + callId + ": " + error);
             if (galleryUri != null) {
@@ -5518,6 +5844,289 @@ public class Main extends XposedModule {
             }
             try { bitmap.recycle(); } catch (Throwable ignored) {}
         }
+    }
+
+    private static void queueAgentScreenshotUpload(
+            Context context, String scope, File screenshot) {
+        String safeScope = HeartbeatToolProtocol.cleanScope(scope);
+        if (safeScope.length() == 0 || screenshot == null) return;
+        Context source = context == null ? currentHostContext() : context;
+        Context application = source == null ? null : source.getApplicationContext();
+        Context safeContext = application == null ? source : application;
+        Object token = new Object();
+        AGENT_SCREENSHOT_UPLOAD_TOKENS.put(safeScope, token);
+        Handler handler = currentMainHandler();
+        if (handler == null) return;
+        handler.post(new AgentScreenshotUploadAttempt(
+                safeContext, safeScope, screenshot, token));
+    }
+
+    /**
+     * Adds the captured PNG through DeepSeek's real composer uploader, waits for its server file
+     * id, and then sends the image as the next visible turn in the same conversation.
+     */
+    private static final class AgentScreenshotUploadAttempt implements Runnable {
+        private static final int MAX_ATTEMPTS = 240;
+        private static final long RETRY_MS = 250L;
+
+        final Context context;
+        final String scope;
+        final File screenshot;
+        final Object token;
+        int attempts;
+        Object composer;
+        Object attachment;
+        String uploadKey = "";
+        String fileName = "";
+
+        AgentScreenshotUploadAttempt(
+                Context context, String scope, File screenshot, Object token) {
+            this.context = context;
+            this.scope = scope;
+            this.screenshot = screenshot;
+            this.token = token;
+        }
+
+        @Override public void run() {
+            if (AGENT_SCREENSHOT_UPLOAD_TOKENS.get(scope) != token) return;
+            attempts++;
+            try {
+                if (!screenshot.isFile() || screenshot.length() < 1024L) {
+                    fail(UiLanguage.text(context,
+                            "截图文件不可用", "The screenshot file is unavailable"));
+                    return;
+                }
+                WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                Object viewModel = reference == null ? null : reference.get();
+                if (reference != null && viewModel == null) {
+                    ACTIVE_CHAT_VIEW_MODELS.remove(scope, reference);
+                }
+                if (viewModel == null) {
+                    retryOrFail(UiLanguage.text(context,
+                            "原对话尚未就绪", "The original chat is not ready"));
+                    return;
+                }
+                Object session = invokeNoArg(viewModel, "G");
+                if (session == null || !scope.equals(String.valueOf(
+                        readHostField(session, "a")))) {
+                    fail(UiLanguage.text(context,
+                            "已离开截图所属对话，未自动上传",
+                            "The source chat is no longer active; the capture was not uploaded"));
+                    return;
+                }
+                Object generation = invokeNoArg(
+                        readHostField(session, "i"), "getValue");
+                if (!isIdleGenerationState(generation)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在等待当前回复结束",
+                            "Waiting for the current response to finish"));
+                    return;
+                }
+                if (attachment == null) {
+                    composer = invokeNoArg(viewModel, "K");
+                    if (composer == null) {
+                        retryOrFail(UiLanguage.text(context,
+                                "图片上传器尚未就绪",
+                                "The image uploader is not ready"));
+                        return;
+                    }
+                    Object currentAttachments =
+                            snapshotComposerAttachments(composer);
+                    if (currentAttachments instanceof List
+                            && !((List) currentAttachments).isEmpty()) {
+                        // Never mix an Agent capture into a draft the user is already composing.
+                        retryOrFail(UiLanguage.text(context,
+                                "输入框已有待发送附件",
+                                "The composer already contains an unsent attachment"));
+                        return;
+                    }
+                    uploadKey = String.valueOf(invokeNoArg(composer, "d"));
+                    if (uploadKey == null || "null".equals(uploadKey)
+                            || uploadKey.length() == 0) {
+                        retryOrFail(UiLanguage.text(context,
+                                "当前模型标识尚未就绪",
+                                "The current model identity is not ready"));
+                        return;
+                    }
+                    fileName = "DeepSeek_Agent_"
+                            + new SimpleDateFormat(
+                            "yyyyMMdd_HHmmss", Locale.US).format(new Date())
+                            + ".png";
+                    Object metadata = createNativeScreenshotMetadata(
+                            viewModel.getClass().getClassLoader(),
+                            screenshot, fileName);
+                    if (metadata == null
+                            || !invokeNativeScreenshotUploader(
+                            composer, metadata, scope)) {
+                        fail(UiLanguage.text(context,
+                                "无法启动 DeepSeek 图片上传",
+                                "Could not start DeepSeek's image upload"));
+                        return;
+                    }
+                    Object after = snapshotComposerAttachments(composer);
+                    attachment = findNativeAttachment(after, fileName);
+                    schedule();
+                    return;
+                }
+
+                Object attachments = snapshotComposerAttachments(composer);
+                Object liveAttachment = findNativeAttachment(
+                        attachments, fileName);
+                if (liveAttachment != null) attachment = liveAttachment;
+                if (attachment == null || !(attachments instanceof List)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在等待图片进入输入框",
+                            "Waiting for the image to enter the composer"));
+                    return;
+                }
+                String remoteId = nativeAttachmentRemoteId(
+                        attachment, uploadKey);
+                if (remoteId.length() == 0) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在上传截图",
+                            "Uploading the screenshot"));
+                    return;
+                }
+                String prompt = UiLanguage.text(context,
+                        "【Agent 截图】这是刚刚按你的工具调用获取的当前屏幕截图。"
+                                + "请基于图片内容继续处理上一条请求；如果图片信息不足，请明确说明。",
+                        "[Agent screenshot] This is the current screen captured by your tool call. "
+                                + "Continue the previous request using the image. If the image is "
+                                + "insufficient, say so clearly.");
+                if (!invokeNativeUiTextSend(viewModel, prompt, attachments)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "截图已上传，正在等待发送",
+                            "The screenshot is uploaded and waiting to send"));
+                    return;
+                }
+                AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(scope, token);
+                log("Agent screenshot uploaded and sent sid=" + scope
+                        + " remote=" + truncateForLog(remoteId, 120));
+            } catch (Throwable error) {
+                log("Agent screenshot upload attempt failed sid=" + scope
+                        + " attempt=" + attempts + ": "
+                        + safeThrowableMessage(error));
+                retryOrFail(UiLanguage.text(context,
+                        "截图自动上传失败", "Automatic screenshot upload failed"));
+            }
+        }
+
+        private void retryOrFail(String detail) {
+            if (attempts < MAX_ATTEMPTS) {
+                schedule();
+            } else {
+                fail(detail);
+            }
+        }
+
+        private void schedule() {
+            Handler handler = currentMainHandler();
+            if (handler == null) {
+                fail(UiLanguage.text(context,
+                        "主界面已关闭", "The main UI was closed"));
+                return;
+            }
+            handler.postDelayed(this, RETRY_MS);
+        }
+
+        private void fail(String detail) {
+            if (!AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(scope, token)) return;
+            log("Agent screenshot upload abandoned sid=" + scope
+                    + " attempts=" + attempts + " detail=" + detail);
+            if (context != null) showHeartbeatToolToast(context, detail);
+        }
+    }
+
+    private static Object snapshotComposerAttachments(Object composer) {
+        if (composer == null) return null;
+        Object draft = invokeNoArg(composer, "l");
+        if (draft == null) return null;
+        Object mutable = readHostField(
+                draft, HostCompat.isV230() ? "a" : "b");
+        if (mutable == null) return null;
+        Object snapshot = invokeNoArg(mutable, "i");
+        return snapshot == null && mutable instanceof List ? mutable : snapshot;
+    }
+
+    private static Object createNativeScreenshotMetadata(
+            ClassLoader classLoader, File screenshot, String fileName) {
+        try {
+            Class<?> metadataType = HostCompat.load(classLoader, "wu1");
+            Uri uri = Uri.fromFile(screenshot);
+            if (HostCompat.isV230()) {
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(screenshot.getAbsolutePath(), options);
+                Constructor<?> constructor = metadataType.getDeclaredConstructor(
+                        Uri.class, String.class, long.class,
+                        int.class, int.class);
+                constructor.setAccessible(true);
+                return constructor.newInstance(
+                        uri, fileName, Long.valueOf(screenshot.length()),
+                        Integer.valueOf(Math.max(1, options.outWidth)),
+                        Integer.valueOf(Math.max(1, options.outHeight)));
+            }
+            Constructor<?> constructor = metadataType.getDeclaredConstructor(
+                    Uri.class, String.class, long.class);
+            constructor.setAccessible(true);
+            return constructor.newInstance(
+                    uri, fileName, Long.valueOf(screenshot.length()));
+        } catch (Throwable error) {
+            log("native screenshot metadata creation failed: "
+                    + safeThrowableMessage(error));
+            return null;
+        }
+    }
+
+    private static boolean invokeNativeScreenshotUploader(
+            Object composer, Object metadata, String scope) {
+        if (composer == null || metadata == null) return false;
+        for (Method method : composer.getClass().getDeclaredMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            if (!"u".equals(method.getName()) || types.length != 2
+                    || types[1] != String.class
+                    || !types[0].isInstance(metadata)) continue;
+            try {
+                method.setAccessible(true);
+                method.invoke(composer, metadata, scope);
+                return true;
+            } catch (Throwable error) {
+                log("native screenshot uploader call failed: "
+                        + safeThrowableMessage(error));
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static Object findNativeAttachment(
+            Object attachments, String fileName) {
+        if (!(attachments instanceof List)) return null;
+        List values = (List) attachments;
+        for (int index = values.size() - 1; index >= 0; index--) {
+            Object candidate = values.get(index);
+            if (fileName.equals(String.valueOf(
+                    readHostField(candidate, "a")))) return candidate;
+        }
+        return null;
+    }
+
+    private static String nativeAttachmentRemoteId(
+            Object attachment, String uploadKey) {
+        if (attachment == null || uploadKey == null) return "";
+        String methodName = HostCompat.isV230() ? "f" : "e";
+        for (Method method : attachment.getClass().getDeclaredMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            if (!methodName.equals(method.getName())
+                    || types.length != 1 || types[0] != String.class
+                    || method.getReturnType() != String.class) continue;
+            try {
+                method.setAccessible(true);
+                Object value = method.invoke(attachment, uploadKey);
+                return value == null ? "" : String.valueOf(value).trim();
+            } catch (Throwable ignored) {}
+        }
+        return "";
     }
 
     private static boolean dispatchProactiveTask(
@@ -6090,14 +6699,18 @@ public class Main extends XposedModule {
                                 }
                             }
                             String sysPrompt = readPrompt();
+                            java.util.Set<String> enabledLocalTools =
+                                    AgentToolConfig.effectiveTools(
+                                            isProactiveHeartbeatEnabled());
                             String heartbeatTools = !isSynthetic
-                                    && isProactiveHeartbeatEnabled()
                                     && conversationId.length() > 0
+                                    && !enabledLocalTools.isEmpty()
                                     ? HeartbeatToolProtocol.systemPrompt(
                                             System.currentTimeMillis(),
                                             heartbeatPlanForConversation(conversationId),
                                             proactiveHeartbeatIntervalMinutes(),
-                                            conversationId)
+                                            conversationId,
+                                            enabledLocalTools)
                                     : "";
                             String combinedPrompt = combineSystemPrompts(
                                     sysPrompt, heartbeatTools);
@@ -6530,7 +7143,7 @@ public class Main extends XposedModule {
             stream.initialized = true;
             // API/proactive generations hold the private native lane and parse their own output.
             // Only an ordinary visible chat response may execute a hidden heartbeat call here.
-            if (executeTools && isProactiveHeartbeatEnabled()
+            if (executeTools && AgentToolConfig.load().enabled
                     && LOCAL_API_COMPLETION_SLOTS.availablePermits() > 0) {
                 for (HeartbeatToolProtocol.ToolCall call : parsed.calls) {
                     String fingerprint = call.scope + "|" + call.id + "|" + call.tool;

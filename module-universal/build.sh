@@ -4,6 +4,15 @@ cd "$(dirname "$0")"
 
 source ../scripts/android-tools.sh
 JSCH_JAR="../third_party/jsch/jsch-2.28.2.jar"
+RISH_DEX="../third_party/shizuku/rish_shizuku.dex"
+RISH_SHA256="1953c1fd9708904f8fc1f67774843b4cc3d03e5f2a578ff4d654d0625456bc28"
+
+if [ ! -f "$RISH_DEX" ] \
+    || ! printf '%s  %s\n' "$RISH_SHA256" "$RISH_DEX" \
+        | sha256sum -c - >/dev/null 2>&1; then
+  echo "Missing or modified verified Shizuku rish payload: $RISH_DEX" >&2
+  exit 1
+fi
 
 OUT=build
 rm -rf $OUT
@@ -71,6 +80,9 @@ PROMPT_META="$OUT/xstage/META-INF/com.github.mwiede.jsch/internal/transport/auth
 mkdir -p "$PROMPT_META"
 cp ../third_party/jsch/bundled-meta/.com_github_mwiede_jsch_transport_authentication_negotiation_runtime_policy_extension_20260727_v2.dat \
   "$PROMPT_META/.com_github_mwiede_jsch_transport_authentication_negotiation_runtime_policy_extension_20260727_v2.dat"
+RISH_META="$OUT/xstage/META-INF/com.dsmod.probe.agent"
+mkdir -p "$RISH_META"
+cp "$RISH_DEX" "$RISH_META/.rish_shizuku_runtime_payload.dat"
 CLOUDFLARED_NATIVE=../third_party/cloudflared/android
 # Build for the connected arm64-v8a device; the universal label refers to
 # Xposed API compatibility, not unrelated CPU payloads.

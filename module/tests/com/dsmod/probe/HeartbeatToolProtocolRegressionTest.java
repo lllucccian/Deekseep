@@ -310,6 +310,75 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(HeartbeatToolProtocol.isRegisteredToolStatusText(screenshotStatus),
                 "non-heartbeat Agent status was not registered for gray small-text styling");
 
+        String askUser = singleCallBlock(
+                "{\"id\":\"ask_001\",\"tool\":\"ask_user\","
+                        + "\"scope\":\"conversation-1234\",\"questions\":["
+                        + "{\"question\":\"你希望先做哪一部分？\","
+                        + "\"options\":[\"先完成界面\",\"先完成执行器\",\"先写测试\"]},"
+                        + "{\"question\":\"动效强度怎么选？\","
+                        + "\"options\":[\"弱\",\"标准\",\"稍强\"]}]}");
+        HeartbeatToolProtocol.Result askParsed;
+        previousLocale = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.CHINA);
+            askParsed = HeartbeatToolProtocol.parseForConversation(askUser);
+        } finally {
+            Locale.setDefault(previousLocale);
+        }
+        require(askParsed.calls.size() == 1
+                        && HeartbeatToolProtocol.TOOL_ASK_USER.equals(
+                        askParsed.calls.get(0).tool),
+                "ask_user call was not parsed");
+        require(askParsed.calls.get(0).questions.size() == 2
+                        && askParsed.calls.get(0).questions.get(0).options.size() == 3
+                        && "标准".equals(
+                        askParsed.calls.get(0).questions.get(1).options.get(1)),
+                "ask_user questions or options were not retained");
+        String askStatus = HeartbeatToolProtocol.stripToolStatusStyleMarkers(
+                askParsed.visibleText);
+        require(askStatus.contains("询问用户：你希望先做哪一部分？")
+                        && timestampedToolRows(askStatus) == 1,
+                "ask_user did not render one immediate compact activity row");
+        String visibleAnswer = AgentQuestionUi.buildVisibleAnswer(
+                askParsed.calls.get(0).questions,
+                new String[]{"先完成执行器", "标准"}, "");
+        require(("Question：你希望先做哪一部分？\n"
+                        + "Answer：先完成执行器\n\n"
+                        + "Question：动效强度怎么选？\n"
+                        + "Answer：标准").equals(visibleAnswer),
+                "ask_user answer was not converted to visible Question/Answer text");
+        String customAnswer = AgentQuestionUi.buildVisibleAnswer(
+                askParsed.calls.get(0).questions,
+                new String[]{"先写测试", null}, "第二题我想先实际体验再决定");
+        require(customAnswer.contains("Answer：先写测试")
+                        && customAnswer.endsWith(
+                        "Answer：第二题我想先实际体验再决定"),
+                "free-form answer did not fill an unanswered question");
+        String invalidAsk = singleCallBlock(
+                "{\"id\":\"ask_bad\",\"tool\":\"ask_user\","
+                        + "\"scope\":\"conversation-1234\",\"questions\":["
+                        + "{\"question\":\"无效问题\",\"options\":[\"只有一个\"]}]}");
+        require(HeartbeatToolProtocol.parse(invalidAsk).calls.isEmpty(),
+                "ask_user accepted fewer than two answer options");
+
+        AgentToolConfig.Snapshot defaults = AgentToolConfig.defaults();
+        require(defaults.enabled
+                        && AgentToolConfig.PERMISSION_ALL.equals(
+                        defaults.permission)
+                        && defaults.enabledTools.containsAll(
+                        AgentToolConfig.tools()),
+                "Agent defaults are not enabled/all-allowed with every tool on");
+        AgentToolConfig.Snapshot roundTrip = AgentToolConfig.decode(
+                AgentToolConfig.encode(defaults
+                        .withBackend(AgentToolConfig.BACKEND_ROOT)
+                        .withTool(HeartbeatToolProtocol.TOOL_TAP_SCREEN, false)));
+        require(AgentToolConfig.BACKEND_ROOT.equals(roundTrip.backend)
+                        && !roundTrip.enabledTools.contains(
+                        HeartbeatToolProtocol.TOOL_TAP_SCREEN)
+                        && roundTrip.enabledTools.contains(
+                        HeartbeatToolProtocol.TOOL_ASK_USER),
+                "Agent settings JSON round-trip changed backend or tool toggles");
+
         String invalidTap = singleCallBlock(
                 "{\"id\":\"tap_bad\",\"tool\":\"tap_screen\","
                         + "\"scope\":\"conversation-1234\",\"x\":1001,\"y\":500}");
@@ -366,6 +435,7 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && prompt.contains("tap_screen")
                         && prompt.contains("swipe_screen")
                         && prompt.contains("press_back")
+                        && prompt.contains("ask_user")
                         && prompt.contains("180 分钟")
                         && prompt.contains("\"scope\":\"conversation-1234\""),
                 "default heartbeat system prompt omitted the local tool contract");

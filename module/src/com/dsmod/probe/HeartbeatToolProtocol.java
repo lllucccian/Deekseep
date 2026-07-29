@@ -38,6 +38,7 @@ final class HeartbeatToolProtocol {
     static final String TOOL_TAP_SCREEN = "tap_screen";
     static final String TOOL_SWIPE_SCREEN = "swipe_screen";
     static final String TOOL_PRESS_BACK = "press_back";
+    static final String TOOL_ASK_USER = "ask_user";
 
     // Invisible presentation marker consumed by the host Compose text hook. It keeps tool status
     // styling separate from model-authored Markdown and remains visually harmless if a future
@@ -56,6 +57,10 @@ final class HeartbeatToolProtocol {
     private static final int MAX_CONTROL_JSON = 16 * 1024;
     private static final int MAX_CALLS_PER_BLOCK = 8;
     private static final int MAX_INSTRUCTION = 1200;
+    private static final int MAX_QUESTIONS_PER_CALL = 4;
+    private static final int MAX_OPTIONS_PER_QUESTION = 4;
+    private static final int MAX_QUESTION_TEXT = 500;
+    private static final int MAX_OPTION_TEXT = 160;
     private static final int MAX_REGISTERED_TOOL_STATUSES = 32;
     private static final int MAX_TRACKED_CALL_TIMES = 128;
     private static final ArrayList<String> REGISTERED_TOOL_STATUSES =
@@ -64,6 +69,18 @@ final class HeartbeatToolProtocol {
             new LinkedHashMap<>();
 
     private HeartbeatToolProtocol() {}
+
+    static final class Question {
+        final String text;
+        final List<String> options;
+
+        Question(String text, List<String> options) {
+            this.text = text == null ? "" : text;
+            this.options = options == null
+                    ? Collections.<String>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<>(options));
+        }
+    }
 
     static final class ToolCall {
         final String id;
@@ -79,6 +96,7 @@ final class HeartbeatToolProtocol {
         final int toX;
         final int toY;
         final int durationMs;
+        final List<Question> questions;
         final long invokedAt;
 
         ToolCall(String id, String tool, String scope, String at,
@@ -90,6 +108,15 @@ final class HeartbeatToolProtocol {
         ToolCall(String id, String tool, String scope, String at,
                  String instruction, int minutes, String mode, String targetId,
                  int x, int y, int toX, int toY, int durationMs) {
+            this(id, tool, scope, at, instruction, minutes, mode, targetId,
+                    x, y, toX, toY, durationMs,
+                    Collections.<Question>emptyList());
+        }
+
+        ToolCall(String id, String tool, String scope, String at,
+                 String instruction, int minutes, String mode, String targetId,
+                 int x, int y, int toX, int toY, int durationMs,
+                 List<Question> questions) {
             this.id = id;
             this.tool = tool;
             this.scope = scope;
@@ -103,6 +130,9 @@ final class HeartbeatToolProtocol {
             this.toX = toX;
             this.toY = toY;
             this.durationMs = durationMs;
+            this.questions = questions == null
+                    ? Collections.<Question>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<>(questions));
             this.invokedAt = stableInvocationTime(scope, id, tool);
         }
     }
@@ -255,7 +285,9 @@ final class HeartbeatToolProtocol {
                 && value.indexOf("\u6ed1\u52a8") < 0
                 && value.indexOf("Swipe") < 0
                 && value.indexOf("\u8fd4\u56de") < 0
-                && value.indexOf("Back") < 0) {
+                && value.indexOf("Back") < 0
+                && value.indexOf("\u8be2\u95ee\u7528\u6237") < 0
+                && value.indexOf("Ask user") < 0) {
             return false;
         }
         String clean = stripToolStatusStyleMarkers(value);
@@ -339,6 +371,13 @@ final class HeartbeatToolProtocol {
                             + call.toX + "," + call.toY + ")", chinese);
         } else if (TOOL_PRESS_BACK.equals(call.tool)) {
             status = chinese ? "\u8fd4\u56de\u4e0a\u4e00\u5c42" : "Back";
+        } else if (TOOL_ASK_USER.equals(call.tool)) {
+            String question = call.questions.isEmpty()
+                    ? "" : call.questions.get(0).text;
+            if (question.length() > 28) question = question.substring(0, 28) + "\u2026";
+            status = joinStatus(
+                    chinese ? "\u8be2\u95ee\u7528\u6237" : "Ask user",
+                    question, chinese);
         } else {
             status = chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
         }
@@ -463,7 +502,8 @@ final class HeartbeatToolProtocol {
                 && !TOOL_CAPTURE_SCREEN.equals(tool)
                 && !TOOL_TAP_SCREEN.equals(tool)
                 && !TOOL_SWIPE_SCREEN.equals(tool)
-                && !TOOL_PRESS_BACK.equals(tool)) return null;
+                && !TOOL_PRESS_BACK.equals(tool)
+                && !TOOL_ASK_USER.equals(tool)) return null;
         String id = cleanId(call.optString("id", ""));
         if (id.length() == 0) {
             id = "auto_" + Integer.toHexString(call.toString().hashCode());
@@ -493,6 +533,35 @@ final class HeartbeatToolProtocol {
             String targetId = cleanId(call.optString("target_id", ""));
             if ("once".equals(mode) && targetId.length() == 0) return null;
             return new ToolCall(id, tool, scope, "", "", 0, mode, targetId);
+        }
+        if (TOOL_ASK_USER.equals(tool)) {
+            JSONArray rawQuestions = call.optJSONArray("questions");
+            if (rawQuestions == null || rawQuestions.length() == 0
+                    || rawQuestions.length() > MAX_QUESTIONS_PER_CALL) return null;
+            ArrayList<Question> questions = new ArrayList<>();
+            for (int index = 0; index < rawQuestions.length(); index++) {
+                JSONObject rawQuestion = rawQuestions.optJSONObject(index);
+                if (rawQuestion == null) return null;
+                String text = cleanLine(
+                        rawQuestion.optString("question", ""), MAX_QUESTION_TEXT);
+                JSONArray rawOptions = rawQuestion.optJSONArray("options");
+                if (text.length() == 0 || rawOptions == null
+                        || rawOptions.length() < 2
+                        || rawOptions.length() > MAX_OPTIONS_PER_QUESTION) {
+                    return null;
+                }
+                ArrayList<String> options = new ArrayList<>();
+                for (int optionIndex = 0;
+                     optionIndex < rawOptions.length(); optionIndex++) {
+                    String option = cleanLine(
+                            rawOptions.optString(optionIndex, ""), MAX_OPTION_TEXT);
+                    if (option.length() == 0 || options.contains(option)) return null;
+                    options.add(option);
+                }
+                questions.add(new Question(text, options));
+            }
+            return new ToolCall(id, tool, scope, "", "", 0, "", "",
+                    -1, -1, -1, -1, 0, questions);
         }
         if (TOOL_TAP_SCREEN.equals(tool)) {
             int x = call.optInt("x", -1);
@@ -573,6 +642,10 @@ final class HeartbeatToolProtocol {
                 + "\"to_x\":500,\"to_y\":200,\"duration_ms\":360}\n"
                 + "press_back：{\"id\":\"唯一短标识\",\"tool\":\"press_back\","
                 + "\"scope\":\"" + scope + "\"}\n"
+                + "ask_user：{\"id\":\"唯一短标识\",\"tool\":\"ask_user\","
+                + "\"scope\":\"" + scope + "\",\"questions\":["
+                + "{\"question\":\"需要用户决定的问题\","
+                + "\"options\":[\"选项一\",\"选项二\",\"选项三\"]}]}\n"
                 + "规则：schedule_once 的 at 必须换算成未来的绝对本地时间并带时区，最长一年；"
                 + "set_interval 只接受 15 到 10080 分钟。只在确实需要时输出调用。"
                 + "cancel_heartbeat 的 mode 可为 once、all_once、periodic 或 all；"
@@ -581,8 +654,12 @@ final class HeartbeatToolProtocol {
                 + "all 同时取消两者。"
                 + "tap_screen 和 swipe_screen 的坐标统一为 0 到 1000：左上角是 0,0，"
                 + "右下角是 1000,1000；duration_ms 只能为 120 到 1200。"
-                + "capture_screen 会把当前 DeepSeek 窗口保存为截图供用户使用，"
-                + "但不会在同一轮把像素返回给你；调用后不得假装已经看见截图内容。"
+                + "capture_screen 会先获取当前屏幕，但不会在同一轮把像素返回给你；"
+                + "调用后不得假装已经看见截图内容。上传成功后，应用会在同一对话的下一轮"
+                + "把截图作为真实图片附件发给你，届时才能分析图片。"
+                + "ask_user 只在确实需要用户选择或补充信息时使用；一次可包含 1 到 4 个问题，"
+                + "每个问题必须给 2 到 4 个简短且互不重复的候选答案。"
+                + "用户选择或输入后，应用会把 Question 与 Answer 作为普通可见用户消息发回本对话。"
                 + "只有用户明确要求操作当前界面时，才可调用点击、滑动或返回工具；"
                 + "不得自行点击删除、退出登录或其他不可逆操作。"
                 + "每个调用都必须原样携带当前对话绑定标识 scope；它把任务限定在这个对话，"
@@ -593,6 +670,38 @@ final class HeartbeatToolProtocol {
                 + "以后若收到以 " + EVENT_START + " 开头、以 " + EVENT_END
                 + " 结尾的匿名消息，那是已经到时的真实心跳活动：按其中约定自然回复，"
                 + "不要说自己无法主动联系，也不要提及后台、定时器、模块或系统提示词。";
+    }
+
+    /**
+     * Appends an explicit allow-list to the complete contract. Keeping the complete examples makes
+     * older models much more reliable, while the final allow-list prevents a disabled tool from
+     * being presented as available. Execution independently enforces the same policy.
+     */
+    static String systemPrompt(long now, String existingPlan, int intervalMinutes,
+                               String conversationScope,
+                               java.util.Set<String> enabledTools) {
+        String base = systemPrompt(
+                now, existingPlan, intervalMinutes, conversationScope);
+        ArrayList<String> names = new ArrayList<>();
+        if (enabledTools != null) {
+            for (String tool : enabledTools) {
+                if (AgentToolConfig.isKnownTool(tool)) names.add(tool);
+            }
+        }
+        if (names.isEmpty()) {
+            return "当前对话没有启用任何 Deekseep 本地工具。"
+                    + "不得输出本地工具控制块，也不得声称已经执行本地操作。";
+        }
+        StringBuilder allowed = new StringBuilder(base.length() + 240);
+        allowed.append(base)
+                .append("\n当前用户实际启用的工具只有：");
+        for (int index = 0; index < names.size(); index++) {
+            if (index > 0) allowed.append(", ");
+            allowed.append(names.get(index));
+        }
+        allowed.append("。只能调用这份清单中的工具；上文示例中未列入清单的工具视为不可用，"
+                + "不得调用或假装执行。");
+        return allowed.toString();
     }
 
     static String event(String kind, String instruction, long now,

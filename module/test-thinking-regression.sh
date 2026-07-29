@@ -67,6 +67,9 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     src/com/dsmod/probe/ChatAppearance.java \
     src/com/dsmod/probe/ImageCutoutUi.java \
     src/com/dsmod/probe/HeartbeatToolProtocol.java \
+    src/com/dsmod/probe/AgentToolConfig.java \
+    src/com/dsmod/probe/AgentQuestionUi.java \
+    src/com/dsmod/probe/AgentDeviceBridge.java \
     src/com/dsmod/probe/ProactiveHeartbeatReceiver.java \
     src/com/dsmod/probe/HistoryBridge.java \
     src/com/dsmod/probe/XposedActivationProvider.java \

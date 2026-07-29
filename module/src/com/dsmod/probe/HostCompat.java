@@ -169,6 +169,7 @@ final class HostCompat {
             case "us": return "dt";
             case "pv0": return "cw0";
             case "k31": return "h41";
+            case "wu1": return "bx1";
             case "fp": return "mp";
             case "ky2": return "r03";
             case "yu0": return "lv0";
