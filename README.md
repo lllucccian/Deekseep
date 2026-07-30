@@ -117,16 +117,14 @@ The repository does not distribute the official DeepSeek APK, a rooting solution
 
 If Android rejects an in-place upgrade from an older or differently signed build, disable and uninstall only the old module APK before installing 1.7.3; this does not uninstall DeepSeek. See the full [installation guide](docs/INSTALLATION.md).
 
-## Current release files
+## Release contents
 
-The 1.7.3 release provides only these two installable APKs:
-
-| APK | DeepSeek target | Xposed interfaces |
-|---|---|---|
-| `deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk` | Mainland 2.2.2 (`233`) and 2.3.0 (`237`) | API 82 / 100 / 101 / 102 |
-| `deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk` | Google Play 2.2.2 (`236`) only | API 82 / 100 / 101 / 102 |
-
-The [1.7.3 release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.3) also contains the two channel source snapshots and `SHA256SUMS.txt`. Dedicated API 102 and older single-interface APKs have been retired from the current release. Never enable multiple Deekseep variants for the same DeepSeek process.
+The two buttons above are the only installable APK choices. The
+[1.7.3 release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.3)
+also contains two source snapshots and `SHA256SUMS.txt`; those files are not
+additional APK variants. Dedicated API 102 and older single-interface APKs have
+been retired from the current release. Never enable multiple Deekseep variants
+for the same DeepSeek process.
 
 ## Compatibility table
 
