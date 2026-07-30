@@ -106,17 +106,28 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(!parsed.visibleText.contains("schedule_once"),
                 "control JSON leaked into visible text");
         require(parsed.visibleText.contains("已经替你安排好了。")
-                        && parsed.visibleText.contains("晚点见。"),
-                "normal assistant text around a control block was damaged");
-        require(parsed.calls.size() == 5, "valid calls were not parsed");
+                        && !parsed.visibleText.contains("晚点见。"),
+                "text after a tool call was not held until the real result returned");
+        require(parsed.calls.size() == 1,
+                "one response accepted more than one Agent tool call");
         require("2026-08-02T18:37:00+08:00".equals(parsed.calls.get(0).at),
                 "absolute one-time heartbeat was not retained");
         require("conversation-1234".equals(parsed.calls.get(0).scope),
                 "one-time heartbeat lost its source conversation binding");
-        require(parsed.calls.get(2).minutes == 90,
-                "heartbeat interval was not parsed");
-        require("all_once".equals(parsed.calls.get(4).mode),
-                "heartbeat cancellation mode was not parsed");
+
+        String markdownEscaped = singleCallBlock(
+                "{\"id\":\"escaped_001\",\"tool\":\"get_current_time\","
+                        + "\"scope\":\"conversation-1234\"}")
+                .replace("DEEKSEEP_LOCAL_TOOLS_V1",
+                        "DEEKSEEP\\_LOCAL\\_TOOLS\\_V1");
+        HeartbeatToolProtocol.Result escapedParsed =
+                HeartbeatToolProtocol.parseForConversation(markdownEscaped);
+        require(escapedParsed.calls.size() == 1
+                        && "escaped_001".equals(escapedParsed.calls.get(0).id),
+                "Markdown-escaped exact control marker was not recognized");
+        require(!escapedParsed.visibleText.contains("DEEKSEEP")
+                        && !escapedParsed.visibleText.contains("get_current_time"),
+                "Markdown-escaped private control text leaked into the conversation");
 
         Locale previousLocale = Locale.getDefault();
         TimeZone previousTimeZone = TimeZone.getDefault();
@@ -152,13 +163,11 @@ public final class HeartbeatToolProtocolRegressionTest {
                 "ordinary model prose was mistaken for a registered tool status");
         require(presentedText.contains("\u8bbe\u7f6e\u5fc3\u8df3 to 8\u67082\u65e5 18:37:00"),
                 "one-time heartbeat did not clearly label its trigger time");
-        require(presentedText.contains("\u8bbe\u7f6e\u5fc3\u8df3 to \u6bcf90\u5206\u949f"),
-                "heartbeat interval did not use the requested to format");
-        require(presentedText.contains(
-                        "\u53d6\u6d88\u5fc3\u8df3\uff1a\u5168\u90e8\u4e00\u6b21\u6027\u4efb\u52a1"),
-                "heartbeat cancellation did not use the compact status");
-        require(timestampedToolRows(presentedText) == 5,
-                "not every heartbeat tool row starts with its invocation time");
+        require(!presentedText.contains("\u6bcf90\u5206\u949f")
+                        && !presentedText.contains("\u53d6\u6d88\u5fc3\u8df3"),
+                "later calls from a multi-tool batch leaked into the single-step UI");
+        require(timestampedToolRows(presentedText) == 1,
+                "single-step heartbeat response rendered more than one activity row");
         require(!presentedText.contains("\u25cc")
                         && !presentedText.contains("\u8c03\u7528\u4e86")
                         && !presentedText.contains("**"),
@@ -227,8 +236,8 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(firstStreamingFrame.calls.size() == 1
                         && "stream_plan".equals(firstStreamingFrame.calls.get(0).id),
                 "the first singular call was not available before the next call completed");
-        require(firstStreamingFrame.incompleteControlBlock,
-                "the unfinished second singular call was not reported");
+        require(!firstStreamingFrame.incompleteControlBlock,
+                "content after the first call kept the accepted step artificially open");
         require(occurrences(firstStreamingFrame.visibleText, "> ") == 1,
                 "the first completed call did not render immediately and independently");
 
@@ -238,77 +247,132 @@ public final class HeartbeatToolProtocolRegressionTest {
                 HeartbeatToolProtocol.parseForConversation(
                         "正在处理。\n" + firstSingleCall + "\n"
                                 + secondSingleCall + "\n" + thirdCallPrefix);
-        require(secondStreamingFrame.calls.size() == 2
-                        && "stream_plan".equals(secondStreamingFrame.calls.get(0).id)
-                        && "stream_interval".equals(secondStreamingFrame.calls.get(1).id),
-                "sequential singular calls were not parsed in emission order");
-        require(secondStreamingFrame.incompleteControlBlock,
-                "the unfinished third singular call was not reported");
-        require(occurrences(secondStreamingFrame.visibleText, "> ") == 2,
-                "the second completed call waited for the remaining calls");
+        require(secondStreamingFrame.calls.size() == 1
+                        && "stream_plan".equals(secondStreamingFrame.calls.get(0).id),
+                "a second tool call escaped the single-step response gate");
+        require(!secondStreamingFrame.incompleteControlBlock,
+                "content after the accepted tool call affected stream state");
+        require(occurrences(secondStreamingFrame.visibleText, "> ") == 1,
+                "a later tool call rendered before the first result returned");
 
         HeartbeatToolProtocol.Result finalStreamingFrame =
                 HeartbeatToolProtocol.parseForConversation(
                         "正在处理。\n" + firstSingleCall + "\n"
                                 + secondSingleCall + "\n" + thirdSingleCall);
-        require(finalStreamingFrame.calls.size() == 3
-                        && "stream_bind".equals(finalStreamingFrame.calls.get(2).id),
-                "the final singular call was not parsed");
+        require(finalStreamingFrame.calls.size() == 1
+                        && "stream_plan".equals(finalStreamingFrame.calls.get(0).id),
+                "multiple complete tool blocks bypassed the single-step gate");
         require(!finalStreamingFrame.incompleteControlBlock
-                        && occurrences(finalStreamingFrame.visibleText, "> ") == 3,
-                "independent call rows were not retained after the stream completed");
+                        && occurrences(finalStreamingFrame.visibleText, "> ") == 1,
+                "later call rows remained after the stream completed");
 
-        String agentPayload =
+        String[] agentBlocks = new String[]{
                 singleCallBlock("{\"id\":\"time_001\",\"tool\":\"get_current_time\","
-                        + "\"scope\":\"conversation-1234\"}") + "\n"
-                + singleCallBlock("{\"id\":\"screen_001\",\"tool\":\"capture_screen\","
-                        + "\"scope\":\"conversation-1234\"}") + "\n"
-                + singleCallBlock("{\"id\":\"tap_001\",\"tool\":\"tap_screen\","
-                        + "\"scope\":\"conversation-1234\",\"x\":250,\"y\":750}") + "\n"
-                + singleCallBlock("{\"id\":\"swipe_001\",\"tool\":\"swipe_screen\","
+                        + "\"scope\":\"conversation-1234\"}"),
+                singleCallBlock("{\"id\":\"screen_001\",\"tool\":\"capture_screen\","
+                        + "\"scope\":\"conversation-1234\"}"),
+                singleCallBlock("{\"id\":\"tap_001\",\"tool\":\"tap_screen\","
+                        + "\"scope\":\"conversation-1234\",\"x\":250,\"y\":750}"),
+                singleCallBlock("{\"id\":\"swipe_001\",\"tool\":\"swipe_screen\","
                         + "\"scope\":\"conversation-1234\",\"x\":500,\"y\":800,"
-                        + "\"to_x\":500,\"to_y\":200,\"duration_ms\":420}") + "\n"
-                + singleCallBlock("{\"id\":\"back_001\",\"tool\":\"press_back\","
-                        + "\"scope\":\"conversation-1234\"}");
-        HeartbeatToolProtocol.Result agentPresented;
+                        + "\"to_x\":500,\"to_y\":200,\"duration_ms\":420}"),
+                singleCallBlock("{\"id\":\"back_001\",\"tool\":\"press_back\","
+                        + "\"scope\":\"conversation-1234\"}"),
+                singleCallBlock("{\"id\":\"read_001\",\"tool\":\"read_file\","
+                        + "\"scope\":\"conversation-1234\","
+                        + "\"path\":\"/data/local/tmp/agent-demo.txt\","
+                        + "\"offset\":12,\"max_bytes\":4096}"),
+                singleCallBlock("{\"id\":\"write_001\",\"tool\":\"write_file\","
+                        + "\"scope\":\"conversation-1234\","
+                        + "\"path\":\"/data/local/tmp/agent-demo.txt\","
+                        + "\"content\":\"hello 世界\",\"mode\":\"append\","
+                        + "\"create_parents\":true}"),
+                singleCallBlock("{\"id\":\"shell_001\",\"tool\":\"shell\","
+                        + "\"scope\":\"conversation-1234\","
+                        + "\"command\":\"which cp && id\",\"timeout_ms\":7000}")
+        };
+        ArrayList<HeartbeatToolProtocol.ToolCall> agentCalls = new ArrayList<>();
+        StringBuilder agentVisible = new StringBuilder();
+        String screenshotStatus = null;
         previousLocale = Locale.getDefault();
         previousTimeZone = TimeZone.getDefault();
         try {
             Locale.setDefault(Locale.CHINA);
             TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
-            agentPresented = HeartbeatToolProtocol.parseForConversation(agentPayload);
+            for (String block : agentBlocks) {
+                HeartbeatToolProtocol.Result one =
+                        HeartbeatToolProtocol.parseForConversation(block);
+                require(one.calls.size() == 1,
+                        "a singular basic Agent call was not parsed");
+                agentCalls.add(one.calls.get(0));
+                agentVisible.append(one.visibleText).append('\n');
+                if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(
+                        one.calls.get(0).tool)) {
+                    for (String line : one.visibleText.split("\n")) {
+                        if (line.startsWith("> ")) {
+                            screenshotStatus = line.substring(2);
+                            break;
+                        }
+                    }
+                }
+            }
         } finally {
             Locale.setDefault(previousLocale);
             TimeZone.setDefault(previousTimeZone);
         }
-        require(agentPresented.calls.size() == 5,
+        require(agentCalls.size() == 8,
                 "valid basic Agent calls were not parsed");
-        require(agentPresented.calls.get(2).x == 250
-                        && agentPresented.calls.get(2).y == 750,
+        require(agentCalls.get(2).x == 250
+                        && agentCalls.get(2).y == 750,
                 "tap coordinates were not retained");
-        require(agentPresented.calls.get(3).toX == 500
-                        && agentPresented.calls.get(3).toY == 200
-                        && agentPresented.calls.get(3).durationMs == 420,
+        require(agentCalls.get(3).toX == 500
+                        && agentCalls.get(3).toY == 200
+                        && agentCalls.get(3).durationMs == 420,
                 "swipe geometry or duration was not retained");
+        require("/data/local/tmp/agent-demo.txt".equals(
+                        agentCalls.get(5).path)
+                        && agentCalls.get(5).offset == 12L
+                        && agentCalls.get(5).maxBytes == 4096,
+                "read_file path, offset, or byte limit was not retained");
+        require(agentCalls.get(6).append
+                        && agentCalls.get(6).createParents
+                        && "hello 世界".equals(agentCalls.get(6).content),
+                "write_file content or mode was not retained");
+        require("which cp && id".equals(agentCalls.get(7).command)
+                        && agentCalls.get(7).timeoutMs == 7000,
+                "shell command or timeout was not retained");
         String agentText = HeartbeatToolProtocol.stripToolStatusStyleMarkers(
-                agentPresented.visibleText);
+                agentVisible.toString());
         require(agentText.contains("\u83b7\u53d6\u5f53\u524d\u65f6\u95f4\uff1a")
                         && agentText.contains("\u83b7\u53d6\u622a\u56fe")
                         && agentText.contains("\u70b9\u51fb\u5c4f\u5e55\uff1ax=250, y=750")
                         && agentText.contains("\u6ed1\u52a8\u5c4f\u5e55\uff1a(500,800)")
-                        && agentText.contains("\u8fd4\u56de\u4e0a\u4e00\u5c42"),
+                        && agentText.contains("\u8fd4\u56de\u4e0a\u4e00\u5c42")
+                        && agentText.contains("\u8bfb\u53d6\u6587\u4ef6\uff1a")
+                        && agentText.contains("\u8ffd\u52a0\u6587\u4ef6\uff1a")
+                        && agentText.contains("Shell\uff1awhich cp && id"),
                 "basic Agent calls did not receive compact activity rows");
-        require(timestampedToolRows(agentText) == 5,
+        require(timestampedToolRows(agentText) == 8,
                 "basic Agent activity rows do not all start with invocation times");
-        String screenshotStatus = null;
-        for (String line : agentPresented.visibleText.split("\n")) {
-            if (line.startsWith("> ") && line.contains("\u83b7\u53d6\u622a\u56fe")) {
-                screenshotStatus = line.substring(2);
-                break;
-            }
-        }
         require(HeartbeatToolProtocol.isRegisteredToolStatusText(screenshotStatus),
                 "non-heartbeat Agent status was not registered for gray small-text styling");
+
+        StringBuilder illegalMultiTool = new StringBuilder("开始\n");
+        for (String block : agentBlocks) {
+            illegalMultiTool.append(block).append('\n');
+        }
+        illegalMultiTool.append("已经全部完成");
+        HeartbeatToolProtocol.Result gatedAgent =
+                HeartbeatToolProtocol.parseForConversation(
+                        illegalMultiTool.toString());
+        require(gatedAgent.calls.size() == 1
+                        && HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME.equals(
+                        gatedAgent.calls.get(0).tool)
+                        && timestampedToolRows(
+                        HeartbeatToolProtocol.stripToolStatusStyleMarkers(
+                                gatedAgent.visibleText)) == 1
+                        && !gatedAgent.visibleText.contains("已经全部完成"),
+                "multi-tool output or premature final text bypassed the single-step gate");
 
         String askUser = singleCallBlock(
                 "{\"id\":\"ask_001\",\"tool\":\"ask_user\","
@@ -378,12 +442,35 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && roundTrip.enabledTools.contains(
                         HeartbeatToolProtocol.TOOL_ASK_USER),
                 "Agent settings JSON round-trip changed backend or tool toggles");
+        AgentToolConfig.Snapshot migrated = AgentToolConfig.decode(
+                "{\"version\":1,\"enabled\":true,\"backend\":\"in_app\","
+                        + "\"permission\":\"all\",\"enabled_tools\":[\"ask_user\"]}");
+        require(migrated.enabledTools.contains(HeartbeatToolProtocol.TOOL_READ_FILE)
+                        && migrated.enabledTools.contains(
+                        HeartbeatToolProtocol.TOOL_WRITE_FILE)
+                        && migrated.enabledTools.contains(
+                        HeartbeatToolProtocol.TOOL_SHELL),
+                "v1 Agent settings did not enable newly added file and shell tools");
+
+        require("'a'\\''b'".equals(AgentDeviceBridge.shellQuote("a'b")),
+                "shell path quoting did not escape a single quote safely");
 
         String invalidTap = singleCallBlock(
                 "{\"id\":\"tap_bad\",\"tool\":\"tap_screen\","
                         + "\"scope\":\"conversation-1234\",\"x\":1001,\"y\":500}");
         require(HeartbeatToolProtocol.parse(invalidTap).calls.isEmpty(),
                 "out-of-range normalized tap coordinates were accepted");
+        require(HeartbeatToolProtocol.parse(singleCallBlock(
+                        "{\"id\":\"read_bad\",\"tool\":\"read_file\","
+                                + "\"scope\":\"conversation-1234\","
+                                + "\"path\":\"relative.txt\"}")).calls.isEmpty(),
+                "read_file accepted a relative path");
+        require(HeartbeatToolProtocol.parse(singleCallBlock(
+                        "{\"id\":\"shell_bad\",\"tool\":\"shell\","
+                                + "\"scope\":\"conversation-1234\","
+                                + "\"command\":\"id\",\"timeout_ms\":60000}"))
+                        .calls.isEmpty(),
+                "shell accepted an excessive timeout");
 
         String partialMarker = "先等等\n[[DEEKSEEP_LOC";
         require("先等等\n".equals(
@@ -418,6 +505,27 @@ public final class HeartbeatToolProtocolRegressionTest {
                         HeartbeatToolProtocol.stripControlBlocks(echoedEvent)),
                 "an echoed anonymous heartbeat event leaked into assistant text");
 
+        HeartbeatToolProtocol.ToolCall shellCall =
+                HeartbeatToolProtocol.parse(singleCallBlock(
+                        "{\"id\":\"shell_result\",\"tool\":\"shell\","
+                                + "\"scope\":\"conversation-1234\","
+                                + "\"command\":\"which cp\"}")).calls.get(0);
+        String toolResult = HeartbeatToolProtocol.toolResultEvent(
+                shellCall, true, 0, "/system/bin/cp\n",
+                "Shell command completed", "utf-8", false);
+        require(toolResult.startsWith(HeartbeatToolProtocol.RESULT_START)
+                        && toolResult.contains("\"ok\":true")
+                        && toolResult.contains("/system/bin/cp")
+                        && HeartbeatToolProtocol.isCompleteToolResultBody(toolResult),
+                "tool result event omitted its private framing or payload");
+        require("前文后文".equals(
+                        HeartbeatToolProtocol.stripControlBlocks(
+                                "前文" + toolResult + "后文")),
+                "an echoed local tool result leaked into assistant text");
+        require("问候\n".equals(HeartbeatToolProtocol.stripControlBlocks(
+                        "问候\n[[DEEKSEEP_LOCAL_TOOL_RES")),
+                "partial tool-result marker flashed into visible output");
+
         String partialEvent = "问候\n[[DEEKSEEP_ANONYMOUS_HEART";
         require("问候\n".equals(
                         HeartbeatToolProtocol.stripControlBlocks(partialEvent)),
@@ -436,17 +544,24 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && prompt.contains("swipe_screen")
                         && prompt.contains("press_back")
                         && prompt.contains("ask_user")
+                        && prompt.contains("read_file")
+                        && prompt.contains("write_file")
+                        && prompt.contains("shell")
+                        && prompt.contains(HeartbeatToolProtocol.RESULT_START)
                         && prompt.contains("180 分钟")
                         && prompt.contains("\"scope\":\"conversation-1234\""),
                 "default heartbeat system prompt omitted the local tool contract");
-        require(prompt.contains("每个工具调用必须单独使用一组完整控制块")
+        require(prompt.contains("严格使用单步 Agent 循环")
                         && prompt.contains("{\"call\":")
-                        && prompt.contains("写完一个 call 后立刻写结束标记")
+                        && prompt.contains("每一轮回复最多只能调用一个工具")
+                        && prompt.contains("控制块结束后必须立即停止输出")
                         && !prompt.contains("{\"calls\":["),
-                "default heartbeat prompt still permits delayed multi-call batches");
+                "default heartbeat prompt still permits multi-tool batches");
         require(prompt.contains("坐标统一为 0 到 1000")
                         && prompt.contains("不会在同一轮把像素返回给你")
-                        && prompt.contains("不得假装已经看见截图内容"),
+                        && prompt.contains("不得假装已经看见截图内容")
+                        && prompt.contains("Android 系统 PATH")
+                        && prompt.contains("收到结果前不得假装操作成功"),
                 "basic Agent prompt omitted coordinate or screenshot-result boundaries");
 
         try {
@@ -472,6 +587,22 @@ public final class HeartbeatToolProtocolRegressionTest {
                     "proactive assistant reply was not reparented to the visible chat head");
             require(Integer.valueOf(12).equals(history.a.d),
                     "assistant response stopped being the visible conversation head");
+
+            FoldMessage resultEvent = new FoldMessage(
+                    13, 12, "USER", "REQUEST",
+                    "<system>\nprivate\n</system>\n\n" + toolResult);
+            FoldMessage resultReply = new FoldMessage(
+                    14, 13, "ASSISTANT", "RESPONSE",
+                    "cp 位于 /system/bin/cp");
+            FoldResponse resultHistory = new FoldResponse(
+                    new FoldSession(14), visibleUser, proactiveReply,
+                    resultEvent, resultReply);
+            int resultCount =
+                    ((Number) fold.invoke(null, resultHistory)).intValue();
+            require(resultCount == 1 && resultHistory.b.size() == 3
+                            && resultHistory.b.get(2) == resultReply
+                            && Integer.valueOf(12).equals(resultReply.g),
+                    "hidden tool-result request was not folded and reparented");
 
             FoldMessage ordinaryInjectedUser = new FoldMessage(
                     20, null, "USER", "REQUEST",

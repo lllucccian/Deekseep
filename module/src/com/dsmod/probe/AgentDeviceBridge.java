@@ -6,23 +6,30 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.system.Os;
+import android.util.Base64;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Narrow privileged backend for Agent screen actions.
+ * Execution backend for Agent screen, file and basic shell actions.
  *
- * <p>This deliberately does not expose an arbitrary shell tool. Every command is assembled from
- * already validated numeric coordinates or a fixed key event, which keeps Root/Shizuku useful
- * without turning a model-emitted string into unrestricted command execution.</p>
+ * <p>File paths, content sizes and timeouts are strictly validated by
+ * {@link HeartbeatToolProtocol}. The caller independently enforces the user's tool allow-list and
+ * permission mode before an operation reaches this class.</p>
  */
 final class AgentDeviceBridge {
     static final String RISH_RESOURCE =
@@ -31,11 +38,29 @@ final class AgentDeviceBridge {
             "/data/data/com.deepseek.chat/files/deekseep_agent/rish_shizuku.dex";
     private static final String SCREENSHOT_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_agent/latest_screen.png";
+    private static final int NORMAL_OUTPUT_LIMIT = 64 * 1024;
+    private static final int SCREENSHOT_OUTPUT_LIMIT = 24 * 1024 * 1024;
+    private static final String SYSTEM_PATH =
+            "/system/bin:/system/xbin:/vendor/bin:/product/bin:/system_ext/bin";
+    private static final String SHIZUKU_START_COMMAND =
+            "apk=$(/system/bin/pm path moe.shizuku.privileged.api 2>/dev/null"
+                    + " | /system/bin/head -n 1); "
+                    + "apk=${apk#package:}; base=${apk%/base.apk}; starter=''; "
+                    + "for candidate in \"$base\"/lib/*/libshizuku.so"
+                    + " \"$base\"/libshizuku.so; do "
+                    + "if [ -x \"$candidate\" ]; then starter=$candidate; break; fi; done; "
+                    + "if [ -z \"$starter\" ]; then "
+                    + "echo 'Shizuku starter not found' >&2; exit 44; fi; "
+                    + "\"$starter\"";
     private static final ExecutorService EXECUTOR =
             Executors.newSingleThreadExecutor();
 
     interface StatusCallback {
         void onStatus(Status status);
+    }
+
+    interface ResultCallback {
+        void onResult(ToolResult result);
     }
 
     static final class Status {
@@ -45,6 +70,25 @@ final class AgentDeviceBridge {
         Status(boolean connected, String detail) {
             this.connected = connected;
             this.detail = detail == null ? "" : detail;
+        }
+    }
+
+    static final class ToolResult {
+        final boolean success;
+        final int exitCode;
+        final String output;
+        final String detail;
+        final String encoding;
+        final boolean truncated;
+
+        ToolResult(boolean success, int exitCode, String output,
+                   String detail, String encoding, boolean truncated) {
+            this.success = success;
+            this.exitCode = exitCode;
+            this.output = output == null ? "" : output;
+            this.detail = detail == null ? "" : detail;
+            this.encoding = encoding == null ? "utf-8" : encoding;
+            this.truncated = truncated;
         }
     }
 
@@ -59,7 +103,7 @@ final class AgentDeviceBridge {
                     result = new Status(true, UiLanguage.text(context,
                             "应用内后端已就绪", "In-app backend is ready"));
                 } else {
-                    CommandResult command = runCommand(
+                    CommandResult command = runCommandWithShizukuRecovery(
                             context, backend, "id", 5000L, false);
                     boolean connected = command.exitCode == 0
                             && (command.output.contains("uid=0")
@@ -111,7 +155,7 @@ final class AgentDeviceBridge {
                                 "此工具不支持高权限执行",
                                 "This tool has no privileged implementation"));
                     } else {
-                        CommandResult result = runCommand(
+                        CommandResult result = runCommandWithShizukuRecovery(
                                 context, config.backend, command, 7000L, false);
                         status = new Status(result.exitCode == 0,
                                 result.exitCode == 0
@@ -129,6 +173,234 @@ final class AgentDeviceBridge {
                 });
             }
         });
+    }
+
+    static void executeDataTool(
+            final Context context,
+            final HeartbeatToolProtocol.ToolCall call,
+            final ResultCallback callback) {
+        EXECUTOR.execute(new Runnable() {
+            @Override public void run() {
+                AgentToolConfig.Snapshot config = AgentToolConfig.load();
+                String backend = config.backend;
+                if (!AgentToolConfig.PERMISSION_ALL.equals(config.permission)) {
+                    backend = AgentToolConfig.BACKEND_IN_APP;
+                }
+                ToolResult result;
+                if (call == null) {
+                    result = new ToolResult(false, -1, "",
+                            UiLanguage.text(context,
+                                    "工具调用为空", "The tool call is empty"),
+                            "utf-8", false);
+                } else if (HeartbeatToolProtocol.TOOL_READ_FILE.equals(call.tool)) {
+                    result = readFile(context, backend, call);
+                } else if (HeartbeatToolProtocol.TOOL_WRITE_FILE.equals(call.tool)) {
+                    result = writeFile(context, backend, call);
+                } else if (HeartbeatToolProtocol.TOOL_SHELL.equals(call.tool)) {
+                    result = executeShell(context, backend, call);
+                } else {
+                    result = new ToolResult(false, -1, "",
+                            UiLanguage.text(context,
+                                    "此工具没有文件或 Shell 实现",
+                                    "This tool has no file or shell implementation"),
+                            "utf-8", false);
+                }
+                final ToolResult delivered = result;
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override public void run() {
+                        if (callback != null) callback.onResult(delivered);
+                    }
+                });
+            }
+        });
+    }
+
+    private static ToolResult readFile(
+            Context context, String backend,
+            HeartbeatToolProtocol.ToolCall call) {
+        if (AgentToolConfig.BACKEND_IN_APP.equals(backend)) {
+            FileInputStream input = null;
+            try {
+                input = new FileInputStream(call.path);
+                if (!skipFully(input, call.offset)) {
+                    return new ToolResult(true, 0, "",
+                            UiLanguage.text(context,
+                                    "已到达文件末尾", "Reached end of file"),
+                            "utf-8", false);
+                }
+                byte[] buffer = new byte[call.maxBytes + 1];
+                int size = 0;
+                while (size < buffer.length) {
+                    int count = input.read(buffer, size, buffer.length - size);
+                    if (count < 0) break;
+                    if (count > 0) size += count;
+                }
+                boolean truncated = size > call.maxBytes;
+                int kept = Math.min(size, call.maxBytes);
+                return decodedFileResult(
+                        Arrays.copyOf(buffer, kept), call.path, truncated);
+            } catch (Throwable error) {
+                return failureResult(context, backend, error);
+            } finally {
+                if (input != null) try { input.close(); } catch (Throwable ignored) {}
+            }
+        }
+
+        String command = "/system/bin/dd if=" + shellQuote(call.path)
+                + " bs=1 skip=" + call.offset
+                + " count=" + (call.maxBytes + 1);
+        CommandResult result = runCommandWithShizukuRecovery(
+                context, backend, command, 12000L, true,
+                call.maxBytes + 1);
+        if (result.exitCode != 0) {
+            return commandFailure(context, backend, result);
+        }
+        byte[] bytes = result.binary == null ? new byte[0] : result.binary;
+        boolean truncated = bytes.length > call.maxBytes || result.truncated;
+        if (bytes.length > call.maxBytes) {
+            bytes = Arrays.copyOf(bytes, call.maxBytes);
+        }
+        return decodedFileResult(bytes, call.path, truncated);
+    }
+
+    private static boolean skipFully(InputStream input, long count)
+            throws IOException {
+        long remaining = Math.max(0L, count);
+        byte[] discard = new byte[8192];
+        while (remaining > 0L) {
+            long skipped = input.skip(remaining);
+            if (skipped > 0L) {
+                remaining -= skipped;
+                continue;
+            }
+            int read = input.read(
+                    discard, 0, (int) Math.min(discard.length, remaining));
+            if (read < 0) return false;
+            remaining -= read;
+        }
+        return true;
+    }
+
+    private static ToolResult decodedFileResult(
+            byte[] bytes, String path, boolean truncated) {
+        byte[] safe = bytes == null ? new byte[0] : bytes;
+        String encoding = "utf-8";
+        String output;
+        try {
+            output = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(safe)).toString();
+            if (output.indexOf('\u0000') >= 0) {
+                throw new CharacterCodingException();
+            }
+        } catch (CharacterCodingException binary) {
+            output = Base64.encodeToString(safe, Base64.NO_WRAP);
+            encoding = "base64";
+        }
+        return new ToolResult(true, 0, output,
+                "read " + safe.length + " bytes from " + path,
+                encoding, truncated);
+    }
+
+    private static ToolResult writeFile(
+            Context context, String backend,
+            HeartbeatToolProtocol.ToolCall call) {
+        byte[] bytes = call.content.getBytes(StandardCharsets.UTF_8);
+        if (AgentToolConfig.BACKEND_IN_APP.equals(backend)) {
+            FileOutputStream output = null;
+            try {
+                File target = new File(call.path);
+                File parent = target.getParentFile();
+                if (call.createParents && parent != null
+                        && !parent.isDirectory() && !parent.mkdirs()) {
+                    throw new IOException("could not create parent directories");
+                }
+                output = new FileOutputStream(target, call.append);
+                output.write(bytes);
+                output.flush();
+                return new ToolResult(true, 0, "",
+                        (call.append ? "appended " : "wrote ")
+                                + bytes.length + " bytes to " + call.path,
+                        "utf-8", false);
+            } catch (Throwable error) {
+                return failureResult(context, backend, error);
+            } finally {
+                if (output != null) try { output.close(); } catch (Throwable ignored) {}
+            }
+        }
+
+        StringBuilder command = new StringBuilder(bytes.length * 2 + 256);
+        if (call.createParents) {
+            File parent = new File(call.path).getParentFile();
+            if (parent != null) {
+                command.append("/system/bin/mkdir -p ")
+                        .append(shellQuote(parent.getAbsolutePath()))
+                        .append(" && ");
+            }
+        }
+        String encoded = Base64.encodeToString(bytes, Base64.NO_WRAP);
+        command.append("/system/bin/printf %s ")
+                .append(shellQuote(encoded))
+                .append(" | /system/bin/base64 -d ")
+                .append(call.append ? ">> " : "> ")
+                .append(shellQuote(call.path));
+        CommandResult result = runCommandWithShizukuRecovery(
+                context, backend, command.toString(), 12000L, false);
+        if (result.exitCode != 0) {
+            return commandFailure(context, backend, result);
+        }
+        return new ToolResult(true, 0, result.output,
+                (call.append ? "appended " : "wrote ")
+                        + bytes.length + " bytes to " + call.path,
+                "utf-8", result.truncated);
+    }
+
+    private static ToolResult executeShell(
+            Context context, String backend,
+            HeartbeatToolProtocol.ToolCall call) {
+        String command = "PATH=" + SYSTEM_PATH
+                + "; export PATH; " + call.command;
+        CommandResult result = runCommandWithShizukuRecovery(
+                context, backend, command, call.timeoutMs, false);
+        String output = combinedCommandOutput(result);
+        String detail = result.exitCode == 0
+                ? UiLanguage.text(context,
+                "Shell 执行完成", "Shell command completed")
+                : friendlyFailure(context, backend, result);
+        return new ToolResult(result.exitCode == 0, result.exitCode,
+                output, detail, "utf-8", result.truncated);
+    }
+
+    private static ToolResult failureResult(
+            Context context, String backend, Throwable error) {
+        String detail = error == null ? "" : error.getClass().getSimpleName()
+                + ": " + String.valueOf(error.getMessage());
+        return new ToolResult(false, -1, "",
+                friendlyFailure(context, backend,
+                        new CommandResult(-1, "", detail, null, false)),
+                "utf-8", false);
+    }
+
+    private static ToolResult commandFailure(
+            Context context, String backend, CommandResult result) {
+        return new ToolResult(false,
+                result == null ? -1 : result.exitCode,
+                combinedCommandOutput(result),
+                friendlyFailure(context, backend, result),
+                "utf-8", result != null && result.truncated);
+    }
+
+    private static String combinedCommandOutput(CommandResult result) {
+        if (result == null) return "";
+        if (result.output.length() == 0) return result.error;
+        if (result.error.length() == 0) return result.output;
+        return result.output + "\n[stderr]\n" + result.error;
+    }
+
+    static String shellQuote(String value) {
+        String safe = value == null ? "" : value;
+        return "'" + safe.replace("'", "'\\''") + "'";
     }
 
     private static String commandFor(HeartbeatToolProtocol.ToolCall call) {
@@ -166,9 +438,9 @@ final class AgentDeviceBridge {
             return new Status(false, UiLanguage.text(context,
                     "无法创建截图目录", "Could not create the screenshot directory"));
         }
-        CommandResult result = runCommand(
+        CommandResult result = runCommandWithShizukuRecovery(
                 context, backend, "screencap -p", 10000L, true);
-        if (result.exitCode != 0 || result.binary == null
+        if (result.exitCode != 0 || result.truncated || result.binary == null
                 || result.binary.length < 1024) {
             return new Status(false, friendlyFailure(context, backend, result));
         }
@@ -194,21 +466,76 @@ final class AgentDeviceBridge {
         }
     }
 
-    private static CommandResult runCommand(
+    private static CommandResult runCommandWithShizukuRecovery(
             Context context, String backend, String command,
             long timeoutMs, boolean binaryOutput) {
+        return runCommandWithShizukuRecovery(
+                context, backend, command, timeoutMs, binaryOutput,
+                binaryOutput ? SCREENSHOT_OUTPUT_LIMIT : NORMAL_OUTPUT_LIMIT);
+    }
+
+    private static CommandResult runCommandWithShizukuRecovery(
+            Context context, String backend, String command,
+            long timeoutMs, boolean binaryOutput, int outputLimit) {
+        CommandResult first = runCommand(
+                context, backend, command, timeoutMs, binaryOutput, outputLimit);
+        if (!AgentToolConfig.BACKEND_SHIZUKU.equals(backend)
+                || !shizukuServerIsStopped(first)) {
+            return first;
+        }
+        CommandResult started = runCommand(
+                context, AgentToolConfig.BACKEND_ROOT,
+                SHIZUKU_START_COMMAND, 12000L, false, NORMAL_OUTPUT_LIMIT);
+        if (started.exitCode != 0) {
+            String startFailure = combinedCommandOutput(started);
+            return new CommandResult(first.exitCode, first.output,
+                    first.error + (startFailure.length() == 0 ? ""
+                            : "\nRoot auto-start failed: " + startFailure),
+                    first.binary, first.truncated || started.truncated);
+        }
+        /*
+         * The native starter exits after spawning the server, before its binder
+         * service is necessarily published. A single short sleep was racy on
+         * slower devices: the first rish retry could still report that the
+         * server was not running. Retry only that transient state and keep the
+         * total readiness window bounded.
+         */
+        CommandResult retried = first;
+        long[] readinessWaits = { 1500L, 900L, 1200L };
+        for (long readinessWait : readinessWaits) {
+            SystemClock.sleep(readinessWait);
+            retried = runCommand(
+                    context, backend, command, timeoutMs,
+                    binaryOutput, outputLimit);
+            if (!shizukuServerIsStopped(retried)) {
+                return retried;
+            }
+        }
+        return retried;
+    }
+
+    private static boolean shizukuServerIsStopped(CommandResult result) {
+        String detail = combinedCommandOutput(result);
+        return detail.contains("Server is not running")
+                || detail.contains("Shizuku service not running");
+    }
+
+    private static CommandResult runCommand(
+            Context context, String backend, String command,
+            long timeoutMs, boolean binaryOutput, int outputLimit) {
         Process process = null;
         InputStream standard = null;
         InputStream error = null;
         try {
             ProcessBuilder builder;
             if (AgentToolConfig.BACKEND_ROOT.equals(backend)) {
-                builder = new ProcessBuilder("su", "-c", command);
+                builder = new ProcessBuilder("/system/bin/su", "-c", command);
             } else if (AgentToolConfig.BACKEND_SHIZUKU.equals(backend)) {
                 File dex = ensureRishDex();
                 if (dex == null) {
                     return new CommandResult(-1,
-                            "rish_shizuku.dex is unavailable", null);
+                            "", "rish_shizuku.dex is unavailable",
+                            null, false);
                 }
                 builder = new ProcessBuilder(
                         "/system/bin/app_process",
@@ -222,17 +549,31 @@ final class AgentDeviceBridge {
                         context == null ? "com.deepseek.chat"
                                 : context.getPackageName());
                 environment.put("RISH_PRESERVE_ENV", "0");
+            } else if (AgentToolConfig.BACKEND_IN_APP.equals(backend)) {
+                builder = new ProcessBuilder(
+                        "/system/bin/sh", "-c", command);
+                if (context != null && context.getFilesDir() != null
+                        && context.getFilesDir().isDirectory()) {
+                    builder.directory(context.getFilesDir());
+                }
             } else {
-                return new CommandResult(-1, "in-app backend", null);
+                return new CommandResult(
+                        -1, "", "unknown execution backend", null, false);
             }
+            Map<String, String> processEnvironment = builder.environment();
+            processEnvironment.put("PATH", SYSTEM_PATH);
             process = builder.start();
             standard = process.getInputStream();
             error = process.getErrorStream();
-            ByteArrayOutputStream standardBytes = new ByteArrayOutputStream();
-            ByteArrayOutputStream errorBytes = new ByteArrayOutputStream();
+            int limit = Math.max(1024, outputLimit);
+            ByteArrayOutputStream standardBytes =
+                    new ByteArrayOutputStream(Math.min(limit, 8192));
+            ByteArrayOutputStream errorBytes =
+                    new ByteArrayOutputStream(Math.min(NORMAL_OUTPUT_LIMIT, 8192));
             StreamCollector standardCollector =
-                    new StreamCollector(standard, standardBytes);
-            StreamCollector errorCollector = new StreamCollector(error, errorBytes);
+                    new StreamCollector(standard, standardBytes, limit);
+            StreamCollector errorCollector = new StreamCollector(
+                    error, errorBytes, NORMAL_OUTPUT_LIMIT);
             Thread outThread = new Thread(
                     standardCollector, "Deekseep-Agent-stdout");
             Thread errThread = new Thread(
@@ -252,23 +593,26 @@ final class AgentDeviceBridge {
             }
             if (exit == null) {
                 process.destroy();
-                return new CommandResult(-2, "command timed out", null);
+                return new CommandResult(
+                        -2, "", "command timed out", null,
+                        standardCollector.truncated || errorCollector.truncated);
             }
             outThread.join(1000L);
             errThread.join(1000L);
             byte[] stdout = standardBytes.toByteArray();
             String text = binaryOutput ? ""
-                    : new String(stdout, java.nio.charset.StandardCharsets.UTF_8).trim();
+                    : new String(stdout, StandardCharsets.UTF_8);
             String errorText = new String(
                     errorBytes.toByteArray(),
-                    java.nio.charset.StandardCharsets.UTF_8).trim();
-            if (text.length() == 0) text = errorText;
-            return new CommandResult(exit.intValue(), text,
-                    binaryOutput ? stdout : null);
+                    StandardCharsets.UTF_8);
+            return new CommandResult(exit.intValue(), text, errorText,
+                    binaryOutput ? stdout : null,
+                    standardCollector.truncated || errorCollector.truncated);
         } catch (Throwable errorValue) {
-            return new CommandResult(-1,
+            return new CommandResult(-1, "",
                     errorValue.getClass().getSimpleName() + ": "
-                            + String.valueOf(errorValue.getMessage()), null);
+                            + String.valueOf(errorValue.getMessage()),
+                    null, false);
         } finally {
             if (standard != null) try { standard.close(); } catch (Throwable ignored) {}
             if (error != null) try { error.close(); } catch (Throwable ignored) {}
@@ -342,14 +686,32 @@ final class AgentDeviceBridge {
 
     private static String friendlyFailure(
             Context context, String backend, CommandResult result) {
-        String detail = result == null ? "" : result.output;
+        String detail = combinedCommandOutput(result).trim();
         if (detail.length() > 180) detail = detail.substring(0, 180);
         if (AgentToolConfig.BACKEND_SHIZUKU.equals(backend)) {
             if (detail.contains("Server is not running")
                     || detail.contains("binder")) {
+                if (detail.contains("Root auto-start failed")
+                        && (detail.contains("No such file")
+                        || detail.contains("denied")
+                        || detail.contains("permission"))) {
+                    return UiLanguage.text(context,
+                            "Shizuku 服务未运行，且 DeepSeek 尚未获 Root；"
+                                    + "已为你准备打开 Shizuku 启动页",
+                            "Shizuku is not running and DeepSeek has no Root access; "
+                                    + "open Shizuku to start it");
+                }
                 return UiLanguage.text(context,
-                        "Shizuku 服务未运行，请先在 Shizuku 中启动服务",
-                        "Shizuku is not running; start it in the Shizuku app");
+                        "Shizuku 服务未运行，Root 自动启动也未成功；请先在 Shizuku 中启动服务",
+                        "Shizuku is not running and Root auto-start failed; "
+                                + "start it in the Shizuku app");
+            }
+            if (detail.contains("Request timeout")) {
+                return UiLanguage.text(context,
+                        "Shizuku 服务已启动，但 rish 连接超时；请关闭 DeepSeek 与 Shizuku "
+                                + "的电池优化后重试",
+                        "Shizuku is running but rish timed out; disable battery optimization "
+                                + "for DeepSeek and Shizuku, then retry");
             }
             if (detail.contains("permission")
                     || detail.contains("denied")
@@ -377,22 +739,31 @@ final class AgentDeviceBridge {
     private static final class CommandResult {
         final int exitCode;
         final String output;
+        final String error;
         final byte[] binary;
+        final boolean truncated;
 
-        CommandResult(int exitCode, String output, byte[] binary) {
+        CommandResult(int exitCode, String output, String error,
+                      byte[] binary, boolean truncated) {
             this.exitCode = exitCode;
             this.output = output == null ? "" : output;
+            this.error = error == null ? "" : error;
             this.binary = binary;
+            this.truncated = truncated;
         }
     }
 
     private static final class StreamCollector implements Runnable {
         final InputStream input;
-        final OutputStream output;
+        final ByteArrayOutputStream output;
+        final int limit;
+        volatile boolean truncated;
 
-        StreamCollector(InputStream input, OutputStream output) {
+        StreamCollector(
+                InputStream input, ByteArrayOutputStream output, int limit) {
             this.input = input;
             this.output = output;
+            this.limit = Math.max(0, limit);
         }
 
         @Override public void run() {
@@ -400,7 +771,12 @@ final class AgentDeviceBridge {
             try {
                 int count;
                 while ((count = input.read(buffer)) >= 0) {
-                    if (count > 0) output.write(buffer, 0, count);
+                    if (count <= 0) continue;
+                    int remaining = Math.max(0, limit - output.size());
+                    if (remaining > 0) {
+                        output.write(buffer, 0, Math.min(count, remaining));
+                    }
+                    if (count > remaining) truncated = true;
                 }
             } catch (Throwable ignored) {}
         }

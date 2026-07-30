@@ -43,6 +43,9 @@ final class AgentToolConfig {
         ArrayList<String> tools = new ArrayList<>();
         tools.add(HeartbeatToolProtocol.TOOL_ASK_USER);
         tools.add(HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME);
+        tools.add(HeartbeatToolProtocol.TOOL_READ_FILE);
+        tools.add(HeartbeatToolProtocol.TOOL_WRITE_FILE);
+        tools.add(HeartbeatToolProtocol.TOOL_SHELL);
         tools.add(HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN);
         tools.add(HeartbeatToolProtocol.TOOL_TAP_SCREEN);
         tools.add(HeartbeatToolProtocol.TOOL_SWIPE_SCREEN);
@@ -227,6 +230,15 @@ final class AgentToolConfig {
         if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(tool)) {
             return chinese ? "获取屏幕截图" : "Capture screen";
         }
+        if (HeartbeatToolProtocol.TOOL_READ_FILE.equals(tool)) {
+            return chinese ? "读取文件" : "Read file";
+        }
+        if (HeartbeatToolProtocol.TOOL_WRITE_FILE.equals(tool)) {
+            return chinese ? "写入文件" : "Write file";
+        }
+        if (HeartbeatToolProtocol.TOOL_SHELL.equals(tool)) {
+            return chinese ? "基础 Shell" : "Basic shell";
+        }
         if (HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(tool)) {
             return chinese ? "点击屏幕" : "Tap screen";
         }
@@ -266,6 +278,18 @@ final class AgentToolConfig {
             return chinese ? "截取当前屏幕；外部屏幕需要 Root 或 Shizuku"
                     : "Capture the screen; external screens require Root or Shizuku";
         }
+        if (HeartbeatToolProtocol.TOOL_READ_FILE.equals(tool)) {
+            return chinese ? "读取文本或二进制文件片段；高权限路径需要 Root 或 Shizuku"
+                    : "Read text or binary file slices; privileged paths need Root or Shizuku";
+        }
+        if (HeartbeatToolProtocol.TOOL_WRITE_FILE.equals(tool)) {
+            return chinese ? "覆盖或追加 UTF-8 文本；高权限路径需要 Root 或 Shizuku"
+                    : "Overwrite or append UTF-8 text; privileged paths need Root or Shizuku";
+        }
+        if (HeartbeatToolProtocol.TOOL_SHELL.equals(tool)) {
+            return chinese ? "使用 Android 系统 PATH 执行 which、cp、cat 等基础命令"
+                    : "Run which, cp, cat, and other commands on Android's system PATH";
+        }
         if (HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(tool)
                 || HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(tool)
                 || HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(tool)) {
@@ -283,7 +307,7 @@ final class AgentToolConfig {
     static String encode(Snapshot snapshot) {
         try {
             JSONObject root = new JSONObject();
-            root.put("version", 1);
+            root.put("version", 2);
             root.put("enabled", snapshot.enabled);
             root.put("backend", cleanBackend(snapshot.backend));
             root.put("permission", cleanPermission(snapshot.permission));
@@ -294,7 +318,7 @@ final class AgentToolConfig {
             root.put("enabled_tools", tools);
             return root.toString();
         } catch (Throwable ignored) {
-            return "{\"version\":1,\"enabled\":true,\"backend\":\"in_app\","
+            return "{\"version\":2,\"enabled\":true,\"backend\":\"in_app\","
                     + "\"permission\":\"all\",\"enabled_tools\":[]}";
         }
     }
@@ -305,6 +329,7 @@ final class AgentToolConfig {
             boolean enabled = root.optBoolean("enabled", true);
             String backend = root.optString("backend", BACKEND_IN_APP);
             String permission = root.optString("permission", PERMISSION_ALL);
+            int version = root.optInt("version", 1);
             JSONArray array = root.optJSONArray("enabled_tools");
             LinkedHashSet<String> tools = new LinkedHashSet<>();
             if (array == null) {
@@ -313,6 +338,11 @@ final class AgentToolConfig {
                 for (int index = 0; index < array.length(); index++) {
                     String tool = array.optString(index, "");
                     if (isKnownTool(tool)) tools.add(tool);
+                }
+                if (version < 2) {
+                    tools.add(HeartbeatToolProtocol.TOOL_READ_FILE);
+                    tools.add(HeartbeatToolProtocol.TOOL_WRITE_FILE);
+                    tools.add(HeartbeatToolProtocol.TOOL_SHELL);
                 }
             }
             return new Snapshot(enabled, backend, permission, tools);

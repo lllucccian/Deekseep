@@ -6,6 +6,9 @@ if [[ $# -ne 1 ]]; then
 Usage:
   agent-command.sh '{"tool":"capture_screen"}'
   agent-command.sh '{"tool":"ask_user","questions":[{"question":"先做哪项？","options":["界面","执行器","测试"]}]}'
+  agent-command.sh '{"tool":"read_file","path":"/data/local/tmp/demo.txt"}'
+  agent-command.sh '{"tool":"write_file","path":"/data/local/tmp/demo.txt","content":"hello","create_parents":true}'
+  agent-command.sh '{"tool":"shell","command":"which cp && id"}'
   agent-command.sh '{"visible_text":"这是一条命令发送的当前对话消息"}'
 EOF
     exit 2

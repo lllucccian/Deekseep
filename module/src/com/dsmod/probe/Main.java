@@ -76,6 +76,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -244,6 +245,20 @@ public class Main extends XposedModule {
     private static final Map<Object, HeartbeatResponseStream> HEARTBEAT_RESPONSE_STREAMS =
             Collections.synchronizedMap(
                     new WeakHashMap<Object, HeartbeatResponseStream>());
+    private static final long INTERACTIVE_AGENT_TOOL_SCOPE_TTL_MS =
+            TimeUnit.MINUTES.toMillis(10);
+    private static final long AGENT_TOOL_EXECUTION_CLAIM_TTL_MS =
+            TimeUnit.HOURS.toMillis(2);
+    /**
+     * A scope is authorized only when the native visible-chat request actually received the local
+     * tool contract. This is more reliable than using the local-API semaphore as a proxy: an
+     * unrelated local request can briefly own that semaphore while an ordinary UI response is
+     * streaming, which previously made a valid call disappear without ever being executed.
+     */
+    private static final ConcurrentHashMap<String, Long>
+            INTERACTIVE_AGENT_TOOL_SCOPES = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Long>
+            AGENT_TOOL_EXECUTION_CLAIMS = new ConcurrentHashMap<>();
     private static final Object AGENT_UI_ACTION_LOCK = new Object();
     private static final String AGENT_SCREENSHOT_DIR =
             "/data/data/com.deepseek.chat/files/deekseep_agent";
@@ -254,6 +269,8 @@ public class Main extends XposedModule {
             "agent_command_base64";
     private static final ConcurrentHashMap<String, Object>
             AGENT_SCREENSHOT_UPLOAD_TOKENS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Object>
+            AGENT_TOOL_RESULT_TOKENS = new ConcurrentHashMap<>();
     private static volatile long agentUiActionNotBefore;
     private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_HIT_LOGGED =
             new AtomicBoolean();
@@ -5209,7 +5226,7 @@ public class Main extends XposedModule {
      * DeepSeek receiver and accepts the same narrow, validated call schema as model output.
      */
     private static void handleAgentCommand(Context context, String json) {
-        if (json == null || json.trim().length() == 0 || json.length() > 16 * 1024) {
+        if (json == null || json.trim().length() == 0 || json.length() > 48 * 1024) {
             log("ignored empty/oversized Agent command");
             return;
         }
@@ -5283,22 +5300,45 @@ public class Main extends XposedModule {
         Context effective = context != null ? context : currentHostContext();
         if (effective == null) return 0;
         int completed = 0;
+        boolean consumedStep = false;
         for (HeartbeatToolProtocol.ToolCall call : calls) {
             if (call == null) continue;
+            if (consumedStep) {
+                log("ignored later local tool call until the first result returns tool="
+                        + call.tool + " id=" + call.id);
+                break;
+            }
+            consumedStep = true;
             try {
                 boolean success = false;
                 String scope = HeartbeatToolProtocol.cleanScope(call.scope);
                 if (scope.length() == 0) continue;
+                if (!claimAgentToolExecution(call)) {
+                    log("ignored duplicate local tool call tool="
+                            + call.tool + " id=" + call.id
+                            + " scope=" + scope);
+                    continue;
+                }
                 if (!AgentToolConfig.allows(call.tool)) {
                     log("local tool blocked by Agent settings tool=" + call.tool);
+                    queueSimpleAgentToolResult(effective, call, false, "",
+                            UiLanguage.text(effective,
+                                    "此工具已在 Agent 设置中关闭",
+                                    "This tool is disabled in Agent settings"));
                     continue;
                 }
                 if (AgentToolConfig.isHeartbeatTool(call.tool)
                         && !isProactiveHeartbeatEnabled()) {
                     log("heartbeat tool blocked because proactive messages are disabled tool="
                             + call.tool);
+                    queueSimpleAgentToolResult(effective, call, false, "",
+                            UiLanguage.text(effective,
+                                    "心跳功能当前未开启",
+                                    "The heartbeat feature is currently disabled"));
                     continue;
                 }
+                boolean resultWillArriveSeparately = false;
+                String resultOutput = "";
                 if (HeartbeatToolProtocol.TOOL_SCHEDULE_ONCE.equals(call.tool)) {
                     long triggerAt = parseHeartbeatToolTime(
                             call.at, System.currentTimeMillis());
@@ -5316,6 +5356,7 @@ public class Main extends XposedModule {
                                 "AI 给出的时间无效，未安排心跳",
                                 "The AI supplied an invalid time; no heartbeat was scheduled"));
                     }
+                    resultOutput = call.at;
                 } else if (HeartbeatToolProtocol.TOOL_SET_PLAN.equals(call.tool)) {
                     String plan = HeartbeatToolProtocol.cleanInstruction(call.instruction);
                     if (plan.length() > 0) success =
@@ -5365,6 +5406,7 @@ public class Main extends XposedModule {
                             : UiLanguage.text(effective,
                             "AI 设置心跳间隔失败",
                             "AI could not set the heartbeat interval"));
+                    resultOutput = String.valueOf(call.minutes);
                 } else if (HeartbeatToolProtocol.TOOL_CANCEL_HEARTBEAT.equals(call.tool)) {
                     boolean cancelOnce = "once".equals(call.mode)
                             || "all_once".equals(call.mode) || "all".equals(call.mode);
@@ -5383,27 +5425,82 @@ public class Main extends XposedModule {
                             : UiLanguage.text(effective,
                             "取消心跳失败",
                             "Could not cancel the heartbeat"));
+                    resultOutput = call.mode;
                 } else if (HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME.equals(call.tool)) {
-                    // The exact device time is already rendered into this call's activity row.
                     success = true;
+                    resultOutput = formatAgentToolResultTime(
+                            System.currentTimeMillis());
                 } else if (HeartbeatToolProtocol.TOOL_ASK_USER.equals(call.tool)) {
                     success = queueAgentQuestion(effective, call, announce);
+                    resultWillArriveSeparately = success;
                 } else if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)
                         || HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(call.tool)
                         || HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(call.tool)
                         || HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)) {
                     success = queueAgentUiTool(effective, call, announce);
+                    resultWillArriveSeparately = success;
+                } else if (HeartbeatToolProtocol.TOOL_READ_FILE.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_WRITE_FILE.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_SHELL.equals(call.tool)) {
+                    success = queueAgentDataTool(effective, call, announce);
+                    resultWillArriveSeparately = success;
                 }
                 if (success) {
                     completed++;
                     log("local tool completed tool=" + call.tool
                             + " id=" + call.id);
                 }
+                if (!resultWillArriveSeparately) {
+                    queueSimpleAgentToolResult(
+                            effective, call, success, resultOutput,
+                            success
+                                    ? UiLanguage.text(effective,
+                                    "工具执行完成", "Tool completed")
+                                    : UiLanguage.text(effective,
+                                    "工具执行失败", "Tool failed"));
+                }
             } catch (Throwable t) {
                 log("local tool failed tool=" + call.tool + ": " + t);
             }
         }
         return completed;
+    }
+
+    private static boolean claimAgentToolExecution(
+            HeartbeatToolProtocol.ToolCall call) {
+        if (call == null) return false;
+        String scope = HeartbeatToolProtocol.cleanScope(call.scope);
+        if (scope.length() == 0 || call.id == null || call.tool == null) {
+            return false;
+        }
+        String fingerprint = scope + "|" + call.id + "|" + call.tool;
+        long now = System.currentTimeMillis();
+        while (true) {
+            Long previous = AGENT_TOOL_EXECUTION_CLAIMS.putIfAbsent(
+                    fingerprint, Long.valueOf(now));
+            if (previous == null) break;
+            if (now - previous.longValue()
+                    <= AGENT_TOOL_EXECUTION_CLAIM_TTL_MS) {
+                return false;
+            }
+            if (AGENT_TOOL_EXECUTION_CLAIMS.replace(
+                    fingerprint, previous, Long.valueOf(now))) {
+                break;
+            }
+        }
+        if (AGENT_TOOL_EXECUTION_CLAIMS.size() > 256) {
+            long oldestAllowed = now - AGENT_TOOL_EXECUTION_CLAIM_TTL_MS;
+            for (Map.Entry<String, Long> entry
+                    : AGENT_TOOL_EXECUTION_CLAIMS.entrySet()) {
+                Long claimedAt = entry.getValue();
+                if (claimedAt == null
+                        || claimedAt.longValue() < oldestAllowed) {
+                    AGENT_TOOL_EXECUTION_CLAIMS.remove(
+                            entry.getKey(), claimedAt);
+                }
+            }
+        }
+        return true;
     }
 
     private static boolean queueAgentQuestion(
@@ -5425,6 +5522,154 @@ public class Main extends XposedModule {
                         queueVisibleAgentAnswer(context, scope, visibleAnswer);
                     }
                 });
+    }
+
+    private static boolean queueAgentDataTool(
+            final Context context, final HeartbeatToolProtocol.ToolCall call,
+            final boolean announce) {
+        AgentDeviceBridge.executeDataTool(
+                context, call, new AgentDeviceBridge.ResultCallback() {
+                    @Override public void onResult(
+                            AgentDeviceBridge.ToolResult result) {
+                        log("Agent data tool result tool=" + call.tool
+                                + " id=" + call.id
+                                + " ok=" + result.success
+                                + " exit=" + result.exitCode
+                                + " chars=" + result.output.length()
+                                + " truncated=" + result.truncated
+                                + " detail=" + truncateForLog(
+                                result.detail, 320));
+                        if (!result.success && announce) {
+                            showHeartbeatToolToast(context, result.detail);
+                        }
+                        queueHiddenAgentToolResult(context, call, result);
+                    }
+                });
+        return true;
+    }
+
+    private static void queueSimpleAgentToolResult(
+            Context context, HeartbeatToolProtocol.ToolCall call,
+            boolean success, String output, String detail) {
+        queueHiddenAgentToolResult(
+                context, call, new AgentDeviceBridge.ToolResult(
+                        success, success ? 0 : 1, output, detail,
+                        "utf-8", false));
+    }
+
+    private static String formatAgentToolResultTime(long value) {
+        SimpleDateFormat format = new SimpleDateFormat(
+                "yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US);
+        format.setTimeZone(TimeZone.getDefault());
+        return format.format(new Date(value));
+    }
+
+    private static void queueHiddenAgentToolResult(
+            Context context, HeartbeatToolProtocol.ToolCall call,
+            AgentDeviceBridge.ToolResult result) {
+        if (call == null || result == null) return;
+        String scope = HeartbeatToolProtocol.cleanScope(call.scope);
+        if (scope.length() == 0) return;
+        String event = HeartbeatToolProtocol.toolResultEvent(
+                call, result.success, result.exitCode, result.output,
+                result.detail, result.encoding, result.truncated);
+        if (event.length() == 0) return;
+        if ("agent-command-preview".equals(scope)) {
+            log("Agent command preview result tool=" + call.tool
+                    + " output=" + truncateForLog(result.output, 1800));
+            return;
+        }
+        Context source = context == null ? currentHostContext() : context;
+        Context application = source == null ? null : source.getApplicationContext();
+        Context safeContext = application == null ? source : application;
+        Handler handler = currentMainHandler();
+        if (handler == null) {
+            log("Agent tool result could not queue: main handler unavailable");
+            return;
+        }
+        String key = scope + "|" + call.id;
+        Object token = new Object();
+        AGENT_TOOL_RESULT_TOKENS.put(key, token);
+        handler.post(new HiddenAgentToolResultAttempt(
+                safeContext, scope, key, token, event, 0));
+    }
+
+    /**
+     * Sends a private tool-result turn only after the originating assistant stream is idle. The
+     * request is filtered out of Compose and folded from history, while its assistant child uses
+     * DeepSeek's normal streaming pipeline.
+     */
+    private static final class HiddenAgentToolResultAttempt implements Runnable {
+        private static final int MAX_ATTEMPTS = 200;
+        private static final long RETRY_MS = 300L;
+
+        final Context context;
+        final String scope;
+        final String key;
+        final Object token;
+        final String event;
+        final int attempt;
+
+        HiddenAgentToolResultAttempt(
+                Context context, String scope, String key,
+                Object token, String event, int attempt) {
+            this.context = context;
+            this.scope = scope;
+            this.key = key;
+            this.token = token;
+            this.event = event;
+            this.attempt = attempt;
+        }
+
+        @Override public void run() {
+            if (AGENT_TOOL_RESULT_TOKENS.get(key) != token) return;
+            boolean sent = false;
+            try {
+                WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                Object viewModel = reference == null ? null : reference.get();
+                if (reference != null && viewModel == null) {
+                    ACTIVE_CHAT_VIEW_MODELS.remove(scope, reference);
+                }
+                if (viewModel != null) {
+                    Object session = invokeNoArg(viewModel, "G");
+                    String activeScope = String.valueOf(
+                            readHostField(session, "a"));
+                    Object state = invokeNoArg(
+                            readHostField(session, "i"), "getValue");
+                    if (scope.equals(activeScope)
+                            && isIdleGenerationState(state)) {
+                        sent = invokeNativeUiTextSend(viewModel, event);
+                    }
+                }
+            } catch (Throwable error) {
+                log("Agent tool result send failed sid=" + scope
+                        + " attempt=" + attempt + ": "
+                        + safeThrowableMessage(error));
+            }
+            if (sent) {
+                AGENT_TOOL_RESULT_TOKENS.remove(key, token);
+                log("Agent hidden tool result sent sid=" + scope
+                        + " chars=" + event.length());
+                return;
+            }
+            if (attempt + 1 < MAX_ATTEMPTS) {
+                Handler handler = currentMainHandler();
+                if (handler != null) {
+                    handler.postDelayed(new HiddenAgentToolResultAttempt(
+                            context, scope, key, token,
+                            event, attempt + 1), RETRY_MS);
+                    return;
+                }
+            }
+            AGENT_TOOL_RESULT_TOKENS.remove(key, token);
+            if (context != null) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "工具已执行，但结果未能回传：请返回原对话",
+                            "The tool ran, but its result could not be returned; "
+                                    + "go back to the original chat"));
+            log("Agent hidden tool result abandoned sid=" + scope
+                    + " attempts=" + (attempt + 1));
+        }
     }
 
     /**
@@ -5536,9 +5781,13 @@ public class Main extends XposedModule {
                                     && HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN
                                     .equals(call.tool)) {
                                 queueAgentScreenshotUpload(
-                                        context, call.scope,
+                                        context, call,
                                         new File(AGENT_SCREENSHOT_DIR,
                                                 "latest_screen.png"));
+                            } else {
+                                queueSimpleAgentToolResult(
+                                        context, call, status.connected, "",
+                                        status.detail);
                             }
                             if (!status.connected && announce) {
                                 showHeartbeatToolToast(context, status.detail);
@@ -5587,6 +5836,16 @@ public class Main extends XposedModule {
                     showHeartbeatToolToast(context, UiLanguage.text(context,
                             "界面工具执行失败：" + call.tool,
                             "UI tool failed: " + call.tool));
+                }
+                if (!HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)
+                        || !success) {
+                    queueSimpleAgentToolResult(
+                            context, call, success, "",
+                            success
+                                    ? UiLanguage.text(context,
+                                    "界面工具执行完成", "UI tool completed")
+                                    : UiLanguage.text(context,
+                                    "界面工具执行失败", "UI tool failed"));
                 }
             }
         }, delay);
@@ -5708,9 +5967,7 @@ public class Main extends XposedModule {
         Context source = context == null ? activity : context;
         Context application = source.getApplicationContext();
         final Context safeContext = application == null ? source : application;
-        final String safeCallId = call == null || call.id == null ? "" : call.id;
-        final String safeScope = call == null
-                ? "" : HeartbeatToolProtocol.cleanScope(call.scope);
+        final HeartbeatToolProtocol.ToolCall safeCall = call;
         if (Build.VERSION.SDK_INT >= 26) {
             Handler handler = currentMainHandler();
             if (handler == null) {
@@ -5723,13 +5980,18 @@ public class Main extends XposedModule {
                             @Override public void onPixelCopyFinished(int result) {
                                 if (result == PixelCopy.SUCCESS) {
                                     writeAgentScreenshotAsync(
-                                            safeContext, bitmap,
-                                            safeCallId, safeScope);
+                                            safeContext, bitmap, safeCall);
                                     return;
                                 }
                                 try { bitmap.recycle(); } catch (Throwable ignored) {}
                                 log("agent screenshot PixelCopy failed code=" + result);
                                 showHeartbeatToolToast(safeContext,
+                                        UiLanguage.text(safeContext,
+                                                "截图失败：窗口画面暂不可用",
+                                                "Capture failed: the window surface "
+                                                        + "is not available"));
+                                queueSimpleAgentToolResult(
+                                        safeContext, safeCall, false, "",
                                         UiLanguage.text(safeContext,
                                                 "截图失败：窗口画面暂不可用",
                                                 "Capture failed: the window surface "
@@ -5753,17 +6015,17 @@ public class Main extends XposedModule {
             return false;
         }
         writeAgentScreenshotAsync(
-                safeContext, bitmap, safeCallId, safeScope);
+                safeContext, bitmap, safeCall);
         return true;
     }
 
     private static void writeAgentScreenshotAsync(
             final Context context, final Bitmap bitmap,
-            final String callId, final String scope) {
+            final HeartbeatToolProtocol.ToolCall call) {
         Thread writer = new Thread(new Runnable() {
             @Override public void run() {
                 saveAgentScreenshot(
-                        context, bitmap, callId, scope);
+                        context, bitmap, call);
             }
         }, "Deekseep-Agent-Screenshot");
         writer.setDaemon(true);
@@ -5771,7 +6033,11 @@ public class Main extends XposedModule {
     }
 
     private static void saveAgentScreenshot(
-            Context context, Bitmap bitmap, String callId, String scope) {
+            Context context, Bitmap bitmap,
+            HeartbeatToolProtocol.ToolCall call) {
+        String callId = call == null || call.id == null ? "" : call.id;
+        String scope = call == null
+                ? "" : HeartbeatToolProtocol.cleanScope(call.scope);
         boolean privateSaved = false;
         Uri galleryUri = null;
         OutputStream output = null;
@@ -5825,8 +6091,14 @@ public class Main extends XposedModule {
                     "截图保存失败", "Could not save screenshot"));
             if (privateSaved && scope != null && scope.length() > 0) {
                 queueAgentScreenshotUpload(
-                        context, scope, new File(
+                        context, call, new File(
                                 AGENT_SCREENSHOT_DIR, "latest_screen.png"));
+            } else {
+                queueSimpleAgentToolResult(
+                        context, call, false, "",
+                        UiLanguage.text(context,
+                                "截图未能上传回原对话",
+                                "The screenshot could not be uploaded to the source chat"));
             }
         } catch (Throwable error) {
             log("agent screenshot save failed call=" + callId + ": " + error);
@@ -5838,6 +6110,10 @@ public class Main extends XposedModule {
             showHeartbeatToolToast(context,
                     UiLanguage.text(context,
                             "截图保存失败", "Could not save screenshot"));
+            queueSimpleAgentToolResult(
+                    context, call, false, "",
+                    UiLanguage.text(context,
+                            "截图保存失败", "Could not save screenshot"));
         } finally {
             if (output != null) {
                 try { output.close(); } catch (Throwable ignored) {}
@@ -5847,8 +6123,10 @@ public class Main extends XposedModule {
     }
 
     private static void queueAgentScreenshotUpload(
-            Context context, String scope, File screenshot) {
-        String safeScope = HeartbeatToolProtocol.cleanScope(scope);
+            Context context, HeartbeatToolProtocol.ToolCall call,
+            File screenshot) {
+        String safeScope = call == null ? ""
+                : HeartbeatToolProtocol.cleanScope(call.scope);
         if (safeScope.length() == 0 || screenshot == null) return;
         Context source = context == null ? currentHostContext() : context;
         Context application = source == null ? null : source.getApplicationContext();
@@ -5858,7 +6136,7 @@ public class Main extends XposedModule {
         Handler handler = currentMainHandler();
         if (handler == null) return;
         handler.post(new AgentScreenshotUploadAttempt(
-                safeContext, safeScope, screenshot, token));
+                safeContext, safeScope, screenshot, token, call));
     }
 
     /**
@@ -5873,6 +6151,7 @@ public class Main extends XposedModule {
         final String scope;
         final File screenshot;
         final Object token;
+        final HeartbeatToolProtocol.ToolCall call;
         int attempts;
         Object composer;
         Object attachment;
@@ -5880,11 +6159,13 @@ public class Main extends XposedModule {
         String fileName = "";
 
         AgentScreenshotUploadAttempt(
-                Context context, String scope, File screenshot, Object token) {
+                Context context, String scope, File screenshot,
+                Object token, HeartbeatToolProtocol.ToolCall call) {
             this.context = context;
             this.scope = scope;
             this.screenshot = screenshot;
             this.token = token;
+            this.call = call;
         }
 
         @Override public void run() {
@@ -6034,6 +6315,8 @@ public class Main extends XposedModule {
             log("Agent screenshot upload abandoned sid=" + scope
                     + " attempts=" + attempts + " detail=" + detail);
             if (context != null) showHeartbeatToolToast(context, detail);
+            queueSimpleAgentToolResult(
+                    context, call, false, "", detail);
         }
     }
 
@@ -6712,6 +6995,11 @@ public class Main extends XposedModule {
                                             conversationId,
                                             enabledLocalTools)
                                     : "";
+                            if (!nativeProactiveEvent
+                                    && heartbeatTools.length() > 0) {
+                                authorizeInteractiveAgentToolScope(
+                                        conversationId);
+                            }
                             String combinedPrompt = combineSystemPrompts(
                                     sysPrompt, heartbeatTools);
                             if (combinedPrompt.length() > 0) {
@@ -7141,11 +7429,27 @@ public class Main extends XposedModule {
             safe = parsed.visibleText;
             stream.visible = safe;
             stream.initialized = true;
-            // API/proactive generations hold the private native lane and parse their own output.
-            // Only an ordinary visible chat response may execute a hidden heartbeat call here.
-            if (executeTools && AgentToolConfig.load().enabled
-                    && LOCAL_API_COMPLETION_SLOTS.availablePermits() > 0) {
+            if (executeTools && parsed.calls.isEmpty()
+                    && !stream.invalidControlLogged
+                    && stream.raw.indexOf(HeartbeatToolProtocol.CONTROL_START) >= 0
+                    && stream.raw.indexOf(HeartbeatToolProtocol.CONTROL_END) >= 0) {
+                stream.invalidControlLogged = true;
+                log("Agent control block was hidden but rejected as invalid"
+                        + " response_chars=" + stream.raw.length());
+            }
+            // The request-side scope lease identifies a real visible-chat generation. Do not use
+            // the local-API semaphore here: an unrelated request can own it for a moment and used
+            // to make this valid call disappear permanently.
+            if (executeTools && AgentToolConfig.load().enabled) {
                 for (HeartbeatToolProtocol.ToolCall call : parsed.calls) {
+                    if (!isAuthorizedInteractiveAgentToolCall(call)) {
+                        if (!stream.unauthorizedCallLogged) {
+                            stream.unauthorizedCallLogged = true;
+                            log("Agent control block ignored outside authorized visible chat"
+                                    + " scope=" + call.scope + " tool=" + call.tool);
+                        }
+                        continue;
+                    }
                     String fingerprint = call.scope + "|" + call.id + "|" + call.tool;
                     if (stream.executed.add(fingerprint)) freshCalls.add(call);
                 }
@@ -7155,6 +7459,34 @@ public class Main extends XposedModule {
         if (!freshCalls.isEmpty()) {
             executeHeartbeatToolCalls(currentHostContext(), freshCalls, true);
         }
+    }
+
+    private static void authorizeInteractiveAgentToolScope(String value) {
+        String scope = HeartbeatToolProtocol.cleanScope(value);
+        if (scope.length() == 0) return;
+        long now = System.currentTimeMillis();
+        INTERACTIVE_AGENT_TOOL_SCOPES.put(
+                scope, Long.valueOf(now + INTERACTIVE_AGENT_TOOL_SCOPE_TTL_MS));
+        if (INTERACTIVE_AGENT_TOOL_SCOPES.size() <= 32) return;
+        for (Map.Entry<String, Long> entry
+                : INTERACTIVE_AGENT_TOOL_SCOPES.entrySet()) {
+            Long expiry = entry.getValue();
+            if (expiry == null || expiry.longValue() < now) {
+                INTERACTIVE_AGENT_TOOL_SCOPES.remove(
+                        entry.getKey(), expiry);
+            }
+        }
+    }
+
+    private static boolean isAuthorizedInteractiveAgentToolCall(
+            HeartbeatToolProtocol.ToolCall call) {
+        if (call == null) return false;
+        String scope = HeartbeatToolProtocol.cleanScope(call.scope);
+        Long expiry = INTERACTIVE_AGENT_TOOL_SCOPES.get(scope);
+        if (expiry == null) return false;
+        if (expiry.longValue() >= System.currentTimeMillis()) return true;
+        INTERACTIVE_AGENT_TOOL_SCOPES.remove(scope, expiry);
+        return false;
     }
 
     private static boolean setMutableStateValue(Object state, Object value) {
@@ -7178,6 +7510,8 @@ public class Main extends XposedModule {
         String raw = "";
         String visible = "";
         boolean initialized;
+        boolean invalidControlLogged;
+        boolean unauthorizedCallLogged;
         final HashSet<String> executed = new HashSet<>();
     }
 
@@ -9304,7 +9638,7 @@ public class Main extends XposedModule {
                         ArrayList<Object> kept = null;
                         for (int index = 0; index < source.size(); index++) {
                             Object message = source.get(index);
-                            if (!isAnonymousHeartbeatUserMessage(message)) continue;
+                            if (!isHiddenAgentTransportUserMessage(message)) continue;
                             if (kept == null) kept = new ArrayList<Object>(source);
                             kept.remove(message);
                         }
@@ -9548,6 +9882,14 @@ public class Main extends XposedModule {
         if (role == null) role = fieldByName(message, "h");
         return "USER".equals(String.valueOf(role))
                 && messageContainsAnonymousHeartbeatEvent(message);
+    }
+
+    private static boolean isHiddenAgentTransportUserMessage(Object message) {
+        if (message == null) return false;
+        Object role = invokeNoArg(message, "A");
+        if (role == null) role = fieldByName(message, "h");
+        return "USER".equals(String.valueOf(role))
+                && messageContainsHiddenAgentTransport(message);
     }
 
     private void scheduleRealSessionProbe() {
@@ -10294,7 +10636,7 @@ public class Main extends XposedModule {
         for (Object message : messages) {
             if (message == null
                     || !"USER".equals(String.valueOf(fieldByName(message, "h")))
-                    || !messageContainsAnonymousHeartbeatEvent(message)) continue;
+                    || !messageContainsHiddenAgentTransport(message)) continue;
             Integer id = intField(message, "f");
             if (id != null) {
                 hiddenParents.put(id, intField(message, "g"));
@@ -10336,6 +10678,15 @@ public class Main extends XposedModule {
     }
 
     private static boolean messageContainsAnonymousHeartbeatEvent(Object message) {
+        return messageContainsPrivateTransport(message, false);
+    }
+
+    private static boolean messageContainsHiddenAgentTransport(Object message) {
+        return messageContainsPrivateTransport(message, true);
+    }
+
+    private static boolean messageContainsPrivateTransport(
+            Object message, boolean includeToolResults) {
         Object fragmentsValue = fieldByName(message, "t");
         if (!(fragmentsValue instanceof List)) {
             fragmentsValue = invokeNoArg(message, "l");
@@ -10352,9 +10703,9 @@ public class Main extends XposedModule {
             // sync. Only the post-system-wrapper body of a transport event may be folded.
             String body = HistoryBridge.stripInjectedSystemPrompts(
                     (String) content).trim();
-            if (body.startsWith(HeartbeatToolProtocol.EVENT_START)
-                    && body.indexOf(HeartbeatToolProtocol.EVENT_END,
-                            HeartbeatToolProtocol.EVENT_START.length()) >= 0) {
+            if (HeartbeatToolProtocol.isCompleteHeartbeatEventBody(body)
+                    || (includeToolResults
+                    && HeartbeatToolProtocol.isCompleteToolResultBody(body))) {
                 return true;
             }
         }

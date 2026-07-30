@@ -26,6 +26,8 @@ final class HeartbeatToolProtocol {
     static final String CONTROL_END = "[[/DEEKSEEP_LOCAL_TOOLS_V1]]";
     static final String EVENT_START = "[[DEEKSEEP_ANONYMOUS_HEARTBEAT_EVENT_V1]]";
     static final String EVENT_END = "[[/DEEKSEEP_ANONYMOUS_HEARTBEAT_EVENT_V1]]";
+    static final String RESULT_START = "[[DEEKSEEP_LOCAL_TOOL_RESULT_V1]]";
+    static final String RESULT_END = "[[/DEEKSEEP_LOCAL_TOOL_RESULT_V1]]";
 
     static final String TOOL_SCHEDULE_ONCE = "schedule_once";
     static final String TOOL_SET_PLAN = "set_plan";
@@ -39,6 +41,9 @@ final class HeartbeatToolProtocol {
     static final String TOOL_SWIPE_SCREEN = "swipe_screen";
     static final String TOOL_PRESS_BACK = "press_back";
     static final String TOOL_ASK_USER = "ask_user";
+    static final String TOOL_READ_FILE = "read_file";
+    static final String TOOL_WRITE_FILE = "write_file";
+    static final String TOOL_SHELL = "shell";
 
     // Invisible presentation marker consumed by the host Compose text hook. It keeps tool status
     // styling separate from model-authored Markdown and remains visually harmless if a future
@@ -54,9 +59,15 @@ final class HeartbeatToolProtocol {
     // TextStyle.copy default mask: keep every existing property except color and fontSize.
     static final int TOOL_STATUS_TEXT_STYLE_COPY_MASK = 0x00FFFFFC;
 
-    private static final int MAX_CONTROL_JSON = 16 * 1024;
-    private static final int MAX_CALLS_PER_BLOCK = 8;
+    private static final int MAX_CONTROL_JSON = 48 * 1024;
+    private static final int MAX_CALLS_PER_RESPONSE = 1;
     private static final int MAX_INSTRUCTION = 1200;
+    private static final int MAX_PATH = 1024;
+    private static final int MAX_FILE_CONTENT = 32 * 1024;
+    private static final int MAX_SHELL_COMMAND = 4096;
+    private static final int MAX_FILE_READ_BYTES = 48 * 1024;
+    private static final int DEFAULT_FILE_READ_BYTES = 32 * 1024;
+    private static final int MAX_TOOL_RESULT_TEXT = 48 * 1024;
     private static final int MAX_QUESTIONS_PER_CALL = 4;
     private static final int MAX_OPTIONS_PER_QUESTION = 4;
     private static final int MAX_QUESTION_TEXT = 500;
@@ -97,6 +108,14 @@ final class HeartbeatToolProtocol {
         final int toY;
         final int durationMs;
         final List<Question> questions;
+        final String path;
+        final String content;
+        final boolean append;
+        final boolean createParents;
+        final long offset;
+        final int maxBytes;
+        final String command;
+        final int timeoutMs;
         final long invokedAt;
 
         ToolCall(String id, String tool, String scope, String at,
@@ -117,6 +136,17 @@ final class HeartbeatToolProtocol {
                  String instruction, int minutes, String mode, String targetId,
                  int x, int y, int toX, int toY, int durationMs,
                  List<Question> questions) {
+            this(id, tool, scope, at, instruction, minutes, mode, targetId,
+                    x, y, toX, toY, durationMs, questions,
+                    "", "", false, false, 0L, 0, "", 0);
+        }
+
+        ToolCall(String id, String tool, String scope, String at,
+                 String instruction, int minutes, String mode, String targetId,
+                 int x, int y, int toX, int toY, int durationMs,
+                 List<Question> questions, String path, String content,
+                 boolean append, boolean createParents, long offset,
+                 int maxBytes, String command, int timeoutMs) {
             this.id = id;
             this.tool = tool;
             this.scope = scope;
@@ -133,6 +163,14 @@ final class HeartbeatToolProtocol {
             this.questions = questions == null
                     ? Collections.<Question>emptyList()
                     : Collections.unmodifiableList(new ArrayList<>(questions));
+            this.path = path == null ? "" : path;
+            this.content = content == null ? "" : content;
+            this.append = append;
+            this.createParents = createParents;
+            this.offset = offset;
+            this.maxBytes = maxBytes;
+            this.command = command == null ? "" : command;
+            this.timeoutMs = timeoutMs;
             this.invokedAt = stableInvocationTime(scope, id, tool);
         }
     }
@@ -169,30 +207,36 @@ final class HeartbeatToolProtocol {
         if (value == null || value.length() == 0) {
             return new Result(value, Collections.<ToolCall>emptyList(), false);
         }
-        StringBuilder visible = new StringBuilder(value.length());
+        String source = normalizeMarkdownEscapedControlMarker(value);
+        StringBuilder visible = new StringBuilder(source.length());
         ArrayList<ToolCall> calls = new ArrayList<>();
         boolean incomplete = false;
         int cursor = 0;
-        while (cursor < value.length()) {
-            int controlStart = value.indexOf(CONTROL_START, cursor);
-            int eventStart = value.indexOf(EVENT_START, cursor);
-            boolean controlBlock = controlStart >= 0
-                    && (eventStart < 0 || controlStart <= eventStart);
-            int start = controlBlock ? controlStart : eventStart;
+        while (cursor < source.length()) {
+            int controlStart = source.indexOf(CONTROL_START, cursor);
+            int eventStart = source.indexOf(EVENT_START, cursor);
+            int resultStart = source.indexOf(RESULT_START, cursor);
+            int start = firstMarker(controlStart, eventStart, resultStart);
             if (start < 0) {
-                visible.append(value, cursor, value.length());
+                visible.append(source, cursor, source.length());
                 break;
             }
-            visible.append(value, cursor, start);
-            String openingMarker = controlBlock ? CONTROL_START : EVENT_START;
-            String closingMarker = controlBlock ? CONTROL_END : EVENT_END;
+            visible.append(source, cursor, start);
+            boolean controlBlock = start == controlStart;
+            boolean heartbeatEvent = start == eventStart;
+            String openingMarker = controlBlock
+                    ? CONTROL_START
+                    : (heartbeatEvent ? EVENT_START : RESULT_START);
+            String closingMarker = controlBlock
+                    ? CONTROL_END
+                    : (heartbeatEvent ? EVENT_END : RESULT_END);
             int payloadStart = start + openingMarker.length();
-            int end = value.indexOf(closingMarker, payloadStart);
+            int end = source.indexOf(closingMarker, payloadStart);
             if (end < 0) {
                 incomplete = true;
                 break;
             }
-            String payload = value.substring(payloadStart, end).trim();
+            String payload = source.substring(payloadStart, end).trim();
             if (controlBlock && payload.length() > 0
                     && payload.length() <= MAX_CONTROL_JSON) {
                 int firstNewCall = calls.size();
@@ -200,14 +244,45 @@ final class HeartbeatToolProtocol {
                 if (renderToolRows && calls.size() > firstNewCall) {
                     appendToolRows(visible, calls, firstNewCall);
                 }
+                if (calls.size() > firstNewCall) {
+                    // A real Agent loop executes exactly one tool, returns its result privately,
+                    // and lets the model decide the next step in a fresh turn. Suppress every
+                    // trailing call or premature conclusion from this response.
+                    cursor = end + closingMarker.length();
+                    break;
+                }
             }
             cursor = end + closingMarker.length();
         }
-        if (cursor == value.length()) {
+        if (cursor == source.length()) {
             // A control block may end at the final byte, in which case the loop does not append.
         }
         String safe = hidePartialOpeningMarker(visible.toString());
         return new Result(safe, calls, incomplete);
+    }
+
+    /**
+     * Some model turns Markdown-escape underscores (and occasionally brackets) even though the
+     * contract says not to use a code block. Accept only escaped spellings of the exact private
+     * marker; this does not broaden execution to natural-language or arbitrary JSON.
+     */
+    private static String normalizeMarkdownEscapedControlMarker(String value) {
+        if (value == null || value.indexOf("DEEKSEEP") < 0) return value;
+        String identifier = "DEEKSEEP_LOCAL_TOOLS_V1";
+        String escapedIdentifier = "DEEKSEEP\\_LOCAL\\_TOOLS\\_V1";
+        String source = value.replace(escapedIdentifier, identifier);
+        source = source
+                .replace("\\[\\[" + identifier + "\\]\\]", CONTROL_START)
+                .replace("\\[\\[/" + identifier + "\\]\\]", CONTROL_END);
+        return source;
+    }
+
+    private static int firstMarker(int first, int second, int third) {
+        int result = -1;
+        if (first >= 0) result = first;
+        if (second >= 0 && (result < 0 || second < result)) result = second;
+        if (third >= 0 && (result < 0 || third < result)) result = third;
+        return result;
     }
 
     static String stripControlBlocks(String value) {
@@ -287,7 +362,14 @@ final class HeartbeatToolProtocol {
                 && value.indexOf("\u8fd4\u56de") < 0
                 && value.indexOf("Back") < 0
                 && value.indexOf("\u8be2\u95ee\u7528\u6237") < 0
-                && value.indexOf("Ask user") < 0) {
+                && value.indexOf("Ask user") < 0
+                && value.indexOf("\u8bfb\u53d6\u6587\u4ef6") < 0
+                && value.indexOf("Read file") < 0
+                && value.indexOf("\u5199\u5165\u6587\u4ef6") < 0
+                && value.indexOf("Write file") < 0
+                && value.indexOf("\u8ffd\u52a0\u6587\u4ef6") < 0
+                && value.indexOf("Append file") < 0
+                && value.indexOf("Shell") < 0) {
             return false;
         }
         String clean = stripToolStatusStyleMarkers(value);
@@ -378,10 +460,35 @@ final class HeartbeatToolProtocol {
             status = joinStatus(
                     chinese ? "\u8be2\u95ee\u7528\u6237" : "Ask user",
                     question, chinese);
+        } else if (TOOL_READ_FILE.equals(call.tool)) {
+            status = joinStatus(
+                    chinese ? "\u8bfb\u53d6\u6587\u4ef6" : "Read file",
+                    compactPath(call.path), chinese);
+        } else if (TOOL_WRITE_FILE.equals(call.tool)) {
+            status = joinStatus(
+                    chinese
+                            ? (call.append ? "\u8ffd\u52a0\u6587\u4ef6"
+                            : "\u5199\u5165\u6587\u4ef6")
+                            : (call.append ? "Append file" : "Write file"),
+                    compactPath(call.path), chinese);
+        } else if (TOOL_SHELL.equals(call.tool)) {
+            String command = call.command.replace('\r', ' ')
+                    .replace('\n', ' ').trim();
+            if (command.length() > 38) command = command.substring(0, 38) + "\u2026";
+            status = joinStatus("Shell", command, chinese);
         } else {
             status = chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
         }
         return statusClock(call.invokedAt) + "  " + status;
+    }
+
+    private static String compactPath(String value) {
+        String path = value == null ? "" : value.trim();
+        if (path.length() <= 42) return path;
+        int slash = path.lastIndexOf('/');
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        if (name.length() > 30) name = name.substring(name.length() - 30);
+        return "\u2026/" + name;
     }
 
     private static String statusClock(long value) {
@@ -475,16 +582,21 @@ final class HeartbeatToolProtocol {
             if (single == null && root.has("tool")) single = root;
             if (single != null) {
                 ToolCall parsed = parseCall(single);
-                if (parsed != null) out.add(parsed);
+                if (parsed != null && out.size() < MAX_CALLS_PER_RESPONSE) {
+                    out.add(parsed);
+                }
                 return;
             }
             JSONArray array = root.optJSONArray("calls");
             if (array == null) return;
-            int count = Math.min(array.length(), MAX_CALLS_PER_BLOCK);
+            int count = array.length();
             for (int i = 0; i < count; i++) {
                 JSONObject call = array.optJSONObject(i);
                 ToolCall parsed = parseCall(call);
-                if (parsed != null) out.add(parsed);
+                if (parsed != null) {
+                    if (out.size() < MAX_CALLS_PER_RESPONSE) out.add(parsed);
+                    return;
+                }
             }
         } catch (Throwable ignored) {}
     }
@@ -503,7 +615,10 @@ final class HeartbeatToolProtocol {
                 && !TOOL_TAP_SCREEN.equals(tool)
                 && !TOOL_SWIPE_SCREEN.equals(tool)
                 && !TOOL_PRESS_BACK.equals(tool)
-                && !TOOL_ASK_USER.equals(tool)) return null;
+                && !TOOL_ASK_USER.equals(tool)
+                && !TOOL_READ_FILE.equals(tool)
+                && !TOOL_WRITE_FILE.equals(tool)
+                && !TOOL_SHELL.equals(tool)) return null;
         String id = cleanId(call.optString("id", ""));
         if (id.length() == 0) {
             id = "auto_" + Integer.toHexString(call.toString().hashCode());
@@ -582,11 +697,69 @@ final class HeartbeatToolProtocol {
             return new ToolCall(id, tool, scope, "", "", 0, "", "",
                     x, y, toX, toY, durationMs);
         }
+        if (TOOL_READ_FILE.equals(tool)) {
+            String path = cleanAbsolutePath(call.optString("path", ""));
+            long offset = call.optLong("offset", 0L);
+            int maxBytes = call.optInt(
+                    "max_bytes", DEFAULT_FILE_READ_BYTES);
+            if (path.length() == 0 || offset < 0L
+                    || maxBytes < 1 || maxBytes > MAX_FILE_READ_BYTES) return null;
+            return new ToolCall(id, tool, scope, "", "", 0, "", "",
+                    -1, -1, -1, -1, 0,
+                    Collections.<Question>emptyList(), path, "",
+                    false, false, offset, maxBytes, "", 0);
+        }
+        if (TOOL_WRITE_FILE.equals(tool)) {
+            String path = cleanAbsolutePath(call.optString("path", ""));
+            if (path.length() == 0 || !call.has("content")) return null;
+            String content = call.optString("content", "");
+            if (content.length() > MAX_FILE_CONTENT
+                    || content.indexOf('\u0000') >= 0) return null;
+            String writeMode = cleanToken(
+                    call.optString("mode", "overwrite"), 16);
+            if (!"overwrite".equals(writeMode)
+                    && !"append".equals(writeMode)) return null;
+            boolean createParents = call.optBoolean("create_parents", false);
+            return new ToolCall(id, tool, scope, "", "", 0, "", "",
+                    -1, -1, -1, -1, 0,
+                    Collections.<Question>emptyList(), path, content,
+                    "append".equals(writeMode), createParents,
+                    0L, 0, "", 0);
+        }
+        if (TOOL_SHELL.equals(tool)) {
+            String command = cleanShellCommand(call.optString("command", ""));
+            int timeoutMs = call.optInt("timeout_ms", 10000);
+            if (command.length() == 0
+                    || timeoutMs < 1000 || timeoutMs > 30000) return null;
+            return new ToolCall(id, tool, scope, "", "", 0, "", "",
+                    -1, -1, -1, -1, 0,
+                    Collections.<Question>emptyList(), "", "",
+                    false, false, 0L, 0, command, timeoutMs);
+        }
         return new ToolCall(id, tool, scope, "", "", 0, "", "");
     }
 
     private static boolean validScreenCoordinate(int value) {
         return value >= 0 && value <= 1000;
+    }
+
+    private static String cleanAbsolutePath(String value) {
+        if (value == null) return "";
+        String path = value.trim();
+        if (path.length() == 0 || path.length() > MAX_PATH
+                || path.charAt(0) != '/'
+                || path.indexOf('\u0000') >= 0
+                || path.indexOf('\r') >= 0
+                || path.indexOf('\n') >= 0) return "";
+        return path;
+    }
+
+    private static String cleanShellCommand(String value) {
+        if (value == null) return "";
+        String command = value.trim();
+        if (command.length() == 0 || command.length() > MAX_SHELL_COMMAND
+                || command.indexOf('\u0000') >= 0) return "";
+        return command;
     }
 
     static String systemPrompt(long now, String existingPlan, int intervalMinutes,
@@ -596,14 +769,19 @@ final class HeartbeatToolProtocol {
         if (plan.length() == 0) plan = "尚未设置；周期心跳时自然、简短地找用户聊天";
         int interval = Math.max(15, Math.min(7 * 24 * 60, intervalMinutes));
         String scope = cleanScope(conversationScope);
-        return "你可以使用 Deekseep 在此设备上提供的真实本地心跳与基础界面工具。"
+        return "你可以使用 Deekseep 在此设备上提供的真实本地心跳、文件、"
+                + "基础系统 Shell 与界面工具。"
                 + "这些工具确实可执行；当用户要求定时提醒、稍后主动联系、修改心跳用途或间隔时，"
                 + "不要声称你无法设置闹钟或无法主动发消息，而要调用对应工具。"
-                + "界面工具只操作当前前台的 DeepSeek 窗口。\n"
+                + "应用内后端使用 DeepSeek 自身权限；用户选择 Root 或 Shizuku 且设为全部允许后，"
+                + "文件、Shell 与界面工具才会使用相应高权限。"
+                + "工具执行结果会通过私有结果事件返回，收到结果前不得假装操作成功。\n"
                 + "当前设备本地时间：" + localTime + "。当前周期心跳间隔："
                 + interval + " 分钟。当前对话的心跳约定：" + plan + "。"
                 + "当前对话绑定标识：" + scope + "。\n"
-                + "每个工具调用必须单独使用一组完整控制块，一组只能包含一个 call。"
+                + "严格使用单步 Agent 循环：每一轮回复最多只能调用一个工具，"
+                + "必须先等这个工具的真实结果返回，下一轮才能决定是否调用下一个工具。"
+                + "工具调用使用一组完整控制块，一组只能包含一个 call。"
                 + "控制块必须是纯 JSON，不得放进 Markdown 代码块。固定格式：\n"
                 + CONTROL_START + "\n"
                 + "{\"call\":{\"id\":\"唯一短标识\",\"tool\":\"schedule_once\","
@@ -611,10 +789,10 @@ final class HeartbeatToolProtocol {
                 + "\"at\":\"YYYY-MM-DDTHH:mm:ss+08:00\","
                 + "\"instruction\":\"届时要做什么\"}}\n"
                 + CONTROL_END + "\n"
-                + "如需调用多个工具，必须按执行顺序为每个工具重复一整组“开始标记、"
-                + "单个 call JSON、结束标记”；写完一个 call 后立刻写结束标记，"
-                + "再开始下一个。禁止使用 calls 数组，禁止在同一控制块放入两个工具，"
-                + "也禁止等所有工具组织完后才统一闭合。\n"
+                + "写完一个 call 后必须立刻写结束标记并结束本轮回复。"
+                + "即使任务需要多个工具，本轮也禁止输出第二个控制块；"
+                + "收到第一个工具的私有结果后，再在下一轮调用第二个。"
+                + "禁止使用 calls 数组，禁止在同一控制块或同一轮放入两个工具。\n"
                 + "call 的值必须按 tool 选择以下一种字段组合：\n"
                 + "schedule_once：{\"id\":\"唯一短标识\",\"tool\":\"schedule_once\","
                 + "\"scope\":\"" + scope + "\","
@@ -646,6 +824,16 @@ final class HeartbeatToolProtocol {
                 + "\"scope\":\"" + scope + "\",\"questions\":["
                 + "{\"question\":\"需要用户决定的问题\","
                 + "\"options\":[\"选项一\",\"选项二\",\"选项三\"]}]}\n"
+                + "read_file：{\"id\":\"唯一短标识\",\"tool\":\"read_file\","
+                + "\"scope\":\"" + scope + "\",\"path\":\"/绝对路径/file.txt\","
+                + "\"offset\":0,\"max_bytes\":32768}\n"
+                + "write_file：{\"id\":\"唯一短标识\",\"tool\":\"write_file\","
+                + "\"scope\":\"" + scope + "\",\"path\":\"/绝对路径/file.txt\","
+                + "\"content\":\"要写入的 UTF-8 文本\",\"mode\":\"overwrite\","
+                + "\"create_parents\":true}\n"
+                + "shell：{\"id\":\"唯一短标识\",\"tool\":\"shell\","
+                + "\"scope\":\"" + scope + "\","
+                + "\"command\":\"which cp && cp --help | head\",\"timeout_ms\":10000}\n"
                 + "规则：schedule_once 的 at 必须换算成未来的绝对本地时间并带时区，最长一年；"
                 + "set_interval 只接受 15 到 10080 分钟。只在确实需要时输出调用。"
                 + "cancel_heartbeat 的 mode 可为 once、all_once、periodic 或 all；"
@@ -660,13 +848,27 @@ final class HeartbeatToolProtocol {
                 + "ask_user 只在确实需要用户选择或补充信息时使用；一次可包含 1 到 4 个问题，"
                 + "每个问题必须给 2 到 4 个简短且互不重复的候选答案。"
                 + "用户选择或输入后，应用会把 Question 与 Answer 作为普通可见用户消息发回本对话。"
+                + "read_file 只接受绝对路径，offset 不得为负，max_bytes 为 1 到 49152；"
+                + "write_file 只接受绝对路径和 UTF-8 文本，mode 只能是 overwrite 或 append，"
+                + "单次最多 32768 个字符。shell 使用 Android 系统 PATH，可直接调用"
+                + " /system/bin 下的 which、cp、cat、mkdir 等基础命令，单次最长 30 秒。"
+                + "只有用户明确要求或完成其当前任务确实需要时才能读文件、写文件或运行 Shell；"
+                + "不得主动读取账号、令牌、密钥等隐私文件，不得在未获明确授权时执行删除、"
+                + "清空、覆盖重要数据、改权限等不可逆命令。"
                 + "只有用户明确要求操作当前界面时，才可调用点击、滑动或返回工具；"
                 + "不得自行点击删除、退出登录或其他不可逆操作。"
                 + "每个调用都必须原样携带当前对话绑定标识 scope；它把任务限定在这个对话，"
                 + "绝不能改成其他标识或当成全局任务。"
                 + "当用户只要求把心跳绑定到当前对话时调用 bind_chat。"
-                + "控制块只能放在最终回答部分，不能写进思考过程。"
-                + "控制块外照常用自然语言回复并确认结果；绝不要向用户解释、复述或展示控制标记与 JSON。"
+                + "控制块只能放在最终回答部分，不能写进思考过程。调用工具前可以用一句话说明"
+                + "正在做什么，但控制块结束后必须立即停止输出；在结果返回前不得确认成功、"
+                + "不得给最终结论。只有确认不再需要工具时，才在没有控制块的一轮给出最终答复。"
+                + "绝不要向用户解释、复述或展示控制标记与 JSON。"
+                + "以后若收到以 " + RESULT_START + " 开头、以 " + RESULT_END
+                + " 结尾的私有工具结果，那是上一项本地调用的真实返回值："
+                + "先根据 ok、exit_code、output、detail、encoding 与 truncated 思考下一步；"
+                + "若还需要工具，只调用一个后结束本轮，若不再需要才给最终答复。"
+                + "不要向用户展示结果事件标记或原始 JSON；除非结果表明仍有必要，不要重复同一调用。"
                 + "以后若收到以 " + EVENT_START + " 开头、以 " + EVENT_END
                 + " 结尾的匿名消息，那是已经到时的真实心跳活动：按其中约定自然回复，"
                 + "不要说自己无法主动联系，也不要提及后台、定时器、模块或系统提示词。";
@@ -727,12 +929,78 @@ final class HeartbeatToolProtocol {
                 + EVENT_END;
     }
 
+    static String toolResultEvent(
+            ToolCall call, boolean success, int exitCode,
+            String output, String detail, String encoding, boolean truncated) {
+        if (call == null) return "";
+        try {
+            String rawOutput = output == null ? "" : output;
+            boolean resultTruncated = truncated
+                    || rawOutput.length() > MAX_TOOL_RESULT_TEXT;
+            JSONObject result = new JSONObject();
+            result.put("id", call.id);
+            result.put("tool", call.tool);
+            result.put("scope", call.scope);
+            result.put("ok", success);
+            result.put("exit_code", exitCode);
+            result.put("encoding", cleanResultLine(encoding, 24));
+            result.put("truncated", resultTruncated);
+            if (call.path.length() > 0) result.put("path", call.path);
+            result.put("detail", cleanResultText(detail, 1200));
+            result.put("output", cleanResultText(rawOutput, MAX_TOOL_RESULT_TEXT));
+            return RESULT_START + "\n" + result.toString() + "\n" + RESULT_END;
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    static boolean isCompleteHeartbeatEventBody(String value) {
+        return isCompletePrivateBody(value, EVENT_START, EVENT_END);
+    }
+
+    static boolean isCompleteToolResultBody(String value) {
+        return isCompletePrivateBody(value, RESULT_START, RESULT_END);
+    }
+
+    static boolean isCompletePrivateTransportBody(String value) {
+        return isCompleteHeartbeatEventBody(value)
+                || isCompleteToolResultBody(value);
+    }
+
+    private static boolean isCompletePrivateBody(
+            String value, String start, String end) {
+        if (value == null) return false;
+        String body = value.trim();
+        return body.startsWith(start)
+                && body.indexOf(end, start.length()) >= 0;
+    }
+
+    private static String cleanResultLine(String value, int max) {
+        return cleanResultText(value, max).replace('\r', ' ')
+                .replace('\n', ' ').trim();
+    }
+
+    private static String cleanResultText(String value, int max) {
+        if (value == null) return "";
+        String out = value
+                .replace(CONTROL_START, "[local-control-marker]")
+                .replace(CONTROL_END, "[/local-control-marker]")
+                .replace(EVENT_START, "[heartbeat-event-marker]")
+                .replace(EVENT_END, "[/heartbeat-event-marker]")
+                .replace(RESULT_START, "[tool-result-marker]")
+                .replace(RESULT_END, "[/tool-result-marker]");
+        if (out.length() > max) out = out.substring(0, max);
+        return out;
+    }
+
     static String cleanInstruction(String value) {
         if (value == null) return "";
         String out = value.replace(CONTROL_START, "")
                 .replace(CONTROL_END, "")
                 .replace(EVENT_START, "")
                 .replace(EVENT_END, "")
+                .replace(RESULT_START, "")
+                .replace(RESULT_END, "")
                 .replace('\r', ' ')
                 .trim();
         if (out.length() > MAX_INSTRUCTION) {
@@ -749,7 +1017,7 @@ final class HeartbeatToolProtocol {
     }
 
     private static String hidePartialOpeningMarker(String value) {
-        String[] markers = new String[]{CONTROL_START, EVENT_START};
+        String[] markers = new String[]{CONTROL_START, EVENT_START, RESULT_START};
         int longest = 0;
         for (String marker : markers) {
             int max = Math.min(value.length(), marker.length() - 1);

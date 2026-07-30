@@ -3,6 +3,7 @@ package com.dsmod.probe;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -88,10 +89,11 @@ final class AgentSettingsUi {
         TextView note = text(activity,
                 UiLanguage.text(activity,
                         "Agent 工具只作用于发起调用的当前对话。问答结果会作为可见消息发送；"
-                                + "屏幕操作默认仅限 DeepSeek，连接 Root 或 Shizuku 后才可作用于系统前台界面。",
+                                + "文件、Shell 与屏幕操作默认使用 DeepSeek 自身权限，"
+                                + "连接 Root 或 Shizuku 后可使用所选高权限后端。",
                         "Agent tools stay scoped to the chat that invoked them. Question answers "
-                                + "are sent visibly. Screen actions are limited to DeepSeek until "
-                                + "Root or Shizuku is connected."),
+                                + "are sent visibly. Files, shell, and screen actions use DeepSeek's "
+                                + "own identity until Root or Shizuku is connected."),
                 13, subColor, false);
         note.setLineSpacing(dp(activity, 2), 1f);
         note.setPadding(dp(activity, 16), dp(activity, 15),
@@ -171,6 +173,10 @@ final class AgentSettingsUi {
                                         backendStatus.setText(status.detail);
                                     } else {
                                         backendStatus.setText(status.detail);
+                                        if (AgentToolConfig.BACKEND_SHIZUKU
+                                                .equals(requested)) {
+                                            openShizukuManager(activity);
+                                        }
                                     }
                                 }
                             });
@@ -254,11 +260,11 @@ final class AgentSettingsUi {
 
         TextView footer = text(activity,
                 UiLanguage.text(activity,
-                        "当前为 1.7.4 实验分支。高权限后端只接受固定的点击、滑动、"
-                                + "返回和截图动作，不向模型开放任意 shell。",
-                        "This is the experimental 1.7.4 branch. Privileged backends only accept "
-                                + "fixed tap, swipe, back, and capture actions; arbitrary shell "
-                                + "is never exposed to the model."),
+                        "当前为 1.7.4 实验分支。文件内容和 Shell 输出会作为隐藏工具结果"
+                                + "返回当前对话；请选择合适的后端，并只开启你需要的工具。",
+                        "This is the experimental 1.7.4 branch. File content and shell output "
+                                + "return to the current chat as hidden tool results. Choose the "
+                                + "appropriate backend and only enable tools you need."),
                 12, subColor, false);
         footer.setGravity(Gravity.CENTER);
         footer.setPadding(dp(activity, 14), dp(activity, 22),
@@ -311,15 +317,15 @@ final class AgentSettingsUi {
                 AgentToolConfig.PERMISSION_EXECUTE,
                 UiLanguage.text(activity, "允许执行", "Allow execution"),
                 UiLanguage.text(activity,
-                        "界面动作仅在 DeepSeek 内执行",
-                        "UI actions stay inside DeepSeek"),
+                        "全部工具仅使用 DeepSeek 自身权限",
+                        "All tools use DeepSeek's own identity"),
                 textColor, subColor, label, description);
         addPermissionOption(activity, panel, popup,
                 AgentToolConfig.PERMISSION_ALL,
                 UiLanguage.text(activity, "全部允许", "Allow all"),
                 UiLanguage.text(activity,
-                        "允许已连接后端操作系统前台界面",
-                        "Allow the connected backend to control the foreground UI"),
+                        "允许已连接后端访问文件、Shell 与前台界面",
+                        "Allow the backend to access files, shell, and foreground UI"),
                 textColor, subColor, label, description);
         panel.measure(
                 View.MeasureSpec.makeMeasureSpec(
@@ -425,12 +431,29 @@ final class AgentSettingsUi {
         }
         if (AgentToolConfig.BACKEND_SHIZUKU.equals(backend)) {
             return UiLanguage.text(context,
-                    "已选择 Shizuku；需先在 Shizuku 中启动服务并允许 DeepSeek",
-                    "Shizuku selected; start its service and allow DeepSeek first");
+                    "已选择 Shizuku；连接时若服务未启动，会尝试通过 Root 自动启动",
+                    "Shizuku selected; Root will try to start its service when needed");
         }
         return UiLanguage.text(context,
                 "应用内模式无需额外权限，只操作当前 DeepSeek 窗口",
                 "In-app mode needs no extra permission and only controls DeepSeek");
+    }
+
+    private static void openShizukuManager(Activity activity) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LAUNCHER)
+                    .setClassName(
+                            "moe.shizuku.privileged.api",
+                            "moe.shizuku.manager.MainActivity")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(intent);
+        } catch (Throwable error) {
+            Toast.makeText(activity, UiLanguage.text(activity,
+                    "无法打开 Shizuku，请确认已经安装",
+                    "Could not open Shizuku; make sure it is installed"),
+                    Toast.LENGTH_SHORT).show();
+        }
     }
 
     private static String permissionLabel(Context context, String value) {
@@ -442,11 +465,12 @@ final class AgentSettingsUi {
     private static String permissionDescription(Context context, String value) {
         return AgentToolConfig.PERMISSION_EXECUTE.equals(value)
                 ? UiLanguage.text(context,
-                "只在 DeepSeek 应用内执行点击、滑动、返回和截图",
-                "Tap, swipe, back, and capture only inside DeepSeek")
+                "文件、Shell 与界面动作只使用 DeepSeek 应用自身权限",
+                "Files, shell, and UI actions only use DeepSeek's app identity")
                 : UiLanguage.text(context,
-                "允许所选 Root/Shizuku 后端操作当前系统前台界面",
-                "Allow the selected Root/Shizuku backend to control the foreground UI");
+                "允许所选 Root/Shizuku 后端访问文件、执行 Shell 和操作前台界面",
+                "Allow the selected Root/Shizuku backend to access files, run shell, "
+                        + "and control the foreground UI");
     }
 
     private static void sectionTitle(
