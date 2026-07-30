@@ -1,21 +1,23 @@
-# Stable API 102
+# Canonical API 102 Compile Target
 
-This is the recommended Deekseep project for a current LSPosed installation.
+This project contains the canonical channel feature source and the modern API
+102 compile target. It remains part of build and regression validation, but its
+APK is no longer a public release choice.
 
-Current release: **1.7.2**.
+Current release: **1.7.3**.
 
 - Package: `com.dsmod.probe`
 - Interface: libxposed API 102
 - Metadata: `META-INF/xposed/`
 - Output: `ds-probe.apk`
-- Public asset: `deekseep-stable-api102-v1.7.2.apk`
+- Internal output: `ds-probe-api102.apk`
+- Public package: built by `../module-universal/`
 
 It contains the broadest maintained stable feature set, including the advanced
 chat editor with live refresh, persistent blank local conversations, direct
 user/AI row appending, gallery image persistence and existing-image reuse,
-the current-source chat wallpaper and multi-sticker layout editor with
-crop focus, background-only depth, and curved unified/per-screen
-sidebar/settings motion,
+the current-source chat wallpaper and multi-sticker editor with scaling,
+horizontal/vertical framing, rotation, opacity, and offline sticker cutout,
 1.7.1 reasoning creation, repair and duration support,
 reasoning-aware native chat search, local data tools, sidebar multi-select, and
 the current expert image relay port. It also includes independent opt-in switches
@@ -39,8 +41,10 @@ Anthropic message/thinking events begin only after native upstream collection st
 Responses additionally tracks Codex thread/session metadata, emits current `phase`, `end_turn`,
 and custom-tool status fields, and keeps encrypted transport items out of model context.
 
-The traditional 1.7.2 APK compiles this same canonical feature core through
-`module-legacy/compat`; the former test editions are no longer published.
+The 1.7.3 universal APK compiles this same canonical feature core through
+`module-legacy/compat` and supports API 82 / 100 / 101 / 102. Dedicated API
+102, Legacy, test, and diagnostic APKs are no longer published as current
+release assets.
 
 ```bash
 cd module

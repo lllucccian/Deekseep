@@ -15,6 +15,32 @@ All notable public releases are documented here.
 - Added real in-app project screenshots, a 1280 × 640 social preview SVG, and
   a manual GitHub repository setup guide.
 
+## 1.7.3 - 2026-07-30
+
+### Unified multi-API release
+
+- Replaced separate API 102 and Legacy downloads with one API 82 / 100 / 101 /
+  102 universal APK per DeepSeek channel. The release now has exactly two APKs:
+  Mainland and Google Play.
+- Added Mainland DeepSeek 2.3.0 (`versionCode 237`) runtime mapping while
+  retaining Mainland 2.2.2 (`233`) compatibility.
+- Kept the Google Play package limited to its verified DeepSeek 2.2.2
+  (`versionCode 236`) mapping; newer Google Play builds remain unsupported.
+- Added chat wallpaper and sticker customization with scaling,
+  horizontal/vertical framing, rotation, opacity, display-range controls, and
+  offline one-tap sticker cutout with manual cleanup.
+- Added temporary Pinggy public URLs and custom Cloudflare Tunnel
+  hostname/connector controls to the DeepSeek Local API.
+- Improved target-process activation verification to prevent an injected module
+  from remaining indefinitely at **Pending verification**.
+- Hardened response preservation across final-state replacement, history
+  refresh, and cold restart paths.
+- Added conversation-bound scheduled reminders and proactive heartbeat
+  delivery with in-chat persistence and background notifications.
+- Removed unused Cloudflared CPU payloads from the release package and retained
+  the arm64 component used by the supported target devices.
+- Updated several Easter eggs.
+
 ## 1.7.2 - 2026-07-22
 
 ### Unified channel release

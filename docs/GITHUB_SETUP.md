@@ -14,7 +14,7 @@ This document lists repository-page changes that the owner can make manually aft
 - Projects: enabled
 - Wiki: enabled
 - Current topics: `android`, `deepseek`, `libxposed`, `lsposed`, `termux`, `xposed`
-- Latest stable Release at the time of this audit: `v1.7.2`
+- Latest stable Release at the time of this audit: `v1.7.3`
 
 ## 1. Repository name
 

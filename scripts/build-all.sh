@@ -52,10 +52,8 @@ if [ -z "$CERT_API102" ] || [ "$CERT_API102" != "$CERT_UNIVERSAL" ]; then
     exit 1
 fi
 
-cp "$ROOT/module/ds-probe-api102.apk" \
-    "$DIST/deekseep-api102-only-v1.7.3.apk"
 cp "$ROOT/module-universal/ds-probe-universal.apk" \
-    "$DIST/deekseep-universal-api82-100-101-102-v1.7.3.apk"
+    "$DIST/deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk"
 
 if find "$DIST" -maxdepth 1 -type f \( -name '*test*' -o -name '*probe*' \) | grep -q .; then
     echo "Refusing to publish retired test/diagnostic APKs in the 1.7.3 release" >&2
@@ -70,8 +68,8 @@ for manifest in "$ROOT/module/AndroidManifest.xml" \
     fi
 done
 
-API102_APK="$DIST/deekseep-api102-only-v1.7.3.apk"
-UNIVERSAL_APK="$DIST/deekseep-universal-api82-100-101-102-v1.7.3.apk"
+API102_APK="$ROOT/module/ds-probe-api102.apk"
+UNIVERSAL_APK="$DIST/deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk"
 unzip -l "$API102_APK" | grep -q 'META-INF/xposed/java_init.list'
 unzip -l "$API102_APK" | grep -q 'META-INF/xposed/module.prop'
 if unzip -l "$API102_APK" | grep -q 'assets/xposed_init'; then
@@ -93,4 +91,4 @@ grep -q 'android:name="xposedminversion" android:value="82"' \
 
 (cd "$DIST" && sha256sum *.apk > SHA256SUMS.txt)
 echo
-echo "API 102-only and API 82/100/101/102 universal APKs are in $DIST"
+echo "The API 82/100/101/102 universal release APK is in $DIST"

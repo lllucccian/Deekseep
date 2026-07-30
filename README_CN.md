@@ -7,7 +7,7 @@
 [![最新版本](https://img.shields.io/github/v/release/lllucccian/Deekseep?display_name=tag&sort=semver)](https://github.com/lllucccian/Deekseep/releases/latest)
 [![GitHub 下载量](https://img.shields.io/github/downloads/lllucccian/Deekseep/total?label=Downloads)](https://github.com/lllucccian/Deekseep/releases)
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3ddc84)](#环境要求)
-[![libxposed API 102](https://img.shields.io/badge/libxposed-API%20102-2f6feb)](#环境要求)
+[![Xposed API 82–102](https://img.shields.io/badge/Xposed_API-82%20%7C%20100%20%7C%20101%20%7C%20102-2f6feb)](#环境要求)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > [!NOTE]
@@ -16,20 +16,23 @@
 ## 兼容情况速览
 
 > [!TIP]
-> Deekseep LSPosed 1.7.2 按具体 App 构建适配，请根据中国大陆版或 Google Play 版的 `versionCode` 选择对应安装包。
+> Deekseep LSPosed 1.7.3 只有两个 APK：国内版和 Google Play 版各一个，二者均为多 API 通用版。
 
-- 中国大陆官方版：DeepSeek 2.2.2（`versionCode 233`），支持稳定 API 102 版和 Legacy 版。
-- Google Play 版：DeepSeek 2.2.2（`versionCode 236`），只支持单独标注的 Google Play API 102 安装包。
+- 中国大陆官方版：支持 DeepSeek 2.2.2（`versionCode 233`）和 2.3.0（`versionCode 237`）。
+- Google Play 版：只支持 DeepSeek 2.2.2（`versionCode 236`），暂不兼容最新版 Google Play DeepSeek。
 - Android：7.0 及以上（API 24+）。
-- 推荐框架：支持 libxposed API 102 的当前版 LSPosed。
-- 传统接口兼容：中国大陆版可使用传统 Xposed API 82+ 的 Legacy 安装包。
+- Xposed 接口：同一个通用 APK 兼容 API 82 / 100 / 101 / 102。
 - 模块作用域：只勾选 `com.deepseek.chat`。
 
 ## 推荐下载
 
-### [下载 Deekseep LSPosed 1.7.2——推荐稳定 API 102 版](https://github.com/lllucccian/Deekseep/releases/download/v1.7.2/deekseep-stable-api102-v1.7.2.apk)
+### [中国大陆版——下载 Deekseep 1.7.3 多 API 通用版](https://github.com/lllucccian/Deekseep/releases/download/v1.7.3/deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk)
 
-这个默认推荐包适用于中国大陆版 DeepSeek 2.2.2（`233`）和当前版 LSPosed。Google Play 用户必须前往 [1.7.2 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.2) 下载 `deekseep-google-play-2.2.2-v1.7.2.apk`。安装前务必核对 DeepSeek 的 `versionCode`。
+适用于中国大陆 DeepSeek 2.2.2（`233`）和 2.3.0（`237`）。
+
+### [Google Play 版——下载 Deekseep 1.7.3 多 API 通用版](https://github.com/lllucccian/Deekseep/releases/download/v1.7.3/deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk)
+
+只适用于 Google Play DeepSeek 2.2.2（`236`）。两个渠道的 APK 不能互换；专用 API 102、Legacy、测试版和诊断版均不再是当前发布选项。
 
 ## 项目截图
 
@@ -60,7 +63,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 - 导入系统提示词，并在不改动可见输入框的情况下写入发送请求。
 - 编辑本地会话标题、用户消息、模型回复、思考内容、思考时间和消息图片；支持新建本地会话，并搜索问题、回复和思考文本。
-- 当前受支持的源码构建均可导入图片作为聊天背景或贴纸；背景支持裁剪取景、旋转、不透明度、可选景深，以及统一或分界面位移。动态效果采用先快后慢的缓出曲线：打开侧栏时随主界面向右、进入设置时向左，并在关闭或返回时平滑复位；高级选项可绑定聊天、侧栏或设置界面。贴纸会保留在聊天与设置页，并可拖动及调整大小、旋转、层级和不透明度。
+- 支持导入图片作为聊天背景或贴纸；背景可连续缩放或输入精确倍率，并支持横向/纵向取景、旋转、不透明度、显示范围、裁剪/完整显示/拉伸，以及聊天、侧栏和设置页绑定。贴纸可拖动并调整大小、旋转、层级和不透明度；一键离线抠图可以保存透明贴纸，效果不理想时还可手动擦除。
 - 将聊天导出为 Markdown，查看本地统计，手动或按保留数量自动备份数据库，并可选启用聊天批量选择与删除。
 - 在已知的客户端 `CONTENT_FILTER` 替换事件发生时保留设备已经收到的文本；无法恢复服务器从未下发的内容。
 
@@ -77,12 +80,14 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 ### 开发者与 API 工具
 
 - 可选启动带独立 Gateway Key 的本机/可信局域网服务，通过 DeepSeek 原生传输提供 OpenAI Chat Completions/Responses 或 Anthropic Messages 兼容接口。
-- 支持流式输出、工具结果续写、Codex 和 Claude Code 工具循环、深度思考参数、原生联网搜索与实时请求诊断；高级设置可固定监听端口，并用自有 Cloudflare Tunnel 令牌连接一个或多个已配置域名。本地 API 位于可选的“实验性功能”页中，默认关闭。
+- 支持流式输出、工具结果续写、Codex 和 Claude Code 工具循环、深度思考参数、原生联网搜索与实时请求诊断；高级设置可申请 Pinggy 临时公网网址、固定监听端口，或用自有 Cloudflare Tunnel 令牌连接已配置域名。本地 API 位于可选的“实验性功能”页中，默认关闭。
 
 ### 界面与兼容增强
 
 - 在 DeepSeek 设置中显示 Deekseep LSPosed 入口，支持中英文自动检测和手动选择。
-- 根据环境选择现代 libxposed API 102、传统 Xposed 兼容版或针对 Google Play 的精确映射版。
+- 为匹配的国内版或 Google Play 宿主使用同一个 API 82 / 100 / 101 / 102 通用接口包。
+- 改进目标进程激活校验，解决模块已启用却长期显示“待验证”的问题。
+- 更新了一些彩蛋。
 
 详细行为与限制见[功能说明](docs/FEATURES.md)和[实验性功能说明](docs/EXPERIMENTAL_FEATURES.md)。
 
@@ -91,7 +96,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 - Android 7.0 / API 24 或更高版本。
 - 安装上方兼容列表中精确匹配渠道和版本的官方 DeepSeek Android App。
 - 能加载模块的 LSPosed/Xposed 环境，以及该环境本身所要求的 Root 或框架配置。
-- 默认推荐包需要支持 libxposed API 102 的当前 LSPosed；中国大陆 Legacy 包需要传统 Xposed API 82+ 环境。
+- 使用 API 82、100、101 或 102 的兼容 Xposed 环境。
 - LSPosed/Xposed 作用域设置为 `com.deepseek.chat`。
 - 使用数据库、账号、删除或实验性工具前，先备份重要聊天记录。
 
@@ -99,51 +104,44 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 ## 安装步骤
 
-1. 在 Android 应用信息中确认 DeepSeek 的渠道、版本 `2.2.2` 和 `versionCode`（中国大陆版为 `233`，Google Play 版为 `236`）。
+1. 在 Android 应用信息中确认 DeepSeek 渠道和 `versionCode`：国内版 `233`/`237`，或 Google Play `236`。
 2. 备份重要的 DeepSeek 聊天记录和本地文件。
-3. 只下载一个与环境匹配的 Deekseep LSPosed APK：中国大陆 `233` + 当前 LSPosed 使用默认推荐 API 102 包；Google Play `236` 使用专用包；只有传统 Xposed 兼容环境才使用 Legacy 包。
+3. 只下载一个匹配渠道的 1.7.3 多 API 通用 APK：国内版用于 `233`/`237`，Google Play 版用于 `236`。
 4. 安装模块 APK，并在 LSPosed/Xposed 管理器中启用。
-5. 作用域只勾选 `com.deepseek.chat`；现代版不需要勾选模块自身应用。
+5. 作用域只勾选 `com.deepseek.chat`，不要勾选模块自身应用。
 6. 强制停止 DeepSeek 后重新打开。通常不需要重启整台设备；只有框架在目标 App 重启后仍未重新加载模块时再重启设备。
 7. 阅读简短的首次使用说明并点击“我知道了”，然后进入 DeepSeek 设置，打开 Deekseep LSPosed 注入的 Deekseep 入口。
 
-现代版和 Legacy 版共用包名 `com.dsmod.probe`，但开发签名不同。切换接口时应先停用并卸载旧模块 APK，再安装另一个版本；这不会卸载 DeepSeek。更多细节见[安装指南](docs/INSTALLATION.md)。
+如果 Android 因旧版或不同签名而拒绝覆盖安装，请先停用并只卸载旧模块 APK，再安装 1.7.3；这不会卸载 DeepSeek。更多细节见[安装指南](docs/INSTALLATION.md)。
 
-## 安装包类型
+## 当前发布文件
 
-首页默认只推荐中国大陆 `233` 的稳定 API 102 版。其他当前或历史包折叠在下方，避免普通用户误装。
+1.7.3 Release 只提供以下两个可安装 APK：
 
-<details>
-<summary>当前、Legacy、测试与诊断安装包</summary>
+| APK | DeepSeek 目标 | Xposed 接口 |
+|---|---|---|
+| `deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk` | 国内版 2.2.2（`233`）和 2.3.0（`237`） | API 82 / 100 / 101 / 102 |
+| `deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk` | 仅 Google Play 2.2.2（`236`） | API 82 / 100 / 101 / 102 |
 
-| APK 或源码类型 | 适用场景 | Xposed 接口 | 支持状态与日志 |
-|---|---|---|---|
-| `deekseep-stable-api102-v1.7.2.apk` | 中国大陆 DeepSeek 2.2.2（`233`）+ 当前 LSPosed | libxposed API 102 | 当前稳定版，也是中国大陆普通用户的推荐包；可选诊断默认关闭。 |
-| `deekseep-google-play-2.2.2-v1.7.2.apk` | Google Play DeepSeek 2.2.2（`236`） | libxposed API 102 | 当前按精确 App 构建适配的 Google Play 包；可选诊断默认关闭。 |
-| `deekseep-stable-legacy-v1.7.2.apk` | 中国大陆 DeepSeek 2.2.2（`233`）+ FPA/较旧兼容框架 | 传统 Xposed API 82+ | 当前稳定兼容版；当前 LSPosed 普通用户不应默认选择；可选诊断默认关闭。 |
-| `deekseep-test-api102-v1.7.apk` | 历史 Compose/消息菜单实验 | libxposed API 102 | 1.7.0 后已停止维护和发布，不推荐使用；精确宿主兼容性及额外日志情况待确认。 |
-| `deekseep-test-legacy-v1.7.apk` | 面向传统 Xposed/FPA 的历史实验 | 传统 Xposed API 82+ | 1.7.0 后已停止维护和发布，不推荐使用；精确宿主兼容性及额外日志情况待确认。 |
-| `deekseep-api102-load-probe-v0.1.apk` | 检查 API 102 是否能为 `com.deepseek.chat` 加载 | libxposed API 102 | 历史诊断探针，只报告加载并可能写入标记，不包含正常模块功能。 |
-
-这些历史包仍保留在 [1.7.0 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.0) 供核对。自 1.7.1 起，稳定 Release 不再包含测试版和诊断版。不要为同一个 DeepSeek 进程同时启用多个 Deekseep LSPosed 版本。
-
-</details>
+[1.7.3 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.3) 还提供两个渠道的源码快照和 `SHA256SUMS.txt`。当前版本已经舍弃专用 API 102 和旧式单接口 APK；不要为同一个 DeepSeek 进程同时启用多个 Deekseep 版本。
 
 ## 兼容性表格
 
 | App 渠道 | App 版本 | versionCode | 状态 | 说明 |
 |---|---:|---:|---|---|
-| 中国大陆官方版 | 2.2.2 | 233 | ✅ 支持 | 当前 LSPosed 使用稳定 API 102；传统 Xposed API 82+ 使用 Legacy。 |
-| Google Play 版 | 2.2.2 | 236 | ✅ 支持 | 只能使用单独标注的 Google Play API 102 APK。 |
+| 中国大陆官方版 | 2.2.2 | 233 | ✅ 支持 | 使用国内版多 API 通用 APK。 |
+| 中国大陆官方版 | 2.3.0 | 237 | ✅ 支持 | 使用国内版多 API 通用 APK。 |
+| Google Play 版 | 2.2.2 | 236 | ✅ 支持 | 使用 Google Play 多 API 通用 APK。 |
+| 更新的 Google Play 版 | 最新版 | 其他 | ❌ 不支持 | 等待明确完成映射的 GP 版本。 |
 | 更旧或其他 DeepSeek 构建 | 待确认 | Unknown | 🧪 未测试 | Hook 依赖具体构建的混淆符号，不能假定兼容。 |
 
 ## 常见问题
 
 - Deekseep LSPosed 入口不显示：核对 App 渠道与版本，安装对应 APK，只启用一个模块版本，作用域勾选 `com.deepseek.chat`，强制停止 DeepSeek 后重新进入设置首页。
-- 模块已启用但 Hook 不生效：检查模块启动页的激活状态和框架接口。现代 LSPosed 使用 API 102，不要把模块自身加入作用域；同时停用可能修改同一界面或请求路径的其他模块。
+- 模块已启用但 Hook 不生效：确认渠道 APK 和 DeepSeek 版本匹配，再检查启动页激活状态与作用域；不要把模块自身加入作用域，同时停用可能修改同一界面或请求路径的其他模块。
 - DeepSeek 版本不兼容：先停用 Deekseep LSPosed，确认原 App 能正常运行。只使用文档明确支持的 versionCode；App 更新后可能需要重新映射。
-- LSPosed API 不兼容：当前 LSPosed 使用 API 102 包；中国大陆 Legacy 包只面向传统 Xposed API 82+/兼容 FPA，不能两个一起装。
-- Google Play 版无法使用：确认 DeepSeek 恰好是 2.2.2（`236`），且模块文件名包含 `google-play-2.2.2`；不能用中国大陆 `233` 的 APK 替代。
+- Xposed API 不兼容：安装 1.7.3 多 API 通用包，不要继续使用已经舍弃的专用 API 102 或 Legacy 包。
+- Google Play 版无法使用：确认 DeepSeek 恰好是 2.2.2（`236`），并使用文件名包含 `google-play-universal` 的 APK；不能用国内版 APK 替代。
 - DeepSeek 更新后功能失效：停用模块并重启 DeepSeek，然后报告新的渠道、`versionName` 和 `versionCode`。本项目不自动保证未来版本兼容。
 - 多账号功能异常：先备份当前账号数据，每次只测试一次添加或导入，并在验证成功前保留原活动账号。不要公开上传导出的账号 JSON。
 - 图片功能异常：确认系统图片选择器能读取文件，并先测试单张图片。专家图片中继属于实验功能，可能受服务器权限、模型路由、PoW 或宿主内部变化影响。
@@ -164,7 +162,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 仓库中的本地 API 实现计划目前记录了以下状态：
 
-- 已完成：OpenAI 与 Anthropic 双格式、国内版两个稳定接口、Google Play 2.2.2 精确映射，以及带门槛的实验性功能页。
+- 已完成：OpenAI 与 Anthropic 双格式、多 API 通用发布、国内版 2.2.2/2.3.0 兼容、Google Play 2.2.2 精确映射，以及带门槛的实验性功能页。
 - 计划中：socket 到宿主 Flow 的明确取消确认、API 图片输入、Responses 状态持久化和幂等键、脱敏诊断包，以及更广的 Anthropic/Claude Code 回归测试。
 - 未排期：其他 DeepSeek 版本适配。每次 App 更新都需要重新确认兼容性，并可能需要新的符号映射。
 
