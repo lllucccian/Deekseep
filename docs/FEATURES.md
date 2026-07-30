@@ -132,7 +132,7 @@ Saved sessions receive a high local cache version to keep a stale server copy
 from immediately overwriting the local edit. This is intentionally invasive:
 create a database backup before editing.
 
-Both stable 1.7.1 builds provide the same refreshed editor, conversation
+Both current 1.7.3 channel builds provide the same refreshed editor, conversation
 creation, gallery/image manager, reasoning writer, and malformed-`THINK`
 migration. See
 [Chat Editor Thinking Fix](CHAT_EDITOR_THINKING_FIX.md).

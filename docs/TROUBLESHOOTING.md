@@ -130,7 +130,7 @@ is explicitly deleted; do not hand-edit them.
 
 ## Added Reasoning and the Answer Both Disappeared
 
-Install the stable 1.7.1 APK matching your framework, ensure it is the only active
+Install the matching 1.7.3 multi-API channel APK, ensure it is the only active
 Deekseep hook, and force-stop/restart DeepSeek. Both stable interfaces run
 the startup migration, which should report a positive
 `repairMalformedThinkFragments fixed=N` once and zero later.
