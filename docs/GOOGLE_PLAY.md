@@ -32,7 +32,7 @@ symbols; source equality alone is not treated as a mapping proof.
 | Response preservation | Clear-response, content-filter, status, final merge/apply, online history and cold-history protection use the Play mappings. |
 | Expert mode and image relay | Expert features, native upload, temporary vision description, prompt rewrite and image-metadata restoration are synchronized. |
 | Local API and public tunnels | OpenAI Chat/Responses, Anthropic Messages, tool loops, background keeper, Binder bridge, JSch/Pinggy and the arm64 cloudflared backend are synchronized. |
-| Chat appearance | Wallpaper, stickers, crop/focus/rotation/depth, bubble/input styling, liquid-glass renderer, route glide and shake parallax are synchronized. |
+| Chat appearance | Wallpaper, stickers, scale/framing/rotation/opacity, offline cutout, and bubble/input styling are synchronized. Several Easter eggs were also updated. |
 | AI proactive messages | Interval control, chat binding, one-time tasks, cancellation tools, inherited deep-thinking state, same-chat native streaming, folded hidden transport turns, notifications and notification-to-chat navigation are synchronized. |
 
 The only intentional channel exception is the private bundled-prompt payload:

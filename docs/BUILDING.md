@@ -33,34 +33,38 @@ cd Deekseep
 bash scripts/build-all.sh
 ```
 
-The final `dist/` directory contains only the supported 1.7.1 assets:
+The final `dist/` directory contains the Google Play 1.7.3 universal release:
 
 ```text
-deekseep-stable-api102-v1.7.1.apk
-deekseep-stable-legacy-v1.7.1.apk
+deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk
 SHA256SUMS.txt
 ```
 
 The release build runs the stable protocol, account, editor and expert-relay
-regressions, verifies both manifests are version 1.7.1, checks the two Xposed
-metadata layouts, and refuses test/probe APKs in `dist/`.
+regressions, verifies the manifests are version 1.7.3, validates the internal
+API 102 compile target and universal package, and refuses test/probe or
+dedicated API 102 APKs in `dist/`.
 
 The old test and load-probe projects are intentionally not release targets.
 See [Build Variants](VARIANTS.md).
+
+This branch builds only the Google Play 2.2.2 (`236`) mapping. The Mainland
+package must be built from `main:module-universal/` because its obfuscated host
+symbols differ.
 
 ## Build One Variant
 
 ```bash
 (cd module && bash build.sh)
-(cd module-legacy && bash build.sh)
+(cd module-universal && bash build.sh)
 ```
 
 The unrenamed outputs remain in their project directories:
 
 | Project | Output |
 |---|---|
-| `module/` | `ds-probe.apk` |
-| `module-legacy/` | `ds-probe-legacy.apk` |
+| `module/` | `ds-probe-google-play.apk` (internal compile/regression artifact) |
+| `module-universal/` | `ds-probe-universal.apk` (public packaging source) |
 
 ## Termux
 
@@ -90,15 +94,15 @@ libxposed API 102 AAR. It is a compile-only dependency:
 - the final APK must not package libxposed API classes;
 - the framework supplies those classes at runtime.
 
-## Shared Stable Core and Legacy Adapter
+## Shared Stable Core and Universal Adapter
 
-`module/src/com/dsmod/probe` is the canonical 1.7.1 feature core. The legacy
-build generates its entry from the same `Main.java` and compiles the same
-feature classes through `module-legacy/compat/LegacyXposedModule.java`. This
-prevents the traditional package from drifting several releases behind the
-modern package.
+`module/src/com/dsmod/probe` is the canonical 1.7.3 Google Play feature core. The
+universal build generates its entry from the same `Main.java` and compiles the
+same feature classes through `module-legacy/compat/LegacyXposedModule.java`.
+This keeps one feature implementation while supporting API 82 / 100 / 101 /
+102 environments.
 
-The legacy project includes small declarations under
+The compatibility project includes small declarations under
 `module-legacy/src/de/robv/android/xposed/`. They expose only compile-time
 signatures. D8 packages only `com/dsmod`, so these stubs do not shadow framework
 classes at runtime. `module-legacy/src/com/dsmod/probe` is retained historical
@@ -118,7 +122,9 @@ uninstall before installing a build signed elsewhere.
 ## Regression Tests
 
 The stable build includes JVM regressions for chat editing, account credentials,
-regional login policy, expert relay, response preservation, native-session
+regional login policy, chat-appearance configuration, image cutout, and
+chat/settings route recognition, expert
+relay, response preservation, native-session
 refresh/delete behavior, and the local API protocol/tool bridge:
 
 ```bash
@@ -127,6 +133,7 @@ bash build.sh
 bash test-thinking-regression.sh
 bash test-expert-relay-regression.sh
 (cd ../module-legacy && bash test-adapter-regression.sh)
+(cd ../module-universal && bash build.sh)
 ```
 
 `test-thinking-regression.sh` runs the Java regression classes, including
@@ -157,18 +164,20 @@ checks that the modern and legacy relay gate implementations are identical.
 ## Package Verification
 
 ```bash
-apksigner verify --verbose module/ds-probe.apk
-unzip -l module/ds-probe.apk | grep 'META-INF/xposed'
-unzip -l module-legacy/ds-probe-legacy.apk | grep 'assets/xposed_init'
+apksigner verify --verbose module-universal/ds-probe-universal.apk
+unzip -l module-universal/ds-probe-universal.apk | grep 'assets/xposed_init'
 sha256sum dist/*.apk
 ```
 
-A modern APK must contain `META-INF/xposed` and a legacy APK must contain
-`assets/xposed_init`. Neither should contain compiled API stub classes.
+The universal APK must contain `assets/xposed_init`, declare minimum Xposed API
+82 metadata, and must not contain compile-only API stub classes. The internal
+API 102 artifact is verified during the root build but is not copied to
+`dist/`.
 
 ## Continuous Integration
 
 `.github/workflows/build.yml` installs Android Platform and Build Tools 35,
-builds and tests the two stable interfaces, and uploads the exact 1.7.1 `dist/`
-contents as a workflow artifact on pushes, pull requests, and manual dispatches.
-Test editions are not built or uploaded.
+builds and tests the canonical and universal channel targets, and uploads the
+1.7.3 universal-only `dist/` contents as a workflow artifact on pushes, pull
+requests, and manual dispatches. Dedicated API 102, Legacy, test, and diagnostic
+APKs are not release artifacts.

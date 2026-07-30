@@ -1,21 +1,23 @@
-# Google Play module
+# Google Play Canonical Compile Target
 
 This directory builds the Google Play DeepSeek 2.2.2 (`versionCode 236`) port
-for a current LSPosed installation.
+as the canonical feature source and internal API 102 validation target. The
+public APK is built by `../module-universal/`.
 
 Current local build: **1.7.3**.
 
 - Package: `com.dsmod.probe`
 - Interface: libxposed API 102
 - Metadata: `META-INF/xposed/`
-- Output: `ds-probe-google-play.apk`
+- Internal output: `ds-probe-google-play.apk`
+- Public asset: `deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk`
 
 It contains the broadest maintained stable feature set, including the advanced
 chat editor with live refresh, persistent blank local conversations, direct
 user/AI row appending, gallery image persistence and existing-image reuse,
-the current-source chat wallpaper and multi-sticker editor with crop focus,
-background-only depth, screen binding, and delayed curved unified/per-screen
-sidebar/settings motion mapped for Google Play 236,
+the current-source chat wallpaper and multi-sticker editor with scaling,
+horizontal/vertical framing, rotation, opacity, screen binding, and offline
+sticker cutout,
 1.7.1 reasoning creation, repair and duration support,
 reasoning-aware native chat search, local data tools, sidebar multi-select, and
 the current expert image relay port. It also includes independent opt-in switches
@@ -43,8 +45,9 @@ Anthropic message/thinking events begin only after native upstream collection st
 Responses additionally tracks Codex thread/session metadata, emits current `phase`, `end_turn`,
 and custom-tool status fields, and keeps encrypted transport items out of model context.
 
-The traditional 1.7.1 APK compiles this same canonical feature core through
-`module-legacy/compat`; the former test editions are no longer published.
+The 1.7.3 universal APK compiles this same canonical feature core through
+`module-legacy/compat` and supports API 82 / 100 / 101 / 102. Dedicated API
+102, Legacy, test, and diagnostic APKs are no longer current release assets.
 
 ```bash
 cd module

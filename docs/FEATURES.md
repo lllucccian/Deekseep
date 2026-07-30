@@ -1,6 +1,6 @@
 # Feature Reference
 
-This document describes the shared 1.7.1 stable feature core. Refer to
+This document describes the shared 1.7.3 stable feature core. Refer to
 [Build Variants](VARIANTS.md) for interface packaging.
 
 ## Settings Entry
@@ -23,29 +23,18 @@ screenshots.
 
 ## Chat Wallpaper and Stickers
 
-Current Google Play 236 source builds provide a **Chat appearance** page. One
+The maintained source builds provide a **Chat appearance** page. A
 system-gallery import can be assigned as the wallpaper or added as one of up to
-12 stickers. The wallpaper supports crop-to-fill, fit, stretch, rotation, and
-opacity. Crop-to-fill offers a nine-position focus chooser immediately after
-import plus continuous horizontal and vertical focus controls, so a landscape
-image can preserve the intended left, middle, or right region. Optional depth
-processing lightly enlarges, softens, and desaturates only the wallpaper,
-giving the unchanged native chat UI a floating foreground feel.
-
-Dynamic motion has its own master switch. With per-screen motion disabled, one
-amount controls the default centered chat, right-shifted sidebar, and
-left-shifted settings positions. Enabling it reveals separate signed offsets
-for all three screens. The exact Google Play `uo2.c()` drawer pixel offset
-updates the wallpaper target in both directions. A frame follower first moves
-quickly and then settles slightly after the native drawer, preserving the
-requested depth lag when opening, closing, dragging, or reversing. Entering and
-leaving settings uses the same curved follower instead of snapping. A
-rotation-aware overscanned canvas avoids blank edges and exposed corners.
-Advanced binding independently selects chat, conversation sidebar, and
-settings visibility.
+12 stickers. Wallpaper controls include crop-to-fill, fit, stretch, continuous
+and exact scaling, rotation, opacity, display range, and horizontal/vertical
+framing. Edge handling can clip, mirror, or extend outer pixels when the image
+does not cover the selected canvas. Advanced binding independently selects the
+chat screen, conversation sidebar, and settings graph.
 
 Each sticker stores normalized screen coordinates plus size, rotation, opacity,
-and list order, so the layout scales across window-size changes.
+and list order, so the layout scales across window-size changes. The offline
+cutout editor can create a transparent sticker automatically and provides
+manual erasing for cleanup.
 
 Selected images are validated, limited to 32 MB, and copied under DeepSeek's
 private `files/deekseep_appearance/assets` directory. The saved layout is an
@@ -57,9 +46,9 @@ At runtime a non-interactive Android View overlay is attached to
 advanced bindings decide whether their wallpaper is also visible. Sign-in and
 unrelated routes hide the overlay. The touch dispatcher always returns false,
 so typing, scrolling, message actions, and buttons continue to reach the host.
-Because this compatibility-oriented layer is drawn above the obfuscated
-Compose tree, high wallpaper opacity can reduce text readability; the editor
-provides live focus, depth, opacity, rotation, binding, and motion previews.
+Because this compatibility-oriented layer is drawn above the obfuscated Compose
+tree, high wallpaper opacity can reduce text readability; the editor provides
+live scale, framing, opacity, rotation, and binding previews.
 
 ## System Prompt Injection
 
@@ -143,7 +132,7 @@ Saved sessions receive a high local cache version to keep a stale server copy
 from immediately overwriting the local edit. This is intentionally invasive:
 create a database backup before editing.
 
-Both stable 1.7.1 builds provide the same refreshed editor, conversation
+Both current 1.7.3 channel builds provide the same refreshed editor, conversation
 creation, gallery/image manager, reasoning writer, and malformed-`THINK`
 migration. See
 [Chat Editor Thinking Fix](CHAT_EDITOR_THINKING_FIX.md).

@@ -2,68 +2,67 @@
 
 All notable public releases are documented here.
 
-## Unreleased (local only)
+## [Unreleased]
 
-- Advanced the Google Play module to **1.7.3** (`versionCode 37`) and completed a
-  mainland-versus-Play feature audit. All maintained features are synchronized
-  except the intentionally excluded private bundled-prompt payload.
-- Added AI proactive messages with configurable intervals, per-chat binding,
-  one-time scheduling and cancellation tools, inherited deep-thinking state,
-  native same-chat streaming, history folding, notifications and notification
-  navigation. The runtime path is mapped to Play 236's
-  `nc1/vp/xo/qv0`, `sn9/o6/j12`, `mq8/gq8/cc4` and
-  `yp2/aq2/vw7/cx7` symbols.
-- Synchronized current activation verification, prompt-state UI, editor/history
-  fixes, liquid-glass behavior, shake parallax, route animation, public-tunnel
-  controls and the complete language catalog.
-- Added notification/alarm/boot permissions and the proactive receiver. The
-  full JVM suite and direct JADX signature audit pass for the exact Play 236
-  target.
-- Reduced the local APK from four cloudflared ABIs to the arm64 payload used by
-  the target device; unrelated x86, x86_64 and armeabi-v7a binaries are no
-  longer packaged.
-- Synchronized the complete chat-wallpaper and multi-sticker editor to the
-  Google Play 2.2.2 (`236`) source without publishing a release.
-- Added crop focus, rotation, opacity, background-only depth, advanced screen
-  binding, and unified or per-screen chat/sidebar/settings offsets.
-- Mapped the live drawer chain as `ds5.w -> so2.a -> uo2.c()`, with
-  `c71.u()` identification and `vo2`/`fc2` anchors. Live frames exclusively
-  drive a delayed ease-out follower, so opening and closing move in the correct
-  direction and the wallpaper settles after the native surface.
-- Added route aliases, English catalog coverage, configuration regressions, and
-  Google Play-specific documentation. This local port remains pending an
-  on-device Play-host visual acceptance pass.
+### Documentation
+
+- Reworked the GitHub project documentation around a faster compatibility,
+  download, installation, screenshot, troubleshooting, and risk overview.
+- Added complete English and Simplified Chinese README files with matching
+  version, channel, framework, scope, and APK guidance.
+- Added structured GitHub Bug, compatibility, and feature Issue Forms plus a
+  detailed Pull Request template.
+- Added real in-app project screenshots, a 1280 × 640 social preview SVG, and
+  a manual GitHub repository setup guide.
+
+## 1.7.3 - 2026-07-30
+
+### Unified multi-API release
+
+- Replaced separate API 102 and Legacy downloads with one API 82 / 100 / 101 /
+  102 universal APK per DeepSeek channel. The release now has exactly two APKs:
+  Mainland and Google Play.
+- Added Mainland DeepSeek 2.3.0 (`versionCode 237`) runtime mapping while
+  retaining Mainland 2.2.2 (`233`) compatibility.
+- Kept the Google Play package limited to its verified DeepSeek 2.2.2
+  (`versionCode 236`) mapping; newer Google Play builds remain unsupported.
+- Added chat wallpaper and sticker customization with scaling,
+  horizontal/vertical framing, rotation, opacity, display-range controls, and
+  offline one-tap sticker cutout with manual cleanup.
+- Added temporary Pinggy public URLs and custom Cloudflare Tunnel
+  hostname/connector controls to the DeepSeek Local API.
+- Improved target-process activation verification to prevent an injected module
+  from remaining indefinitely at **Pending verification**.
+- Hardened response preservation across final-state replacement, history
+  refresh, and cold restart paths.
+- Added conversation-bound scheduled reminders and proactive heartbeat
+  delivery with in-chat persistence and background notifications.
+- Removed unused Cloudflared CPU payloads from the release package and retained
+  the arm64 component used by the supported target devices.
+- Updated several Easter eggs.
 
 ## 1.7.2 - 2026-07-22
 
-### Google Play 2.2.2 port
+### Unified channel release
 
-- Ported the module to the exact Google Play DeepSeek 2.2.2 build
-  (`versionCode 236`) instead of treating the mainland and Play Store R8 maps as
-  interchangeable.
-- Restored and device-tested expert-mode selection, the native image picker and
-  upload path, temporary vision description, expert prompt rewrite, and local
-  image metadata preservation.
-- Restored the response-preservation chain across clear-response construction,
-  content-filter patches, status writes, final merge/apply, online history, and
-  cold local history. The client can preserve text already delivered to the
-  device; it cannot recover content the server never sent.
-- Fixed the Play stream event mapping (`mu0`/`iz7`/`lu0`) and coroutine sentinel
-  mapping (`l22`). The latter had caused the local API to return
-  `502 empty_completion` before an asynchronous native Flow emitted its first
-  token.
-- Verified real OpenAI Chat, OpenAI Responses JSON/SSE, Anthropic Messages, and
-  model-list routes through the installed app. An isolated Codex CLI regression
-  also completed a custom `apply_patch` tool-output loop without touching the
-  user's Codex login.
-- Removed complete Gateway Keys from API diagnostic logs and runtime status
-  JSON. Explicit connection files still contain the key by design and remain
-  sensitive credentials.
-- Added automatic Chinese/English UI selection, an explicit language picker in
-  DeepSeek, and English text for the module launcher and help pages.
+- Published three explicitly named APKs in one release: mainland libxposed API
+  102, mainland traditional-Xposed compatibility, and the exact-build Google
+  Play 2.2.2 (`versionCode 236`) port. Mainland and Play symbol maps remain
+  separate and their APKs are not interchangeable.
+- Added automatic Chinese/English UI selection. Injected pages follow
+  DeepSeek's language on startup, an in-app language row can select Chinese or
+  English explicitly, and every other detected language falls back to English.
+  The standalone module activity follows Android's system language.
+- Completed English coverage for settings, dialogs, Help & Issues, Experimental
+  Features, account tools, editor/search screens, API controls, warnings, and
+  runtime status text, with regression coverage for missing translations.
 - Simplified the standalone module UI.
-- Kept this port on the `google-play` branch as an exact-build target and
-  distributed its labelled APK alongside the mainland builds in `v1.7.2`.
+- Improved OpenAI Chat/Responses and Anthropic Messages streaming, incremental
+  activity delivery, client-session isolation, tool-result continuation, and
+  Codex/Claude Code compatibility through the native DeepSeek transport.
+- Kept expert image relay and the local API in the dedicated Experimental
+  Features section with the versioned first-entry disclosure and separate help.
+  Former test editions remain discontinued and are not release assets.
 
 ## 1.7.1 - 2026-07-22
 

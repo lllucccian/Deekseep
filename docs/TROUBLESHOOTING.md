@@ -2,7 +2,8 @@
 
 ## The Deekseep Entry Does Not Appear
 
-1. Confirm that the installed APK matches the framework interface.
+1. Confirm that the installed 1.7.3 multi-API APK matches the DeepSeek channel
+   and version.
 2. Confirm the module is enabled.
 3. For modern libxposed, scope it to `com.deepseek.chat`; do not add the module
    app merely to make activation detection pass.
@@ -11,15 +12,15 @@
    on other routes.
 6. Check the module launcher activation status.
 
-For a current LSPosed installation, use the stable API 102 build. If loading is
-uncertain, install and enable the API 102 load probe by itself.
+Use the Mainland universal APK for DeepSeek `233`/`237`, or the Google Play
+universal APK for DeepSeek `236`. Dedicated API 102, Legacy, and load-probe
+packages are not current release choices.
 
 ## The Launcher Says “Pending Verification” Although LSPosed Is Enabled
 
-Modern libxposed no longer injects a module into its own application, so the old
-“hook `isModuleActive()` in the launcher” test is not valid. Current stable
-builds receive LSPosed's service Binder through the official Xposed service
-provider and accept a second heartbeat only from the `com.deepseek.chat` UID.
+Hooking `isModuleActive()` in the module application is not a valid activation
+test. Current builds receive the framework service connection and separately
+validate a signal from the `com.deepseek.chat` UID.
 
 Enable the module, scope only DeepSeek, start DeepSeek once, and reopen the
 launcher. “Enabled” means the framework service connected; “Active” additionally
@@ -36,9 +37,9 @@ risk decisions.
 
 ## Android Reports an Incompatible Update
 
-The modern and legacy forms of a channel use the same package ID but separate
-development signing keys. Disable and uninstall the old module APK before
-installing the other interface variant.
+An older build or an APK built on another machine may use a different
+development signing key. Disable and uninstall only the old module APK before
+installing the matching 1.7.3 universal package.
 
 Uninstalling the module package does not uninstall DeepSeek or automatically
 remove prior database edits.
@@ -80,27 +81,22 @@ DeepSeek after updating the module so the new history hooks are installed.
 - Open **Deekseep → Chat appearance** and confirm the master switch is enabled.
 - Return to an actual DeepSeek chat or settings page. Stickers remain on both;
   the wallpaper appears only on screens selected under **Advanced**. Sign-in,
-  table preview, and unrelated routes hide the overlay.
-- If the wallpaper does not move, confirm **Dynamic wallpaper motion** is on
-  and its amount is above 0%. Leave **Set offsets per screen** off for one
-  unified control, or turn it on for signed Chat, Sidebar, and Settings
-  offsets.
+  table preview, and unrelated navigation routes hide the overlay.
 - If a landscape crop preserves the wrong area, choose one of the nine focus
-  positions after import or adjust **Horizontal focus** and **Vertical focus**.
-- **Wallpaper depth** processes only the image; it does not modify DeepSeek's
-  native cards or controls.
+  positions after import or adjust **Horizontal focus** and **Vertical focus**
+  under the wallpaper controls. These affect crop-to-fill only.
+- If scaling or framing exposes an empty edge, choose mirror or outer-pixel
+  extension instead of clipping.
 - Reimport an image if Android's picker returned an unreadable or oversized
   file. Imports are limited to 32 MB and must decode as an image.
-- Fully restart DeepSeek after replacing the module APK so the activity,
-  navigation, and Google Play 236 drawer hooks all come from the same build.
+- Fully restart DeepSeek after replacing the module APK so the activity and
+  navigation hooks come from the same build.
 
-On the exact Play target, the log should report one installed `ds5.w` hook, one
-`uo2.c` live-offset hook, and one `c71.u` appearance click hook. The wallpaper
-is intentionally expected to arrive slightly after the native drawer. Repeated
-per-frame diagnostic logging is not used. If the image still moves in lockstep,
-snaps on return, or moves in the wrong direction, collect only the first
-redacted hook-install lines and verify the host is version code `236`.
-Imported copies and configuration live under `files/deekseep_appearance`.
+The compatibility overlay is drawn above DeepSeek's obfuscated Compose tree and
+never consumes touch events. A high wallpaper opacity can visually cover text
+or controls even though they remain tappable; lower the wallpaper opacity in
+the preview editor. Imported copies and layout configuration live under
+`files/deekseep_appearance`.
 
 ## The Chat Editor Says a Conversation Has No Local Messages
 
@@ -134,7 +130,7 @@ is explicitly deleted; do not hand-edit them.
 
 ## Added Reasoning and the Answer Both Disappeared
 
-Install the stable 1.7.1 APK matching your framework, ensure it is the only active
+Install the matching 1.7.3 multi-API channel APK, ensure it is the only active
 Deekseep hook, and force-stop/restart DeepSeek. Both stable interfaces run
 the startup migration, which should report a positive
 `repairMalformedThinkFragments fixed=N` once and zero later.
