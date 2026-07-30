@@ -114,16 +114,12 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 如果 Android 因旧版或不同签名而拒绝覆盖安装，请先停用并只卸载旧模块 APK，再安装 1.7.3；这不会卸载 DeepSeek。更多细节见[安装指南](docs/INSTALLATION.md)。
 
-## 当前发布文件
+## 发布内容
 
-1.7.3 Release 只提供以下两个可安装 APK：
-
-| APK | DeepSeek 目标 | Xposed 接口 |
-|---|---|---|
-| `deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk` | 国内版 2.2.2（`233`）和 2.3.0（`237`） | API 82 / 100 / 101 / 102 |
-| `deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk` | 仅 Google Play 2.2.2（`236`） | API 82 / 100 / 101 / 102 |
-
-[1.7.3 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.3) 还提供两个渠道的源码快照和 `SHA256SUMS.txt`。当前版本已经舍弃专用 API 102 和旧式单接口 APK；不要为同一个 DeepSeek 进程同时启用多个 Deekseep 版本。
+上方两个按钮就是仅有的两个可安装 APK。[1.7.3 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.3)
+中的另外两个文件是源码快照，`SHA256SUMS.txt` 是校验文件，它们都不是额外的 APK
+版本。当前版本已经舍弃专用 API 102 和旧式单接口 APK；不要为同一个 DeepSeek
+进程同时启用多个 Deekseep 版本。
 
 ## 兼容性表格
 
