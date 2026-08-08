@@ -30,7 +30,7 @@ accounts you are authorized to manage.
 
 ## Warranty
 
-The project is provided under the MIT License on an “as is” basis, without a
+The project is provided under the GNU GPL-3.0-only license on an “as is” basis, without a
 guarantee of compatibility, availability, or fitness for a particular purpose.
 To the extent permitted by law, authors and contributors are not responsible
 for losses arising from installation or use.

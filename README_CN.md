@@ -8,7 +8,7 @@
 [![GitHub 下载量](https://img.shields.io/github/downloads/lllucccian/Deekseep/total?label=Downloads)](https://github.com/lllucccian/Deekseep/releases)
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3ddc84)](#环境要求)
 [![Xposed API 82–102](https://img.shields.io/badge/Xposed_API-82%20%7C%20100%20%7C%20101%20%7C%20102-2f6feb)](#环境要求)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 > [!NOTE]
 > Deekseep 是独立增强模块。请先确认安装包与 DeepSeek 版本匹配；使用聊天、账号或实验性工具前，建议备份重要数据。
@@ -176,6 +176,6 @@ Deekseep LSPosed 是独立第三方项目，不属于 DeepSeek 官方。产品�
 
 ## 许可证
 
-项目自有源码和文档采用 [MIT License](LICENSE)。第三方组件及声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+项目自有源码和文档采用 [GNU GPL-3.0-only](LICENSE)。第三方组件及声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 如果 Deekseep LSPosed 对你有帮助，可以给仓库点一个 ⭐，让更多 DeepSeek 和 LSPosed 用户发现它。
