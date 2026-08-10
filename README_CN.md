@@ -45,3 +45,7 @@ DeepSeek 2.3.4；2.2.0 和 2.3.0 仍可使用但部分功能可能受限；不�
 - [赞助开发](https://www.afdian.com/a/lllucccian)
 
 许可证：[GPL-3.0-only](LICENSE)。
+
+---
+
+**赞助作者以加速开发：** [爱发电](https://www.afdian.com/a/lllucccian)

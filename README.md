@@ -49,3 +49,7 @@ backup and disable the module if the host becomes unstable.
 - [Sponsor development](https://www.afdian.com/a/lllucccian)
 
 Licensed under [GPL-3.0-only](LICENSE).
+
+---
+
+**Sponsor the author to accelerate development:** [爱发电](https://www.afdian.com/a/lllucccian)
