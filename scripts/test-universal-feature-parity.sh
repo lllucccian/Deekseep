@@ -14,6 +14,7 @@ for apk in "${APKS[@]}"; do
     }
 done
 
+mkdir -p "$ROOT/build"
 source_list="$(mktemp "$ROOT/build/universal-core-sources.XXXXXX")"
 trap 'rm -f "$source_list"' EXIT
 find "$ROOT/module/src/com/dsmod/probe" -maxdepth 1 -name '*.java' \
