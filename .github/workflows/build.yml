@@ -30,6 +30,15 @@ jobs:
       - name: Install Android platform and build tools
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Prepare local debug signing key
+        run: |
+          keytool -genkeypair -v \
+            -keystore module/debug.keystore \
+            -storepass android -keypass android \
+            -alias androiddebugkey \
+            -dname 'CN=Android Debug,O=Android,C=US' \
+            -keyalg RSA -keysize 2048 -validity 10000
+
       - name: Build and test stable releases
         run: bash scripts/build-all.sh
 
