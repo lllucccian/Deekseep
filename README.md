@@ -72,14 +72,6 @@ Support development at [爱发电](https://www.afdian.com/a/lllucccian).
 This is the only maintained module APK. The runtime detects the domestic or
 Google Play host and selects its mapping internally.
 
-## Screenshot
-
-<p align="center">
-  <img src="docs/images/Screenshot_2026-07-22-22-49-55-25_7614e48627b7380b17b386d382d1b2ef.jpg" alt="Deekseep LSPosed project preview" width="360">
-</p>
-
-The screenshot shows the English in-app settings for prompt injection, response-replacement prevention, chat multi-select, and native sign-in entry restoration.
-
 <details>
 <summary>More project screenshots</summary>
 

@@ -52,14 +52,6 @@
 
 这是唯一维护中的模块安装包，运行时会自动识别国内版或 Google Play 宿主并选择对应映射。
 
-## 项目截图
-
-<p align="center">
-  <img src="docs/images/Screenshot_2026-07-22-22-49-55-25_7614e48627b7380b17b386d382d1b2ef.jpg" alt="Deekseep LSPosed 项目截图" width="360">
-</p>
-
-截图展示了英文版模块设置中的提示词注入、响应替换保护、聊天多选和原生登录入口恢复开关。
-
 <details>
 <summary>查看更多项目截图</summary>
 

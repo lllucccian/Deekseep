@@ -9,6 +9,8 @@ dist/
 **/src/**/BuildInfo.java
 
 # Local reverse-engineering inputs and generated output
+.local-notes/
+.tmp-*/
 ds.apk
 ds-*.apk
 apk-full/
@@ -22,6 +24,14 @@ apktool*.log
 jadx.log
 libxposed/
 module/src.bak-*/
+.apktool-*/
+.jadx-*/
+.wekit-*/
+apk-signing/
+release-archives/
+variants/
+xunlei-*/
+xl_*/
 
 # Device data, diagnostics, and local notes
 *.db
