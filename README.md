@@ -23,16 +23,19 @@ The 1.7.4 release refactors the module and settings UI into searchable
 execution buttons, and clearer settings entry points (the small gear button to
 the right of a feature name).
 
-Highlights include the basic Agent tools (download and inspect the available
-tools in the app), automatic continue-generation for server-paused long
-thinking, a visible **Reply-ready notification** switch, local mute/ban,
-custom home greeting, custom assistant avatar (requires **Show assistant
-avatar** in the Feature Flag Manager), whale rotation and deep-sea text-wave
-effects, on-screen Hook logs, crash recording/tests, custom DeepSeek requests,
-hot-update blocking, cache cleanup, process management, long-context file
-upload for the local API, and foreground-heartbeat persistence without a
-mandatory background-running exemption. Battery optimization exemptions for
-DeepSeek are still recommended.
+Highlights:
+
+• Basic Agent tools (download and inspect the available tools in the app).
+• Automatic continue-generation for server-paused long thinking.
+• A visible **Reply-ready notification** switch.
+• Local mute/ban and custom home greeting.
+• Custom assistant avatar (requires **Show assistant avatar** in the Feature Flag Manager).
+• Whale rotation and deep-sea text-wave effects.
+• On-screen Hook logs and crash recording/tests.
+• Custom DeepSeek requests, hot-update blocking, cache cleanup, and process management.
+• Long-context file upload for the local API.
+• Foreground-heartbeat persistence without a mandatory background-running exemption.
+• Battery optimization exemptions for DeepSeek are still recommended.
 
 The music Agent tool requires the latest QQ Music **20.7 or newer**; after
 granting Root, it can play music automatically in the background. The native
@@ -147,22 +150,6 @@ The repository does not distribute the official DeepSeek APK, a rooting solution
 
 The universal APK uses package ID `com.dsmod.probe`. See the full [installation guide](docs/INSTALLATION.md).
 
-## Download variants
-
-The default download above is the only maintained 1.7.4 package. Retired
-API-specific and diagnostic packages are not build targets.
-
-<details>
-<summary>Maintained build</summary>
-
-| APK or source variant | Intended use | Xposed interface | Support and diagnostics |
-|---|---|---|---|
-| `Deekseep.apk` | DeepSeek 2.2.0/2.3.0 and 2.3.4 domestic/Google Play | Traditional Xposed-compatible universal entry | Maintained merged release; optional diagnostics remain off by default. |
-
-The historical APKs remain on the [1.7.0 release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.0) for reference. Starting with 1.7.1, test and diagnostic APKs are excluded from stable releases. Never enable multiple Deekseep LSPosed variants for the same DeepSeek process.
-
-</details>
-
 ## Compatibility table
 
 | App channel | App version | Version code | Status | Notes |
@@ -218,6 +205,13 @@ Deekseep LSPosed is an independent third-party project and is not part of
 DeepSeek. Product names and trademarks belong to their respective owners. See
 the concise [project notice](DISCLAIMER.md) for compatibility, data, and
 privacy notes.
+
+## Acknowledgements
+
+The settings information hierarchy and interaction ideas were reviewed against
+WeKit as a UI reference only; no WeKit source code or assets were copied.
+Third-party libraries and their licenses are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 

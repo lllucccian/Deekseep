@@ -3824,7 +3824,7 @@ public final class DeekseepUi {
             titleRow.setPadding(dp(act, 16), dp(act, 14), dp(act, 16), dp(act, 14));
             titleRow.setClickable(true);
             TextView itemTitle = new TextView(act);
-            itemTitle.setText(UiLanguage.dynamic(act, items[i][0]));
+            itemTitle.setText("• " + UiLanguage.dynamic(act, items[i][0]));
             itemTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
             itemTitle.setTextColor(textColor);
             titleRow.addView(itemTitle, new LinearLayout.LayoutParams(
@@ -4572,7 +4572,7 @@ public final class DeekseepUi {
             titleRow.setFocusable(true);
 
             TextView t = new TextView(act);
-            t.setText(UiLanguage.dynamic(act, items[i][0]));
+            t.setText("• " + UiLanguage.dynamic(act, items[i][0]));
             t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
             t.setTextColor(textColor);
             titleRow.addView(t, new LinearLayout.LayoutParams(

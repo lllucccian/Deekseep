@@ -106,9 +106,7 @@ All notable public releases are documented here.
 - `SOURCE-SHA256.txt` — source commit and APK SHA-256 record.
 
 The GitHub release intentionally does not attach duplicate channel APKs or
-reverse-engineering artifacts. Project UI ideas were informed by WeKit as a
-reference; no WeKit code was copied. Development sponsorship is available at
-<https://www.afdian.com/a/lllucccian>.
+reverse-engineering artifacts.
 
 ## 1.7.2 - 2026-07-22
 
