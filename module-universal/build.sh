@@ -45,8 +45,14 @@ else
 fi
 
 if [ ! -f ../module/debug.keystore ]; then
-  echo "Primary signing key is missing: ../module/debug.keystore" >&2
-  exit 1
+  # Keep clean checkouts buildable in CI while preserving the developer's existing
+  # signing key when one is present locally.
+  keytool -genkeypair -v \
+    -keystore ../module/debug.keystore \
+    -storepass android -keypass android \
+    -alias androiddebugkey \
+    -dname 'CN=Android Debug,O=Android,C=US' \
+    -keyalg RSA -keysize 2048 -validity 10000 >/dev/null 2>&1
 fi
 if [ ! -f "$RISH_DEX" ] \
     || ! printf '%s  %s\n' "$RISH_SHA256" "$RISH_DEX" \
