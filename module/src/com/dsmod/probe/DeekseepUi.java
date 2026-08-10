@@ -9,12 +9,16 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.Switch;
@@ -27,6 +31,7 @@ public final class DeekseepUi {
     static final int BRAND = 0xFF4D6BFE;
     static final String ENTRY_BUTTON_TAG = "deekseep_settings_entry_button_v1";
     private static volatile Dialog activePageDialog;
+    private static volatile Dialog rootPageDialog;
     private static volatile Dialog localApiPageDialog;
     private static volatile boolean localApiSettingsFromPage;
     private static volatile TextView activePromptImportButton;
@@ -34,6 +39,67 @@ public final class DeekseepUi {
     private static volatile View activePromptResetRow;
     private static volatile Switch activePromptInjectionSwitch;
     private static volatile boolean refreshingPromptControls;
+    private static final int CATEGORY_CHAT = 1;
+    private static final int CATEGORY_ACCOUNT = 2;
+    private static final int CATEGORY_APPEARANCE = 3;
+    private static final int CATEGORY_DEBUG = 4;
+    private static final int CATEGORY_ENGINEERING = 5;
+    private static final String REPOSITORY = "https://github.com/lllucccian/Deekseep";
+
+    private static final class FeatureSearchEntry {
+        final String title;
+        final String keywords;
+        final int category;
+
+        FeatureSearchEntry(String title, String keywords, int category) {
+            this.title = title;
+            this.keywords = keywords;
+            this.category = category;
+        }
+    }
+
+    private static final FeatureSearchEntry[] FEATURE_SEARCH = {
+            new FeatureSearchEntry("系统提示词注入", "提示词 prompt 导入", CATEGORY_CHAT),
+            new FeatureSearchEntry("去除安全审查", "内容替换 一键破甲", CATEGORY_CHAT),
+            new FeatureSearchEntry("聊天记录多选", "批量 删除", CATEGORY_CHAT),
+            new FeatureSearchEntry("编辑聊天记录", "修改 新建对话", CATEGORY_CHAT),
+            new FeatureSearchEntry("消息时间与详情", "时间戳 message details", CATEGORY_CHAT),
+            new FeatureSearchEntry("自动继续生成", "继续生成 长思考 后台 续写", CATEGORY_CHAT),
+            new FeatureSearchEntry("导出会话为 Markdown", "导出 备份包", CATEGORY_CHAT),
+            new FeatureSearchEntry("导入聊天记录", "恢复 覆盖 备份包", CATEGORY_CHAT),
+            new FeatureSearchEntry("全局搜索聊天记录", "消息 搜索", CATEGORY_CHAT),
+            new FeatureSearchEntry("会话数据统计", "消息 字数", CATEGORY_CHAT),
+            new FeatureSearchEntry("立即备份聊天数据库", "数据库 backup", CATEGORY_CHAT),
+            new FeatureSearchEntry("自动备份聊天数据库", "每日", CATEGORY_CHAT),
+            new FeatureSearchEntry("解锁专家模式与图片上传", "expert 图片", CATEGORY_CHAT),
+            new FeatureSearchEntry("AI 心跳", "主动消息 间隔", CATEGORY_CHAT),
+            new FeatureSearchEntry("多账号管理", "账号 切换 导入", CATEGORY_ACCOUNT),
+            new FeatureSearchEntry("解锁 Google 登录", "谷歌 国内版", CATEGORY_ACCOUNT),
+            new FeatureSearchEntry("解锁微信与手机号登录", "海外版 短信", CATEGORY_ACCOUNT),
+            new FeatureSearchEntry("本地禁言", "时间 截止日期", CATEGORY_ACCOUNT),
+            new FeatureSearchEntry("禁用数据用于优化体验", "隐私 training", CATEGORY_ACCOUNT),
+            new FeatureSearchEntry("主页欢迎语", "首页 文案", CATEGORY_APPEARANCE),
+            new FeatureSearchEntry("原生设置入口", "插件 悬浮", CATEGORY_APPEARANCE),
+            new FeatureSearchEntry("外观设置", "背景 气泡 液态玻璃 空间动效", CATEGORY_APPEARANCE),
+            new FeatureSearchEntry("自定义 DeepSeek 头像",
+                    "助手头像 灰度 显示助手头像", CATEGORY_APPEARANCE),
+            new FeatureSearchEntry("鲸鱼图标动效", "旋转", CATEGORY_APPEARANCE),
+            new FeatureSearchEntry("深海文字波纹", "字体 渐变", CATEGORY_APPEARANCE),
+            new FeatureSearchEntry("记录服务器返回", "诊断 SSE", CATEGORY_DEBUG),
+            new FeatureSearchEntry("Hook 日志显示在屏幕", "日志 overlay", CATEGORY_DEBUG),
+            new FeatureSearchEntry("记录崩溃", "crash", CATEGORY_DEBUG),
+            new FeatureSearchEntry("兼容性诊断报告", "版本 映射", CATEGORY_DEBUG),
+            new FeatureSearchEntry("Hook 性能统计", "耗时", CATEGORY_DEBUG),
+            new FeatureSearchEntry("脱敏事件追踪与导出", "trace", CATEGORY_DEBUG),
+            new FeatureSearchEntry("发送自定义请求", "网络 API", CATEGORY_DEBUG),
+            new FeatureSearchEntry("语言", "中文 English", CATEGORY_ENGINEERING),
+            new FeatureSearchEntry("禁用热更新", "更新 强制更新", CATEGORY_ENGINEERING),
+            new FeatureSearchEntry("灰度功能管理器", "远程配置 feature flags", CATEGORY_ENGINEERING),
+            new FeatureSearchEntry("自动清理缓存", "图片 Mermaid Coil", CATEGORY_ENGINEERING),
+            new FeatureSearchEntry("进程管理", "进程 冻结 解冻 杀死 Root", CATEGORY_ENGINEERING),
+            new FeatureSearchEntry("Agent", "工具 Root Shizuku", CATEGORY_ENGINEERING),
+            new FeatureSearchEntry("本地 API", "OpenAI Claude 保活", CATEGORY_ENGINEERING)
+    };
 
     private static void refreshPromptControls() {
         boolean embedded = Main.isEmbeddedPromptEnabled();
@@ -90,6 +156,16 @@ public final class DeekseepUi {
         if (dialog != null) {
             try { dialog.dismiss(); } catch (Throwable ignored) {}
         }
+        Dialog root = rootPageDialog;
+        rootPageDialog = null;
+        if (root != null && root != dialog) {
+            try { root.dismiss(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** Marks a full-screen module child so native navigation can close the complete module stack. */
+    static void trackChildDialog(Dialog dialog) {
+        if (dialog != null) activePageDialog = dialog;
     }
 
     /** 右上角的文字入口 "Deekseep"（无背景）。 */
@@ -108,8 +184,240 @@ public final class DeekseepUi {
         return b;
     }
 
-    /** 全屏 Dialog：顶部返回+标题，卡片含导入按钮/路径/还原/注入开关。 */
+    /** Deekseep 首页只负责分组；具体开关和工具进入对应子页。 */
     static void showPage(final Activity act) {
+        UiLanguage.refreshHost(act);
+        final boolean dark = isDark(act);
+        final int bgColor = dark ? 0xFF1B1B1D : 0xFFF5F6F8;
+        final int barColor = dark ? 0xFF232326 : 0xFFFFFFFF;
+        final int cardColor = dark ? 0xFF2A2A2D : 0xFFFFFFFF;
+        final int textColor = dark ? 0xFFECECEC : 0xFF1A1A1A;
+        final int subColor = dark ? 0xFF9A9A9E : 0xFF888888;
+        final int divColor = dark ? 0xFF3A3A3D : 0xFFEEEEEE;
+
+        final LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(bgColor);
+        LinearLayout bar = new LinearLayout(act);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(barColor);
+        int statusTop = statusBarHeight(act);
+        bar.setPadding(dp(act, 8), statusTop, dp(act, 16), 0);
+        root.addView(bar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 56) + statusTop));
+
+        final Dialog dlg = new Dialog(act, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        activePageDialog = dlg;
+        rootPageDialog = dlg;
+        dlg.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+            @Override public void onDismiss(android.content.DialogInterface ignored) {
+                if (activePageDialog == dlg) activePageDialog = null;
+                if (rootPageDialog == dlg) rootPageDialog = null;
+            }
+        });
+        TextView back = new TextView(act);
+        back.setText("\u2039");
+        back.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+        back.setTextColor(textColor);
+        back.setGravity(Gravity.CENTER);
+        back.setPadding(dp(act, 8), 0, dp(act, 8), 0);
+        back.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { slideOutAndDismiss(dlg, root); }
+        });
+        bar.addView(back, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(act, 40)));
+        TextView title = new TextView(act);
+        title.setText("Deekseep");
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(textColor);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        titleLp.leftMargin = dp(act, 8);
+        bar.addView(title, titleLp);
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(act);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout content = new LinearLayout(act);
+        content.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(content, new android.widget.ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final EditText featureSearch = new EditText(act);
+        featureSearch.setSingleLine(true);
+        featureSearch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        featureSearch.setTextColor(textColor);
+        featureSearch.setHintTextColor(subColor);
+        featureSearch.setHint(UiLanguage.text(act, "搜索功能", "Search features"));
+        featureSearch.setPadding(dp(act, 16), 0, dp(act, 16), 0);
+        featureSearch.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        GradientDrawable searchBackground = new GradientDrawable();
+        searchBackground.setColor(dark ? 0xFF151517 : 0xFFECEEF2);
+        searchBackground.setCornerRadius(dp(act, 12));
+        featureSearch.setBackground(searchBackground);
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 48));
+        searchLp.setMargins(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 8));
+        content.addView(featureSearch, searchLp);
+
+        final LinearLayout resultsCard = new LinearLayout(act);
+        resultsCard.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable resultsBackground = new GradientDrawable();
+        resultsBackground.setColor(cardColor);
+        resultsBackground.setCornerRadius(dp(act, 12));
+        resultsCard.setBackground(resultsBackground);
+        resultsCard.setVisibility(View.GONE);
+        LinearLayout.LayoutParams resultsLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        resultsLp.setMargins(dp(act, 16), dp(act, 8), dp(act, 16), dp(act, 20));
+        content.addView(resultsCard, resultsLp);
+
+        final LinearLayout card = new LinearLayout(act);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(cardColor);
+        cardBg.setCornerRadius(dp(act, 12));
+        card.setBackground(cardBg);
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardLp.setMargins(dp(act, 16), dp(act, 8), dp(act, 16), dp(act, 20));
+        content.addView(card, cardLp);
+
+        addCategoryEntry(act, dlg, card, "聊天", "ds_category_chat",
+                "", CATEGORY_CHAT,
+                textColor, subColor);
+        card.addView(makeDivider(act, divColor));
+        addCategoryEntry(act, dlg, card, "账号与隐私", "ds_category_account",
+                "", CATEGORY_ACCOUNT,
+                textColor, subColor);
+        card.addView(makeDivider(act, divColor));
+        addCategoryEntry(act, dlg, card, "界面美化", "ds_category_appearance",
+                "", CATEGORY_APPEARANCE,
+                textColor, subColor);
+        card.addView(makeDivider(act, divColor));
+        addCategoryEntry(act, dlg, card, "调试", "ds_category_debug",
+                "", CATEGORY_DEBUG,
+                textColor, subColor);
+        card.addView(makeDivider(act, divColor));
+        addCategoryEntry(act, dlg, card, "工程", "ds_category_engineering",
+                "", CATEGORY_ENGINEERING,
+                textColor, subColor);
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "ds_category_help", "帮助与问题",
+                "", textColor, subColor,
+                new View.OnClickListener() {
+                    @Override public void onClick(View view) { showHelpPage(act); }
+                }));
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "ds_project_license", "开源许可",
+                "", textColor, subColor,
+                new View.OnClickListener() {
+                    @Override public void onClick(View view) { showOpenSourceDialog(act); }
+                }));
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "ds_project_sponsor", "赞助开发者",
+                "", textColor, subColor,
+                new View.OnClickListener() {
+                    @Override public void onClick(View view) { showSponsorDialog(act); }
+                }));
+        card.addView(makeDivider(act, divColor));
+        addBuildFooter(act, card, subColor);
+
+        featureSearch.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence value, int start,
+                                                    int count, int after) {}
+            @Override public void onTextChanged(CharSequence value, int start,
+                                                int before, int count) {
+                String query = value == null ? "" : value.toString().trim();
+                if (query.length() == 0) {
+                    resultsCard.removeAllViews();
+                    resultsCard.setVisibility(View.GONE);
+                    card.setVisibility(View.VISIBLE);
+                    return;
+                }
+                card.setVisibility(View.GONE);
+                resultsCard.setVisibility(View.VISIBLE);
+                populateFeatureSearchResults(act, dlg, resultsCard, query,
+                        textColor, subColor, divColor);
+            }
+            @Override public void afterTextChanged(Editable value) {}
+        });
+
+        UiLanguage.localizeTree(act, root);
+        dlg.setContentView(root);
+        Window window = dlg.getWindow();
+        if (window != null) {
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+            window.setBackgroundDrawable(
+                    new android.graphics.drawable.ColorDrawable(bgColor));
+        }
+        openWithSlide(dlg, root);
+    }
+
+    private static void addCategoryEntry(final Activity act, final Dialog parent,
+            LinearLayout card, String title, String iconName, String description, final int category,
+            int textColor, int subColor) {
+        card.addView(toolActionRow(act, iconName, title, description, textColor, subColor,
+                new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        // The hub remains underneath the child. This prevents a one-frame flash
+                        // of DeepSeek's native settings and gives the module a real back stack.
+                        showCategoryPage(act, category, parent);
+                    }
+                }));
+    }
+
+    private static void populateFeatureSearchResults(final Activity act, final Dialog parent,
+            LinearLayout results, String query, int textColor, int subColor, int dividerColor) {
+        results.removeAllViews();
+        String needle = query.toLowerCase(java.util.Locale.ROOT);
+        int found = 0;
+        for (final FeatureSearchEntry entry : FEATURE_SEARCH) {
+            String english = UiLanguageCatalog.toEnglish(entry.title + " " + entry.keywords);
+            String haystack = (entry.title + " " + entry.keywords + " " + english)
+                    .toLowerCase(java.util.Locale.ROOT);
+            if (!haystack.contains(needle)) continue;
+            if (found > 0) results.addView(makeDivider(act, dividerColor));
+            String destination = UiLanguage.text(act, "位于：", "In: ")
+                    + UiLanguage.dynamic(act, categoryTitle(entry.category))
+                    + UiLanguage.text(act, " · 点击进入", " · Tap to open");
+            results.addView(toolActionRow(act, categorySearchIcon(entry.category),
+                    entry.title, destination, textColor, subColor,
+                    new View.OnClickListener() {
+                        @Override public void onClick(View view) {
+                            showCategoryPage(act, entry.category, parent);
+                        }
+                    }));
+            found++;
+        }
+        if (found == 0) {
+            TextView empty = new TextView(act);
+            empty.setText(UiLanguage.text(act,
+                    "没有找到相关功能", "No matching features"));
+            empty.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            empty.setTextColor(subColor);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(act, 16), dp(act, 24), dp(act, 16), dp(act, 24));
+            results.addView(empty);
+        }
+    }
+
+    private static String categorySearchIcon(int category) {
+        switch (category) {
+            case CATEGORY_CHAT: return "ds_category_chat";
+            case CATEGORY_ACCOUNT: return "ds_category_account";
+            case CATEGORY_APPEARANCE: return "ds_category_appearance";
+            case CATEGORY_DEBUG: return "ds_category_debug";
+            default: return "ds_category_engineering";
+        }
+    }
+
+    /** 全屏分类页；旧功能控件仍复用同一套实现，再按功能归属筛选。 */
+    private static void showCategoryPage(final Activity act, final int category,
+            final Dialog parent) {
         // Re-read DeepSeek's MMKV language tag at the moment the page is opened.  This also covers
         // hosts that change language without recreating or resuming their current Activity.
         UiLanguage.refreshHost(act);
@@ -141,7 +449,7 @@ public final class DeekseepUi {
         dlg.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
             public void onDismiss(android.content.DialogInterface ignored) {
                 if (activePageDialog == dlg) {
-                    activePageDialog = null;
+                    activePageDialog = parent != null && parent.isShowing() ? parent : null;
                     activePromptImportButton = null;
                     activePromptPathText = null;
                     activePromptResetRow = null;
@@ -163,7 +471,7 @@ public final class DeekseepUi {
         bar.addView(back, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(act, 40)));
 
         TextView title = new TextView(act);
-        title.setText("Deekseep");
+        title.setText(categoryTitle(category));
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(textColor);
@@ -298,7 +606,7 @@ public final class DeekseepUi {
         toggleRow.addView(toggleLabel, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        Switch sw = new Switch(act);
+        Switch sw = new HubInsetSwitch(act);
         sw.setChecked(Main.isEnabled());
         int[][] ss = {{android.R.attr.state_checked}, {-android.R.attr.state_checked}};
         // ON: thumb=蓝色, track=浅蓝; OFF: thumb=白色/灰, track=灰
@@ -349,9 +657,7 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView censorDesc = new TextView(act);
-        censorDesc.setText("回答流完后，服务端会追加一帧把整段内容替换成模板回复"
-                + "\u201C这个问题我暂时无法回答\u201D。开启后，模块直接丢弃这帧"
-                + "（带 CONTENT_FILTER 标记的替换帧），已生成的内容原样留在屏幕上。");
+        censorDesc.setText("保留被替换前的完整回答");
         censorDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         censorDesc.setTextColor(subColor);
         LinearLayout.LayoutParams cdlp = new LinearLayout.LayoutParams(
@@ -364,7 +670,7 @@ public final class DeekseepUi {
         cllp.rightMargin = dp(act, 12);
         censorRow.addView(censorLabels, cllp);
 
-        Switch censorSw = new Switch(act);
+        Switch censorSw = new HubInsetSwitch(act);
         censorSw.setChecked(Main.isNoCensor());
         censorSw.setThumbTintList(new android.content.res.ColorStateList(ss,
                 new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
@@ -402,7 +708,7 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView multiDesc = new TextView(act);
-        multiDesc.setText("开启后，长按左侧聊天记录进入多选模式；关闭后使用 DeepSeek 原本的重命名/删除菜单。");
+        multiDesc.setText("长按会话进入多选");
         multiDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         multiDesc.setTextColor(subColor);
         LinearLayout.LayoutParams mdlp = new LinearLayout.LayoutParams(
@@ -415,7 +721,7 @@ public final class DeekseepUi {
         mllp.rightMargin = dp(act, 12);
         multiRow.addView(multiLabels, mllp);
 
-        Switch multiSw = new Switch(act);
+        Switch multiSw = new HubInsetSwitch(act);
         multiSw.setChecked(Main.isChatMultiSelect());
         multiSw.setThumbTintList(new android.content.res.ColorStateList(ss,
                 new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
@@ -453,9 +759,7 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView googleDesc = new TextView(act);
-        googleDesc.setText("国内登录页默认隐藏 Google。开启后保留微信、手机号等入口，并把 DeepSeek 自带的"
-                + "原生 Google 登录项恢复到列表；点击仍走宿主 Credential Manager 和官方登录接口。"
-                + "请在进入登录页前开启，切换后建议完整重启 DeepSeek。");
+        googleDesc.setText("解锁国内用户的 Google 登录入口。");
         googleDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         googleDesc.setTextColor(subColor);
         LinearLayout.LayoutParams gdlp = new LinearLayout.LayoutParams(
@@ -468,7 +772,7 @@ public final class DeekseepUi {
         gllp.rightMargin = dp(act, 12);
         googleRow.addView(googleLabels, gllp);
 
-        Switch googleSw = new Switch(act);
+        Switch googleSw = new HubInsetSwitch(act);
         googleSw.setChecked(Main.isGoogleLoginUnlock());
         googleSw.setThumbTintList(new android.content.res.ColorStateList(ss,
                 new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
@@ -505,9 +809,7 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView cnLoginDesc = new TextView(act);
-        cnLoginDesc.setText("海外登录页默认隐藏微信和短信手机号。此开关会同时恢复这两个 DeepSeek 原生入口，"
-                + "不会联动 Google 开关；点击后仍走宿主自己的微信 SDK、验证码页和官方登录接口。"
-                + "请在进入登录页前开启，切换后建议完整重启 DeepSeek。");
+        cnLoginDesc.setText("解锁海外用户的微信与手机号登录入口。");
         cnLoginDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         cnLoginDesc.setTextColor(subColor);
         LinearLayout.LayoutParams cndlp = new LinearLayout.LayoutParams(
@@ -520,7 +822,7 @@ public final class DeekseepUi {
         cnllp.rightMargin = dp(act, 12);
         cnLoginRow.addView(cnLoginLabels, cnllp);
 
-        Switch cnLoginSw = new Switch(act);
+        Switch cnLoginSw = new HubInsetSwitch(act);
         cnLoginSw.setChecked(Main.isWechatMobileLoginUnlock());
         cnLoginSw.setThumbTintList(new android.content.res.ColorStateList(ss,
                 new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
@@ -536,6 +838,59 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         card.addView(cnLoginRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(simpleSwitchRow(act, "禁用数据用于优化体验",
+                "开启后立即关闭 DeepSeek 的“数据用于优化体验”，并阻止再次开启。",
+                Main.isDataOptOutEnforced(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (reverting) return;
+                        if (Main.setDataOptOutEnforced(act, checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                        Toast.makeText(act, UiLanguage.text(act,
+                                "禁用设置保存失败",
+                                "Could not save the disable-data setting"),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        final TextView[] fakeMuteDetail = new TextView[1];
+        card.addView(configurableSwitchRow(act, "本地禁言 · 实验性",
+                fakeMuteDescription(), Main.isFakeMuteEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                        if (!checked) {
+                            Main.setFakeMuteEnabled(false);
+                            if (fakeMuteDetail[0] != null) {
+                                fakeMuteDetail[0].setText(fakeMuteDescription());
+                            }
+                            Toast.makeText(act, "本地禁言已关闭", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if (!Main.setFakeMuteEnabled(true)) {
+                            button.setOnCheckedChangeListener(null);
+                            button.setChecked(false);
+                            button.setOnCheckedChangeListener(this);
+                            Toast.makeText(act, UiLanguage.text(act,
+                                    "请先设置一个未来的截止时间",
+                                    "Set a future deadline first"),
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                        if (fakeMuteDetail[0] != null) {
+                            fakeMuteDetail[0].setText(fakeMuteDescription());
+                        }
+                    }
+                }, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        showFakeMuteTimePicker(act, fakeMuteDetail[0]);
+                    }
+                }, fakeMuteDetail));
 
         // ── 分割线 ──────────────────────────────────────────────────
         card.addView(makeDivider(act, divColor));
@@ -558,9 +913,8 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView srvDesc = new TextView(act);
-        srvDesc.setText("把服务器返回的每一条 SSE 原始事件写到日志，用于排查内容为何被替换。"
-                + "日志：/data/data/com.deepseek.chat/files/deekseep_srv.log"
-                + "（也会尽量写一份到 /sdcard/deekseep_srv.log）。仅诊断时打开。");
+        srvDesc.setText("");
+        srvDesc.setVisibility(View.GONE);
         srvDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         srvDesc.setTextColor(subColor);
         LinearLayout.LayoutParams sdlp = new LinearLayout.LayoutParams(
@@ -573,7 +927,7 @@ public final class DeekseepUi {
         sllp.rightMargin = dp(act, 12);
         srvRow.addView(srvLabels, sllp);
 
-        Switch srvSw = new Switch(act);
+        Switch srvSw = new HubInsetSwitch(act);
         srvSw.setChecked(Main.isSrvLog());
         srvSw.setThumbTintList(new android.content.res.ColorStateList(ss,
                 new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
@@ -589,6 +943,91 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         card.addView(srvRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        card.addView(makeDivider(act, divColor));
+        LinearLayout overlayRow = new LinearLayout(act);
+        overlayRow.setOrientation(LinearLayout.HORIZONTAL);
+        overlayRow.setGravity(Gravity.CENTER_VERTICAL);
+        overlayRow.setPadding(dp(act, 16), dp(act, 14), dp(act, 12), dp(act, 14));
+        LinearLayout overlayLabels = new LinearLayout(act);
+        overlayLabels.setOrientation(LinearLayout.VERTICAL);
+        TextView overlayTitle = new TextView(act);
+        overlayTitle.setText("Hook 日志显示在屏幕");
+        overlayTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        overlayTitle.setTextColor(textColor);
+        overlayLabels.addView(overlayTitle);
+        TextView overlayDesc = new TextView(act);
+        overlayDesc.setText("透明显示 Hook 日志");
+        overlayDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        overlayDesc.setTextColor(subColor);
+        overlayLabels.addView(overlayDesc);
+        overlayRow.addView(overlayLabels, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Switch overlaySwitch = new HubInsetSwitch(act);
+        overlaySwitch.setChecked(HookLogOverlay.enabled());
+        overlaySwitch.setOnCheckedChangeListener(
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                        HookLogOverlay.setEnabled(checked);
+                        if (checked) HookLogOverlay.onActivityResumed(act);
+                    }
+                });
+        overlayRow.addView(overlaySwitch);
+        card.addView(overlayRow);
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "记录崩溃",
+                "",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        CrashDiagnosticsUi.showRecords(act);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "崩溃测试",
+                "",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        CrashDiagnosticsUi.showCrashTests(act);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "兼容性诊断报告",
+                "",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        DeveloperDiagnostics.showCompatibility(act);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "Hook 性能统计",
+                "",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        DeveloperDiagnostics.showPerformance(act);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "脱敏事件追踪与导出",
+                "",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        DeveloperDiagnostics.exportTrace(act);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "发送自定义请求",
+                "",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        DeepSeekRequestDebugUi.show(act);
+                    }
+                }));
 
         // ── 分割线 ──────────────────────────────────────────────────
         card.addView(makeDivider(act, divColor));
@@ -610,8 +1049,8 @@ public final class DeekseepUi {
         editLabels.addView(editLabel, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         TextView editDesc = new TextView(act);
-        editDesc.setText("长按可修改用户输入、模型回答和思考内容；没有思考链时可新增，"
-                + "并可自定义思考用时（改后重启 DeepSeek 生效）。");
+        editDesc.setText("");
+        editDesc.setVisibility(View.GONE);
         editDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         editDesc.setTextColor(subColor);
         LinearLayout.LayoutParams edlp = new LinearLayout.LayoutParams(
@@ -634,41 +1073,112 @@ public final class DeekseepUi {
         card.addView(editRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        card.addView(makeDivider(act, divColor));
+        card.addView(simpleSwitchRow(act, "消息时间与详情",
+                "在聊天编辑器中显示每条本地消息的时间，点击时间可查看消息 ID 与详情。",
+                Main.isMessageDetailsEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (reverting || Main.setMessageDetailsEnabled(checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(simpleSwitchRow(act, "自动继续生成",
+                "长思考被服务器暂停时自动继续，切到后台也会生效。",
+                Main.isAutoContinueEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (reverting || Main.setAutoContinueEnabled(checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(simpleSwitchRow(act, "回复完成通知",
+                "切到后台后，模型完成回答时发送系统通知。",
+                Main.isReplyReadyNotificationsEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (reverting || Main.setReplyReadyNotificationsEnabled(checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                    }
+                }));
+
         // ── Section 6: 多账号管理（切换/添加账号）────────────────────────
         card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "多账号管理",
-                "添加、切换和移除账号；可严格验真导入 JSON，也可勾选账号导出明文凭证。",
+                "",
                 textColor, subColor, new View.OnClickListener() {
                     public void onClick(View v) { AccountUi.show(act); }
                 }));
 
         // ── Section 7: 聊天数据工具箱（导出/搜索/统计/复制/备份）──────────
         card.addView(makeDivider(act, divColor));
-        card.addView(toolActionRow(act, "导出会话为 Markdown",
-                "把全部本地会话导出成 .md 文件到应用外部目录，可用文件管理器查看/分享。",
+        card.addView(taskActionRow(act, "导出会话为 Markdown",
+                "导出 Markdown，并在下载目录生成可恢复的聊天备份包。",
+                "导出期间请保持 DeepSeek 运行；备份包卸载后仍保留在 Download/Deekseep。",
+                textColor, subColor, new TaskExecutionUi.Task() {
+                    @Override public String run(TaskExecutionUi.Logger logger) throws Throwable {
+                        return DeekseepTools.exportAllForConsole(act, logger);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "导入聊天记录",
+                "选择导出的聊天备份包，只覆盖服务器已重新下发的同 ID 会话。",
                 textColor, subColor, new View.OnClickListener() {
-                    public void onClick(View v) { DeekseepTools.exportAll(act); }
+                    @Override public void onClick(View view) {
+                        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("application/zip");
+                        try {
+                            act.startActivityForResult(intent, Main.CHAT_IMPORT_REQUEST);
+                        } catch (ActivityNotFoundException unavailable) {
+                            intent.setType("*/*");
+                            act.startActivityForResult(intent, Main.CHAT_IMPORT_REQUEST);
+                        }
+                    }
                 }));
 
         card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "全局搜索聊天记录",
-                "检索用户输入、模型回答和深度思考内容，点击进入原生会话。",
+                "",
                 textColor, subColor, new View.OnClickListener() {
                     public void onClick(View v) { ChatSearchUi.show(act); }
                 }));
 
         card.addView(makeDivider(act, divColor));
-        card.addView(toolActionRow(act, "会话数据统计",
+        card.addView(taskActionRow(act, "会话数据统计",
                 "统计本地会话数、消息数、总字数，并按账号分组。",
-                textColor, subColor, new View.OnClickListener() {
-                    public void onClick(View v) { DeekseepTools.showStats(act); }
+                "仅统计设备上的聊天数据库，不会上传聊天内容。",
+                textColor, subColor, new TaskExecutionUi.Task() {
+                    @Override public String run(TaskExecutionUi.Logger logger) {
+                        return DeekseepTools.statisticsForConsole(act, logger);
+                    }
                 }));
 
         card.addView(makeDivider(act, divColor));
-        card.addView(toolActionRow(act, "立即备份聊天数据库",
-                "把全部 deepseek_chat 数据库复制到应用外部目录，重装前手动留底。",
-                textColor, subColor, new View.OnClickListener() {
-                    public void onClick(View v) { DeekseepTools.backupNow(act); }
+        card.addView(taskActionRow(act, "立即备份聊天数据库",
+                "复制全部聊天数据库到应用外部目录。",
+                "备份不会修改原数据库；完成后日志会显示保存目录。",
+                textColor, subColor, new TaskExecutionUi.Task() {
+                    @Override public String run(TaskExecutionUi.Logger logger) throws Throwable {
+                        return DeekseepTools.backupForConsole(act, logger);
+                    }
                 }));
 
         // ── Section 8: 自动备份开关 ─────────────────────────────────────
@@ -687,8 +1197,7 @@ public final class DeekseepUi {
         bkLabels.addView(bkLabel, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         TextView bkDesc = new TextView(act);
-        bkDesc.setText("开启后，每次启动 DeepSeek 若距上次备份超过 24 小时，自动把数据库复制到"
-                + "应用内部目录（仅保留最近 5 份）。");
+        bkDesc.setText("每日自动备份");
         bkDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         bkDesc.setTextColor(subColor);
         LinearLayout.LayoutParams bkdlp = new LinearLayout.LayoutParams(
@@ -699,7 +1208,7 @@ public final class DeekseepUi {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         bkllp.rightMargin = dp(act, 12);
         bkRow.addView(bkLabels, bkllp);
-        Switch bkSw = new Switch(act);
+        Switch bkSw = new HubInsetSwitch(act);
         bkSw.setChecked(Main.isAutoBackup());
         bkSw.setThumbTintList(new android.content.res.ColorStateList(ss,
                 new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
@@ -732,19 +1241,218 @@ public final class DeekseepUi {
                     }
                 }));
 
-        // ── Section 10: 实验性功能 ───────────────────────────────────────
+        // Optional features now live in their normal categories.  There is no separate
+        // experimental page; only the individual feature keeps a concise suffix.
         card.addView(makeDivider(act, divColor));
-        card.addView(toolActionRow(act, "实验性功能",
-                "聊天外观、专家模式图片中继、本地 API 服务及其独立帮助；功能默认关闭，可按需开启。",
-                textColor, subColor, new View.OnClickListener() {
-                    public void onClick(View v) { showExperimentalEntry(act); }
+        card.addView(toolActionRow(act, "主页欢迎语",
+                homeGreetingDescription(act), textColor, subColor,
+                new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        showHomeGreetingDialog(act, greetingDescriptionView(view));
+                    }
                 }));
 
-        // ── Section 11: 帮助与问题（折叠手风琴）───────────────────────────
         card.addView(makeDivider(act, divColor));
-        addHelpSection(act, card, textColor, subColor, divColor, dark);
+        card.addView(simpleSwitchRow(act, "原生设置入口 · 实验性",
+                "开启：置于 DeepSeek 设置顶部的独立“插件”分组；关闭：回退为悬浮入口。"
+                        + "宿主版本变化时可能导致应用闪退，切换后重新进入设置生效。",
+                Main.isNativeSettingsEntryEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(
+                            CompoundButton button, boolean checked) {
+                        if (reverting) return;
+                        if (Main.setNativeSettingsEntryEnabled(checked)) {
+                            Toast.makeText(act, UiLanguage.text(act,
+                                    "入口模式已保存，重新进入 DeepSeek 设置后生效",
+                                    "Entry mode saved; reopen DeepSeek settings to apply"),
+                                    Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                        Toast.makeText(act, UiLanguage.text(act,
+                                "入口模式保存失败", "Could not save the entry mode"),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                }));
 
-        // 页面最底部固定显示实际构建与宿主版本，便于截图定位兼容性问题。
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "外观设置",
+                "自定义背景、贴纸、气泡、透明度、取景和空间动效。",
+                textColor, subColor, new View.OnClickListener() {
+                    public void onClick(View v) { ChatAppearanceUi.show(act); }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "自定义 DeepSeek 头像",
+                "需要在灰度功能管理里面开启“显示助手头像”，否则聊天页不会显示自定义头像。",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        ChatAppearanceUi.showAssistantAvatar(act);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        final TextView[] whaleMotionDetail = new TextView[1];
+        card.addView(configurableSwitchRow(act, "鲸鱼图标动效",
+                whaleMotionDescription(),
+                Main.isWelcomeWhaleMotionEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        Main.setWelcomeWhaleMotionEnabled(checked);
+                    }
+                }, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        showWhaleMotionSpeedSheet(act, whaleMotionDetail[0]);
+                    }
+                }, whaleMotionDetail));
+
+        card.addView(makeDivider(act, divColor));
+        final TextView[] textWaveDetail = new TextView[1];
+        final boolean[] restoringTextWave = new boolean[1];
+        card.addView(configurableSwitchRow(act, "深海文字波纹",
+                textWaveDescription(), Main.isTextWaveEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (restoringTextWave[0]) return;
+                        if (!Main.setTextWaveEnabled(checked)) {
+                            restoringTextWave[0] = true;
+                            button.setChecked(!checked);
+                            restoringTextWave[0] = false;
+                            Toast.makeText(act, UiLanguage.text(act,
+                                    "文字波纹设置保存失败",
+                                    "Could not save the text-wave setting"),
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        showTextWaveSpeedSheet(act, textWaveDetail[0]);
+                    }
+                }, textWaveDetail));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(simpleSwitchRow(act, "解锁专家模式与图片上传 · 实验性",
+                "启用专家模型能力，并通过视觉描述中继图片。",
+                Main.isExpertUnlock(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton b, boolean checked) {
+                        Main.setExpertUnlock(checked);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(simpleSwitchRow(act, "禁用热更新 · 实验性",
+                "阻止 DeepSeek 展示普通或强制更新弹窗；不影响商店手动更新。",
+                Main.isHotUpdateDisabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (reverting) return;
+                        if (Main.setHotUpdateDisabled(checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                        Toast.makeText(act, UiLanguage.text(act,
+                                "热更新设置保存失败",
+                                "Could not save the update setting"),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        final int nativeFeatureOverrideCount =
+                RemoteFeatureFlags.overriddenCount(act.getClassLoader());
+        card.addView(toolActionRow(act, "灰度功能管理器 · 实验性",
+                nativeFeatureOverrideCount == 0
+                        ? "使用 DeepSeek 原生设置覆盖层；保留宿主自带的全部灰度项目。"
+                        : "原生覆盖已管理 " + nativeFeatureOverrideCount + " 项。",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        RemoteFeatureFlagsUi.show(act);
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        final TextView[] cacheCleanerDetail = new TextView[1];
+        card.addView(configurableSwitchRow(act, "自动清理缓存",
+                cacheCleanerDescription(), DeepSeekCacheCleaner.isEnabled(),
+                textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (reverting || DeepSeekCacheCleaner.setEnabled(checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                    }
+                }, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        showCacheCleanerDaysPicker(act, cacheCleanerDetail[0]);
+                    }
+                }, cacheCleanerDetail));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "进程管理 · Root",
+                "查看 DeepSeek 与模块进程，并精确冻结、解冻或杀死。",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        try {
+                            Intent intent = new Intent();
+                            intent.setClassName("com.dsmod.probe",
+                                    "com.dsmod.probe.ProcessManagerActivity");
+                            act.startActivity(intent);
+                        } catch (Throwable error) {
+                            Toast.makeText(act, UiLanguage.text(act,
+                                    "无法打开进程管理，请确认模块 APK 已更新",
+                                    "Could not open process manager; update the module APK"),
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        final TextView[] heartbeatDetail = new TextView[1];
+        card.addView(configurableSwitchRow(act, "AI 心跳 · 实验性",
+                proactiveHeartbeatDescription(act), Main.isProactiveHeartbeatEnabled(),
+                textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton b, boolean checked) {
+                        if (reverting || Main.setProactiveHeartbeatEnabled(act, checked)) return;
+                        reverting = true;
+                        b.setChecked(!checked);
+                        reverting = false;
+                    }
+                }, new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        showProactiveHeartbeatIntervalDialog(act, heartbeatDetail[0]);
+                    }
+                }, heartbeatDetail));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "Agent · 实验性",
+                "管理本地工具、权限模式以及 Root / Shizuku 后端。",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View v) { AgentSettingsUi.show(act); }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        card.addView(toolActionRow(act, "本地 API · 实验性",
+                "配置兼容接口、后台保活、密钥、监听地址和请求统计。",
+                textColor, subColor, new View.OnClickListener() {
+                    @Override public void onClick(View v) { showLocalApiEntry(act); }
+                }));
+
+        filterCategoryRows(card, category);
+
+        // Footer is appended after filtering so it remains present on every category page.
         card.addView(makeDivider(act, divColor));
         addBuildFooter(act, card, subColor);
 
@@ -756,6 +1464,7 @@ public final class DeekseepUi {
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(bgColor));
         }
         // 仿 DeepSeek 子页面：从右向左滑入，而非直接覆盖
+        trackChildDialog(dlg);
         openWithSlide(dlg, root);
         dlg.setOnKeyListener(new Dialog.OnKeyListener() {
             public boolean onKey(android.content.DialogInterface d, int code, android.view.KeyEvent e) {
@@ -981,13 +1690,13 @@ public final class DeekseepUi {
         LinearLayout expertLabels = new LinearLayout(act);
         expertLabels.setOrientation(LinearLayout.VERTICAL);
         TextView expertTitle = new TextView(act);
-        expertTitle.setText("解锁专家模式与图片上传");
+        expertTitle.setText("解锁专家模式与文件中转");
         expertTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         expertTitle.setTypeface(Typeface.DEFAULT_BOLD);
         expertTitle.setTextColor(textColor);
         expertLabels.addView(expertTitle);
         TextView expertDesc = new TextView(act);
-        expertDesc.setText("点亮专家模式的思考、搜索和文件能力；图片会先由视觉模型识别，再把描述中继给专家模型。切换后需重进应用或重选模型。");
+        expertDesc.setText("点亮思考、搜索和文件能力；普通文件保留原文由 DeepSeek 读取，只有图片经视觉模型中继。切换后需重选模型。");
         expertDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         expertDesc.setTextColor(subColor);
         expertLabels.addView(expertDesc);
@@ -995,7 +1704,7 @@ public final class DeekseepUi {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         labelsLp.rightMargin = dp(act, 12);
         expertRow.addView(expertLabels, labelsLp);
-        Switch expertSwitch = new Switch(act);
+        Switch expertSwitch = new HubInsetSwitch(act);
         int[][] states = new int[][]{new int[]{android.R.attr.state_checked},
                 new int[]{-android.R.attr.state_checked}};
         expertSwitch.setChecked(Main.isExpertUnlock());
@@ -1013,44 +1722,10 @@ public final class DeekseepUi {
         card.addView(expertRow);
 
         card.addView(makeDivider(act, divColor));
-        LinearLayout heartbeatRow = new LinearLayout(act);
-        heartbeatRow.setOrientation(LinearLayout.HORIZONTAL);
-        heartbeatRow.setGravity(Gravity.CENTER_VERTICAL);
-        heartbeatRow.setPadding(dp(act, 16), dp(act, 14), dp(act, 12), dp(act, 14));
-        LinearLayout heartbeatLabels = new LinearLayout(act);
-        heartbeatLabels.setOrientation(LinearLayout.VERTICAL);
-        TextView heartbeatTitle = new TextView(act);
-        heartbeatTitle.setText("AI 主动消息");
-        heartbeatTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        heartbeatTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        heartbeatTitle.setTextColor(textColor);
-        heartbeatLabels.addView(heartbeatTitle);
-        final TextView heartbeatDesc = new TextView(act);
-        heartbeatDesc.setText(proactiveHeartbeatDescription(act));
-        heartbeatDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        heartbeatDesc.setTextColor(subColor);
-        heartbeatLabels.addView(heartbeatDesc);
-        heartbeatLabels.setClickable(true);
-        heartbeatLabels.setFocusable(true);
-        heartbeatLabels.setContentDescription(UiLanguage.text(act,
-                "修改主动消息间隔", "Change proactive-message interval"));
-        heartbeatLabels.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                showProactiveHeartbeatIntervalDialog(act, heartbeatDesc);
-            }
-        });
-        LinearLayout.LayoutParams heartbeatLabelsLp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        heartbeatLabelsLp.rightMargin = dp(act, 12);
-        heartbeatRow.addView(heartbeatLabels, heartbeatLabelsLp);
-        final Switch heartbeatSwitch = new Switch(act);
-        heartbeatSwitch.setChecked(Main.isProactiveHeartbeatEnabled());
-        heartbeatSwitch.setThumbTintList(new android.content.res.ColorStateList(states,
-                new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
-        heartbeatSwitch.setTrackTintList(new android.content.res.ColorStateList(states,
-                new int[]{0xFFADBFFF, dark ? 0xFF555555 : 0xFFBFBFBF}));
-        heartbeatSwitch.setBackground(null);
-        heartbeatSwitch.setOnCheckedChangeListener(
+        final TextView[] heartbeatDetailLegacy = new TextView[1];
+        card.addView(configurableSwitchRow(act, "AI 心跳",
+                proactiveHeartbeatDescription(act), Main.isProactiveHeartbeatEnabled(),
+                textColor, subColor, dark,
                 new CompoundButton.OnCheckedChangeListener() {
                     private boolean reverting;
                     @Override public void onCheckedChanged(
@@ -1060,12 +1735,15 @@ public final class DeekseepUi {
                         reverting = true;
                         button.setChecked(!checked);
                         reverting = false;
-                        android.widget.Toast.makeText(act, "主动消息设置保存失败",
+                        android.widget.Toast.makeText(act, "AI 心跳设置保存失败",
                                 android.widget.Toast.LENGTH_SHORT).show();
                     }
-                });
-        heartbeatRow.addView(heartbeatSwitch);
-        card.addView(heartbeatRow);
+                }, new View.OnClickListener() {
+                    @Override public void onClick(View view) {
+                        showProactiveHeartbeatIntervalDialog(
+                                act, heartbeatDetailLegacy[0]);
+                    }
+                }, heartbeatDetailLegacy));
 
         card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "Agent",
@@ -1114,27 +1792,21 @@ public final class DeekseepUi {
 
     private static String proactiveHeartbeatDescription(Context context) {
         String interval = String.format(java.util.Locale.getDefault(), UiLanguage.text(context,
-                        "当前间隔：%d 分钟。点按此处修改；模型主动消息会写入绑定对话，"
-                                + "并在前后台都发送系统通知。聊天中可直接约定每次心跳要做什么，"
-                                + "也可让 AI 安排或取消指定时间的一次性心跳。",
-                        "Current interval: %d minutes. Tap here to change it. Proactive model "
-                                + "messages are added to the bound chat and always produce a "
-                                + "system notification. In chat, you can agree on what each "
-                                + "heartbeat should do or ask the AI to schedule or cancel a "
-                                + "one-time heartbeat for a specific time."),
+                        "每 %d 分钟",
+                        "Every %d minutes"),
                 Main.proactiveHeartbeatIntervalMinutes());
         String binding = !Main.hasProactiveHeartbeatBinding()
                 ? UiLanguage.text(context,
-                        "尚未绑定；请在目标对话中告诉 AI 心跳要做什么。",
-                        "Not bound yet; tell the AI what heartbeats should do in the target chat.")
+                        "未绑定",
+                        "Not bound")
                 : Main.proactiveHeartbeatBoundToCurrentConversation()
                         ? UiLanguage.text(context,
-                                "已绑定当前对话。",
-                                "Bound to the current chat.")
+                                "已绑定当前对话",
+                                "Bound to current chat")
                         : UiLanguage.text(context,
-                                "已绑定一个对话；在目标对话中重新约定即可切换。",
-                                "Bound to a chat; make a new heartbeat agreement in the target chat to switch.");
-        return interval + " " + binding;
+                                "已绑定其他对话",
+                                "Bound to another chat");
+        return interval + " · " + binding;
     }
 
     private static void showProactiveHeartbeatIntervalDialog(
@@ -1153,7 +1825,7 @@ public final class DeekseepUi {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         new android.app.AlertDialog.Builder(act)
                 .setTitle(UiLanguage.text(act,
-                        "设置主动消息间隔", "Set proactive-message interval"))
+                        "设置 AI 心跳间隔", "Set AI heartbeat interval"))
                 .setMessage(UiLanguage.text(act,
                         "请输入 15 到 10080 分钟（最长 7 天）。从保存时重新计时；"
                                 + "系统省电策略可能让实际触发略有延迟。",
@@ -1171,11 +1843,13 @@ public final class DeekseepUi {
                                     if (!Main.setProactiveHeartbeatInterval(act, minutes)) {
                                         throw new IllegalArgumentException("out of range");
                                     }
-                                    description.setText(
-                                            proactiveHeartbeatDescription(act));
+                                    if (description != null) {
+                                        description.setText(
+                                                proactiveHeartbeatDescription(act));
+                                    }
                                     Toast.makeText(act, UiLanguage.text(act,
-                                            "主动消息间隔已保存",
-                                            "Proactive-message interval saved"),
+                                            "AI 心跳间隔已保存",
+                                            "AI heartbeat interval saved"),
                                             Toast.LENGTH_SHORT).show();
                                 } catch (Throwable error) {
                                     Toast.makeText(act, UiLanguage.text(act,
@@ -1189,61 +1863,12 @@ public final class DeekseepUi {
     }
 
     private static void showLocalApiEntry(final Activity act) {
-        if (Main.isLocalApiBackgroundApproved(act)) {
-            showLocalApiPage(act);
-            return;
-        }
-        showLocalApiBackgroundGate(act);
-    }
-
-    private static void showLocalApiBackgroundGate(final Activity act) {
-        String message = "本地 API 运行在 DeepSeek 进程内。若系统限制后台活动，Termux、"
-                + "Codex 或 Claude Code 在前台时，DeepSeek 的 SSE 和上游网络会被暂停或中断。\n\n"
-                + Main.localApiBackgroundStatus(act)
-                + "\n\n请在系统页面把 DeepSeek 的电池使用设为“不限制/允许高耗电”，并允许后台活动。"
-                + "返回后模块会自动复检；只有两项都通过才会启动监听。启用 API 后还会启动一个"
-                + "前台保活任务，专门防止 Android Cached Apps Freezer 冻结监听和 SSE。";
-        showCustomConfirm(act, "先允许 DeepSeek 后台运行", message,
-                "打开电池设置", "校验并进入", false,
-                new Runnable() {
-                    @Override public void run() {
-                        localApiSettingsFromPage = false;
-                        if (!Main.openLocalApiBatterySettings(act)) {
-                            showCustomConfirm(act, "无法打开设置",
-                                    "系统没有可用的电池设置入口。请手动进入：设置 → 应用 → DeepSeek → 电池 → 不限制，然后重新点本功能。",
-                                    null, "知道了", true, null, null);
-                        }
-                    }
-                },
-                new Runnable() {
-                    @Override public void run() {
-                        if (Main.verifyLocalApiBackground(act)) showLocalApiPage(act);
-                        else showLocalApiBackgroundGate(act);
-                    }
-                });
+        showLocalApiPage(act);
     }
 
     static void handleLocalApiBatterySettingsResult(final Activity act) {
-        final boolean fromPage = localApiSettingsFromPage;
         localApiSettingsFromPage = false;
-        boolean allowed = Main.verifyLocalApiBackground(act);
-        if (fromPage && localApiPageDialog != null && localApiPageDialog.isShowing()) {
-            if (!allowed) {
-                showCustomConfirm(act, "后台权限仍未通过",
-                        Main.localApiBackgroundStatus(act)
-                                + "\n\n请确认电池使用为“不限制”，且没有关闭后台活动。",
-                        "再次打开设置", "知道了", true,
-                        new Runnable() {
-                            @Override public void run() {
-                                localApiSettingsFromPage = true;
-                                Main.openLocalApiBatterySettings(act);
-                            }
-                        }, null);
-            }
-            return;
-        }
-        if (allowed) showLocalApiPage(act);
-        else showLocalApiBackgroundGate(act);
+        Main.verifyLocalApiBackground(act);
     }
 
     /** 独立的本地 API 控制页：所有控件与反馈均由模块手工绘制。 */
@@ -1316,7 +1941,7 @@ public final class DeekseepUi {
         cardLp.setMargins(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 20));
         scroll.addView(card, cardLp);
 
-        card.addView(sectionTitle(act, "后台运行校验", textColor));
+        card.addView(sectionTitle(act, "后台运行建议", textColor));
         final TextView backgroundStatus = infoBox(act,
                 Main.localApiBackgroundStatus(act), textColor, dark);
         card.addView(backgroundStatus, insetParams(act, 0, 6));
@@ -1329,7 +1954,7 @@ public final class DeekseepUi {
         final TextView openBattery = dialogAction(act, "打开电池设置", 0xFFE07A22, dark);
         batteryActions.addView(openBattery, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final TextView verifyBattery = dialogAction(act, "重新校验", BRAND, dark);
+        final TextView verifyBattery = dialogAction(act, "刷新状态", BRAND, dark);
         LinearLayout.LayoutParams verifyBatteryLp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         verifyBatteryLp.leftMargin = dp(act, 8);
@@ -1357,7 +1982,7 @@ public final class DeekseepUi {
         enableLabels.addView(enableDesc);
         enableRow.addView(enableLabels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch serviceSwitch = new Switch(act);
+        final Switch serviceSwitch = new HubInsetSwitch(act);
         serviceSwitch.setChecked(Main.isLocalApiEnabled());
         serviceSwitch.setThumbTintList(new android.content.res.ColorStateList(switchStates,
                 new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
@@ -1525,7 +2150,7 @@ public final class DeekseepUi {
                 boolean applied = Main.setLocalApiEnabled(checked);
                 if (checked && !applied) {
                     serviceSwitch.setChecked(false);
-                    feedback.setText(UiLanguage.dynamic(act, "后台运行校验未通过，监听未启动"));
+                    feedback.setText(UiLanguage.dynamic(act, "服务启动失败，请查看运行状态"));
                 } else {
                     feedback.setText(UiLanguage.dynamic(act, checked ? "正在启动监听…"
                             : "服务已关闭，正在清理复用会话…"));
@@ -1550,7 +2175,7 @@ public final class DeekseepUi {
                 boolean allowed = Main.verifyLocalApiBackground(act);
                 backgroundStatus.setText(UiLanguage.dynamic(act, Main.localApiBackgroundStatus(act)));
                 feedback.setText(UiLanguage.dynamic(act, allowed
-                        ? "后台运行校验通过" : "校验未通过，请设为不限制后台活动"));
+                        ? "后台设置已完成" : "未设为不限制；前台保活仍会继续运行"));
                 connectionInfo.setText(UiLanguage.dynamic(act, Main.localApiConnectionInfo()));
                 runtime.setText(UiLanguage.dynamic(act, Main.localApiRuntimeStatus()));
                 keepAliveStatus.setText(UiLanguage.dynamic(act, Main.localApiKeepAliveStatus()));
@@ -1604,6 +2229,7 @@ public final class DeekseepUi {
             }
         });
 
+        addBuildFooter(act, card, subColor);
         UiLanguage.localizeTree(act, root);
         dialog.setContentView(root);
         Window window = dialog.getWindow();
@@ -2020,21 +2646,878 @@ public final class DeekseepUi {
         return v;
     }
 
-    /** 仿"编辑聊天记录"样式的可点击行（标题+说明+右箭头）。 */
-    private static View toolActionRow(final Activity act, String title, String desc,
-                                      int textColor, int subColor, View.OnClickListener onClick) {
+    private static String categoryTitle(int category) {
+        switch (category) {
+            case CATEGORY_CHAT: return "聊天";
+            case CATEGORY_ACCOUNT: return "账号与隐私";
+            case CATEGORY_APPEARANCE: return "界面美化";
+            case CATEGORY_DEBUG: return "调试";
+            default: return "工程";
+        }
+    }
+
+    private static View simpleSwitchRow(final Activity act, String title, String desc,
+            boolean checked, int textColor, int subColor, boolean dark,
+            CompoundButton.OnCheckedChangeListener listener) {
         LinearLayout row = new LinearLayout(act);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16));
+        row.setPadding(dp(act, 16), dp(act, 14), dp(act, 12), dp(act, 14));
+        LinearLayout labels = new LinearLayout(act);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        TextView heading = new TextView(act);
+        heading.setText(UiLanguage.dynamic(act, title));
+        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        heading.setTextColor(textColor);
+        labels.addView(heading);
+        TextView detail = new TextView(act);
+        detail.setText(UiLanguage.dynamic(act, desc));
+        detail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        detail.setTextColor(subColor);
+        labels.addView(detail);
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        labelsLp.rightMargin = dp(act, 12);
+        row.addView(labels, labelsLp);
+        Switch toggle = new HubInsetSwitch(act);
+        int[][] states = {{android.R.attr.state_checked},
+                {-android.R.attr.state_checked}};
+        toggle.setChecked(checked);
+        toggle.setThumbTintList(new android.content.res.ColorStateList(states,
+                new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
+        toggle.setTrackTintList(new android.content.res.ColorStateList(states,
+                new int[]{0xFFADBFFF, dark ? 0xFF555555 : 0xFFBFBFBF}));
+        toggle.setBackground(null);
+        toggle.setOnCheckedChangeListener(listener);
+        row.addView(toggle);
+        return row;
+    }
+
+    private static View configurableSwitchRow(final Activity act,
+            String title, String desc, boolean checked,
+            int textColor, int subColor, boolean dark,
+            CompoundButton.OnCheckedChangeListener listener,
+            View.OnClickListener settingsClick, TextView[] detailOut) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(act, 16), dp(act, 14), dp(act, 8), dp(act, 14));
+
+        LinearLayout labels = new LinearLayout(act);
+        labels.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout titleLine = new LinearLayout(act);
+        titleLine.setOrientation(LinearLayout.HORIZONTAL);
+        titleLine.setGravity(Gravity.CENTER_VERTICAL);
+        TextView heading = new TextView(act);
+        heading.setText(UiLanguage.dynamic(act, title));
+        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        heading.setTextColor(textColor);
+        titleLine.addView(heading, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        View settings = plainGearControl(act, textColor,
+                UiLanguage.text(act, "设置", "Settings"), settingsClick);
+        LinearLayout.LayoutParams settingsLp = new LinearLayout.LayoutParams(
+                dp(act, 36), dp(act, 36));
+        settingsLp.leftMargin = dp(act, 2);
+        titleLine.addView(settings, settingsLp);
+        labels.addView(titleLine);
+        TextView detail = new TextView(act);
+        detail.setText(UiLanguage.dynamic(act, desc));
+        detail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        detail.setTextColor(subColor);
+        LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailLp.topMargin = dp(act, 4);
+        labels.addView(detail, detailLp);
+        if (detailOut != null && detailOut.length > 0) detailOut[0] = detail;
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        labelsLp.rightMargin = dp(act, 8);
+        row.addView(labels, labelsLp);
+
+        Switch toggle = new HubInsetSwitch(act);
+        int[][] states = {{android.R.attr.state_checked},
+                {-android.R.attr.state_checked}};
+        toggle.setChecked(checked);
+        toggle.setThumbTintList(new android.content.res.ColorStateList(states,
+                new int[]{BRAND, dark ? 0xFFCCCCCC : 0xFFFFFFFF}));
+        toggle.setTrackTintList(new android.content.res.ColorStateList(states,
+                new int[]{0xFFADBFFF, dark ? 0xFF555555 : 0xFFBFBFBF}));
+        toggle.setBackground(null);
+        toggle.setOnCheckedChangeListener(listener);
+        row.addView(toggle);
+        return row;
+    }
+
+    private static View taskActionRow(final Activity act, final String title,
+            String description, final String hint,
+            int textColor, int subColor, final TaskExecutionUi.Task task) {
+        final boolean dark = isDark(act);
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(act, 16), dp(act, 14), dp(act, 8), dp(act, 14));
         row.setClickable(true);
         row.setFocusable(true);
 
         LinearLayout labels = new LinearLayout(act);
         labels.setOrientation(LinearLayout.VERTICAL);
+        TextView heading = new TextView(act);
+        heading.setText(UiLanguage.dynamic(act, title));
+        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        heading.setTextColor(textColor);
+        labels.addView(heading);
+        TextView detail = new TextView(act);
+        detail.setText(UiLanguage.dynamic(act, description));
+        detail.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        detail.setTextColor(subColor);
+        LinearLayout.LayoutParams detailLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        detailLp.topMargin = dp(act, 4);
+        labels.addView(detail, detailLp);
+        LinearLayout.LayoutParams labelsLp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        labelsLp.rightMargin = dp(act, 10);
+        row.addView(labels, labelsLp);
+
+        View.OnClickListener execute = new View.OnClickListener() {
+            @Override public void onClick(View view) {
+                TaskExecutionUi.show(act, title, hint, task);
+            }
+        };
+        View control = executeControl(act, textColor, dark,
+                UiLanguage.text(act, "执行", "Run"), execute);
+        row.addView(control, new LinearLayout.LayoutParams(
+                dp(act, 72), dp(act, 40)));
+        row.setOnClickListener(execute);
+        return row;
+    }
+
+    private static View plainGearControl(Activity act, int iconColor,
+            String description, View.OnClickListener listener) {
+        FrameLayout hit = new FrameLayout(act);
+        hit.setClickable(true);
+        hit.setFocusable(true);
+        hit.setContentDescription(description);
+        hit.setOnClickListener(listener);
+
+        View glyph = new HubMaterialGlyphView(act, "ds_action_settings", iconColor);
+        FrameLayout.LayoutParams glyphLp = new FrameLayout.LayoutParams(
+                dp(act, 18), dp(act, 18), Gravity.CENTER);
+        hit.addView(glyph, glyphLp);
+        return hit;
+    }
+
+    private static View executeControl(Activity act, int iconColor,
+            boolean dark, String description, View.OnClickListener listener) {
+        FrameLayout hit = new FrameLayout(act);
+        hit.setClickable(true);
+        hit.setFocusable(true);
+        hit.setContentDescription(description);
+        hit.setOnClickListener(listener);
+
+        LinearLayout face = new LinearLayout(act);
+        face.setOrientation(LinearLayout.HORIZONTAL);
+        face.setGravity(Gravity.CENTER);
+        face.setPadding(dp(act, 8), 0, dp(act, 10), 0);
+        face.setDuplicateParentStateEnabled(true);
+        int normal = dark ? 0xFF3A3A3E : 0xFFE8E9EC;
+        int pressed = dark ? 0xFF505056 : 0xFFD7D9DE;
+        // KSU-style compact action pill: horizontal icon + label, a little larger than a switch.
+        face.setBackground(controlBackground(normal, pressed, dp(act, 18)));
+        FrameLayout.LayoutParams faceLp = new FrameLayout.LayoutParams(
+                dp(act, 68), dp(act, 36), Gravity.CENTER);
+        hit.addView(face, faceLp);
+
+        View glyph = new HubMaterialGlyphView(act, "ds_action_execute", iconColor);
+        LinearLayout.LayoutParams glyphLp = new LinearLayout.LayoutParams(
+                dp(act, 20), dp(act, 20));
+        face.addView(glyph, glyphLp);
+        TextView label = new TextView(act);
+        label.setText(UiLanguage.text(act, "执行", "Action"));
+        label.setTextColor(iconColor);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        label.setSingleLine(true);
+        label.setMaxLines(1);
+        label.setHorizontallyScrolling(true);
+        LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        labelLp.leftMargin = dp(act, 4);
+        face.addView(label, labelLp);
+        return hit;
+    }
+
+    static android.graphics.drawable.StateListDrawable controlBackground(
+            int normal, int pressed, float radius) {
+        android.graphics.drawable.StateListDrawable states =
+                new android.graphics.drawable.StateListDrawable();
+        GradientDrawable down = new GradientDrawable();
+        down.setColor(pressed);
+        down.setCornerRadius(radius);
+        states.addState(new int[]{android.R.attr.state_pressed}, down);
+        GradientDrawable idle = new GradientDrawable();
+        idle.setColor(normal);
+        idle.setCornerRadius(radius);
+        states.addState(new int[0], idle);
+        states.setEnterFadeDuration(80);
+        states.setExitFadeDuration(120);
+        return states;
+    }
+
+    private static void filterCategoryRows(LinearLayout card, int category) {
+        View pendingDivider = null;
+        boolean hasVisibleRow = false;
+        for (int i = 0; i < card.getChildCount(); i++) {
+            View child = card.getChildAt(i);
+            if (!(child instanceof ViewGroup) && !(child instanceof TextView)) {
+                child.setVisibility(View.GONE);
+                pendingDivider = child;
+                continue;
+            }
+            String text = collectText(child, new StringBuilder()).toString();
+            int owner = categoryForText(text);
+            boolean visible = owner == category;
+            child.setVisibility(visible ? View.VISIBLE : View.GONE);
+            if (visible) {
+                if (hasVisibleRow && pendingDivider != null) {
+                    pendingDivider.setVisibility(View.VISIBLE);
+                }
+                hasVisibleRow = true;
+                pendingDivider = null;
+            }
+        }
+    }
+
+    private static StringBuilder collectText(View view, StringBuilder out) {
+        if (view instanceof TextView) {
+            CharSequence text = ((TextView) view).getText();
+            if (text != null) out.append(text).append('\n');
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectText(group.getChildAt(i), out);
+            }
+        }
+        return out;
+    }
+
+    private static int categoryForText(String text) {
+        if (text == null) return CATEGORY_ENGINEERING;
+        if (text.contains("聊天外观") || text.contains("外观设置")
+                || text.contains("自定义 DeepSeek 头像")
+                || text.contains("鲸鱼图标动效")
+                || text.contains("深海文字波纹")
+                || text.contains("主页欢迎语")
+                || text.contains("原生设置入口")) return CATEGORY_APPEARANCE;
+        if (text.contains("记录服务器返回") || text.contains("Hook 日志") || text.contains("记录崩溃")
+                || text.contains("崩溃测试") || text.contains("诊断")
+                || text.contains("性能统计") || text.contains("事件追踪")
+                || text.contains("发送自定义请求")) {
+            return CATEGORY_DEBUG;
+        }
+        if (text.contains("Google 登录") || text.contains("微信与手机号")
+                || text.contains("多账号") || text.contains("安全审查")
+                || text.contains("本地禁言") || text.contains("伪禁言")
+                || text.contains("数据用于优化体验")) {
+            return CATEGORY_ACCOUNT;
+        }
+        if (text.contains("导入提示词") || text.contains("还原设置")
+                || text.contains("已开启其他功能，请先关闭后再使用")
+                || text.contains("系统提示词") || text.contains("聊天记录多选")
+                || text.contains("编辑聊天记录") || text.contains("消息时间与详情")
+                || text.contains("自动继续生成")
+                || text.contains("导出会话")
+                || text.contains("导入聊天记录")
+                || text.contains("全局搜索") || text.contains("会话数据统计")
+                || text.contains("专家模式") || text.contains("AI 心跳")
+                || text.contains("主动消息")) {
+            return CATEGORY_CHAT;
+        }
+        return CATEGORY_ENGINEERING;
+    }
+
+    private static String fakeMuteDescription() {
+        long until = Main.fakeMuteUntilMillis();
+        if (until <= System.currentTimeMillis()) {
+            return "尚未设置有效截止时间";
+        }
+        return (Main.isFakeMuteEnabled() ? "已开启至 " : "已保存，开关未开启 · ")
+                + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                .format(new java.util.Date(until));
+    }
+
+    private static String cacheCleanerDescription() {
+        return "每天检查一次，仅清理 DeepSeek 已确认的图片、Markdown 图表缓存中超过 "
+                + DeepSeekCacheCleaner.days() + " 天的文件。";
+    }
+
+    private static void showCacheCleanerDaysPicker(final Activity act, final TextView detail) {
+        final int[] values = {3, 7, 30};
+        final String[] labels = {
+                UiLanguage.text(act, "保留 3 天", "Keep 3 days"),
+                UiLanguage.text(act, "保留 7 天", "Keep 7 days"),
+                UiLanguage.text(act, "保留 30 天", "Keep 30 days")
+        };
+        int current = DeepSeekCacheCleaner.days();
+        int selected = current == 3 ? 0 : current == 30 ? 2 : 1;
+        final android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(act)
+                .setTitle(UiLanguage.text(act, "缓存保留时间", "Cache retention"))
+                .setSingleChoiceItems(labels, selected, null)
+                .setNegativeButton(UiLanguage.text(act, "取消", "Cancel"), null)
+                .setPositiveButton(UiLanguage.text(act, "保存", "Save"), null)
+                .create();
+        dialog.setOnShowListener(new android.content.DialogInterface.OnShowListener() {
+            @Override public void onShow(android.content.DialogInterface ignored) {
+                dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+                        .setOnClickListener(new View.OnClickListener() {
+                            @Override public void onClick(View view) {
+                                int which = dialog.getListView().getCheckedItemPosition();
+                                if (which < 0 || which >= values.length
+                                        || !DeepSeekCacheCleaner.setDays(values[which])) {
+                                    Toast.makeText(act, UiLanguage.text(act,
+                                            "保存失败", "Save failed"),
+                                            Toast.LENGTH_SHORT).show();
+                                    return;
+                                }
+                                if (detail != null) detail.setText(
+                                        UiLanguage.dynamic(act, cacheCleanerDescription()));
+                                dialog.dismiss();
+                            }
+                        });
+            }
+        });
+        dialog.show();
+    }
+
+    private static String whaleMotionDescription() {
+        return String.format(java.util.Locale.US,
+                "首页鲸鱼持续旋转 · %.1f×", Main.welcomeWhaleMotionSpeed());
+    }
+
+    private static String textWaveDescription() {
+        return String.format(java.util.Locale.US,
+                "右上向左下斜落 · 宽波峰约占字宽 1/3 · %.1f×",
+                Main.textWaveSpeed());
+    }
+
+    private static String homeGreetingDescription(Context context) {
+        String custom = Main.homeGreeting();
+        return custom.length() == 0
+                ? UiLanguage.text(context, "当前：跟随 DeepSeek 默认文案",
+                        "Current: follow DeepSeek's default copy")
+                : UiLanguage.text(context, "当前：", "Current: ") + custom;
+    }
+
+    private static TextView greetingDescriptionView(View row) {
+        if (!(row instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) row;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (!(child instanceof ViewGroup)) continue;
+            ViewGroup labels = (ViewGroup) child;
+            if (labels.getChildCount() > 1 && labels.getChildAt(1) instanceof TextView) {
+                return (TextView) labels.getChildAt(1);
+            }
+        }
+        return null;
+    }
+
+    private static void showHomeGreetingDialog(
+            final Activity act, final TextView description) {
+        final android.widget.EditText input = new android.widget.EditText(act);
+        input.setSingleLine(true);
+        input.setSelectAllOnFocus(true);
+        input.setMaxLines(1);
+        input.setFilters(new android.text.InputFilter[]{
+                new android.text.InputFilter.LengthFilter(60)});
+        input.setText(Main.homeGreeting());
+        input.setHint(UiLanguage.text(act, "例如：今天想我了没？",
+                "For example: Did you miss me today?"));
+        FrameLayout container = new FrameLayout(act);
+        container.setPadding(dp(act, 20), 0, dp(act, 20), 0);
+        container.addView(input, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        new android.app.AlertDialog.Builder(act)
+                .setTitle(UiLanguage.text(act, "自定义主页欢迎语", "Custom home greeting"))
+                .setMessage(UiLanguage.text(act,
+                        "保存后返回主页即可看到新文案；留空会恢复 DeepSeek 默认文案。",
+                        "Return to the home screen after saving to see the new copy. "
+                                + "Leave it blank to restore DeepSeek's default."))
+                .setView(container)
+                .setNegativeButton(UiLanguage.text(act, "取消", "Cancel"), null)
+                .setNeutralButton(UiLanguage.text(act, "恢复默认", "Restore default"),
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(
+                                    android.content.DialogInterface ignored, int which) {
+                                saveHomeGreeting(act, "", description);
+                            }
+                        })
+                .setPositiveButton(UiLanguage.text(act, "保存", "Save"),
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(
+                                    android.content.DialogInterface ignored, int which) {
+                                saveHomeGreeting(
+                                        act, input.getText().toString(), description);
+                            }
+                        })
+                .show();
+    }
+
+    private static void saveHomeGreeting(
+            Activity act, String value, TextView description) {
+        if (!Main.setHomeGreeting(value)) {
+            Toast.makeText(act, UiLanguage.text(act,
+                    "主页欢迎语保存失败", "Could not save the home greeting"),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (description != null) description.setText(homeGreetingDescription(act));
+        Toast.makeText(act, UiLanguage.text(act,
+                "主页欢迎语已保存，返回主页后生效",
+                "Home greeting saved; return home to apply"),
+                Toast.LENGTH_SHORT).show();
+    }
+
+    private static void showTextWaveSpeedSheet(
+            final Activity act, final TextView description) {
+        final float[] selected = new float[]{Main.textWaveSpeed()};
+        LinearLayout content = new LinearLayout(act);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(act, 4), dp(act, 2), dp(act, 4), dp(act, 4));
+        final TextView value = new TextView(act);
+        value.setText(String.format(java.util.Locale.US, "%.1f×", selected[0]));
+        value.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        value.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        value.setTextColor(isDark(act) ? 0xFFF2F2F3 : 0xFF1B1B1D);
+        value.setGravity(Gravity.CENTER);
+        value.setPadding(0, dp(act, 8), 0, dp(act, 8));
+        content.addView(value, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        android.widget.SeekBar speed = new android.widget.SeekBar(act);
+        speed.setMax(130);
+        speed.setProgress(Math.round((selected[0] - 0.2f) * 100f));
+        speed.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(
+                    android.widget.SeekBar seekBar, int progress, boolean fromUser) {
+                selected[0] = 0.2f + progress / 100f;
+                value.setText(String.format(java.util.Locale.US, "%.1f×", selected[0]));
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar seekBar) {}
+        });
+        content.addView(speed, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 48)));
+        TextView range = new TextView(act);
+        range.setText(UiLanguage.text(act,
+                "0.2× 舒缓                                      1.5× 灵动",
+                "0.2× Calm                                      1.5× Lively"));
+        range.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        range.setTextColor(isDark(act) ? 0xFFA8A8AD : 0xFF72767D);
+        range.setGravity(Gravity.CENTER);
+        content.addView(range, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        showMutePickerSheet(act,
+                UiLanguage.text(act, "文字波纹速度", "Text-wave speed"), content,
+                UiLanguage.text(act, "取消", "Cancel"), null,
+                UiLanguage.text(act, "保存", "Save"), new MuteSheetAction() {
+                    @Override public void run(Dialog dialog) {
+                        if (Main.setTextWaveSpeed(selected[0])) {
+                            if (description != null) {
+                                description.setText(textWaveDescription());
+                            }
+                            dialog.dismiss();
+                        } else {
+                            Toast.makeText(act, UiLanguage.text(act,
+                                    "文字波纹速度保存失败",
+                                    "Could not save the text-wave speed"),
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+    }
+
+    private static void showWhaleMotionSpeedSheet(
+            final Activity act, final TextView description) {
+        final float[] selected = new float[]{Main.welcomeWhaleMotionSpeed()};
+        LinearLayout content = new LinearLayout(act);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(act, 4), dp(act, 2), dp(act, 4), dp(act, 4));
+        final TextView value = new TextView(act);
+        value.setText(String.format(java.util.Locale.US, "%.1f×", selected[0]));
+        value.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        value.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        value.setTextColor(isDark(act) ? 0xFFF2F2F3 : 0xFF1B1B1D);
+        value.setGravity(Gravity.CENTER);
+        value.setPadding(0, dp(act, 8), 0, dp(act, 8));
+        content.addView(value, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        android.widget.SeekBar speed = new android.widget.SeekBar(act);
+        speed.setMax(90);
+        speed.setProgress(Math.round((selected[0] - 0.1f) * 100f));
+        speed.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(
+                    android.widget.SeekBar seekBar, int progress, boolean fromUser) {
+                selected[0] = 0.1f + progress / 100f;
+                value.setText(String.format(java.util.Locale.US, "%.1f×", selected[0]));
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar seekBar) {}
+        });
+        content.addView(speed, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(act, 48)));
+        TextView range = new TextView(act);
+        range.setText(UiLanguage.text(act,
+                "0.1× 慢速                                      1.0× 快速",
+                "0.1× Slow                                      1.0× Fast"));
+        range.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        range.setTextColor(isDark(act) ? 0xFFA8A8AD : 0xFF72767D);
+        range.setGravity(Gravity.CENTER);
+        content.addView(range, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        showMutePickerSheet(act,
+                UiLanguage.text(act, "鲸鱼旋转速度", "Whale rotation speed"), content,
+                UiLanguage.text(act, "取消", "Cancel"), null,
+                UiLanguage.text(act, "保存", "Save"), new MuteSheetAction() {
+                    @Override public void run(Dialog dialog) {
+                        Main.setWelcomeWhaleMotionSpeed(selected[0]);
+                        if (description != null) description.setText(whaleMotionDescription());
+                        dialog.dismiss();
+                    }
+                });
+    }
+
+    private static void showFakeMuteTimePicker(final Activity act) {
+        showFakeMuteTimePicker(act, null);
+    }
+
+    private static void showFakeMuteTimePicker(final Activity act,
+                                                final TextView description) {
+        final java.util.Calendar selected = java.util.Calendar.getInstance();
+        long current = Main.fakeMuteUntilMillis();
+        selected.setTimeInMillis(current > System.currentTimeMillis()
+                ? current : System.currentTimeMillis() + 24L * 60L * 60L * 1000L);
+        showFakeMuteDateStep(act, selected, description);
+    }
+
+    private static void showFakeMuteDateStep(final Activity act,
+                                             final java.util.Calendar selected,
+                                             final TextView description) {
+        final android.widget.NumberPicker year = new android.widget.NumberPicker(act);
+        final android.widget.NumberPicker month = new android.widget.NumberPicker(act);
+        final android.widget.NumberPicker day = new android.widget.NumberPicker(act);
+        tuneMutePickerFling(year);
+        tuneMutePickerFling(month);
+        tuneMutePickerFling(day);
+        year.setMinValue(1900);
+        year.setMaxValue(3000);
+        year.setValue(Math.max(1900, Math.min(3000,
+                selected.get(java.util.Calendar.YEAR))));
+        year.setWrapSelectorWheel(false);
+        month.setMinValue(1);
+        month.setMaxValue(12);
+        month.setValue(selected.get(java.util.Calendar.MONTH) + 1);
+        day.setMinValue(1);
+        day.setMaxValue(selected.getActualMaximum(java.util.Calendar.DAY_OF_MONTH));
+        day.setValue(Math.min(selected.get(java.util.Calendar.DAY_OF_MONTH), day.getMaxValue()));
+
+        android.widget.NumberPicker.OnValueChangeListener updateDays =
+                new android.widget.NumberPicker.OnValueChangeListener() {
+                    @Override public void onValueChange(android.widget.NumberPicker picker,
+                                                        int oldValue, int newValue) {
+                        java.util.Calendar probe = java.util.Calendar.getInstance();
+                        probe.clear();
+                        probe.set(java.util.Calendar.YEAR, year.getValue());
+                        probe.set(java.util.Calendar.MONTH, month.getValue() - 1);
+                        int maximum = probe.getActualMaximum(java.util.Calendar.DAY_OF_MONTH);
+                        int previous = day.getValue();
+                        day.setMaxValue(maximum);
+                        day.setValue(Math.min(previous, maximum));
+                    }
+                };
+        year.setOnValueChangedListener(updateDays);
+        month.setOnValueChangedListener(updateDays);
+
+        LinearLayout wheels = new LinearLayout(act);
+        wheels.setOrientation(LinearLayout.HORIZONTAL);
+        wheels.setPadding(dp(act, 12), dp(act, 6), dp(act, 12), 0);
+        wheels.addView(muteWheelColumn(act, year,
+                        UiLanguage.text(act, "\u5e74", "Year")),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        wheels.addView(muteWheelColumn(act, month,
+                        UiLanguage.text(act, "\u6708", "Month")),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        wheels.addView(muteWheelColumn(act, day,
+                        UiLanguage.text(act, "\u65e5", "Day")),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        showMutePickerSheet(act,
+                UiLanguage.text(act, "选择截止日期", "Choose end date"), wheels,
+                UiLanguage.text(act, "取消", "Cancel"), null,
+                UiLanguage.text(act, "下一步", "Next"), new MuteSheetAction() {
+                    @Override public void run(Dialog dialog) {
+                        selected.set(java.util.Calendar.YEAR, year.getValue());
+                        selected.set(java.util.Calendar.MONTH, month.getValue() - 1);
+                        selected.set(java.util.Calendar.DAY_OF_MONTH, day.getValue());
+                        dialog.dismiss();
+                        showFakeMuteClockStep(act, selected, description);
+                    }
+                });
+    }
+
+    private static void showFakeMuteClockStep(final Activity act,
+                                              final java.util.Calendar selected,
+                                              final TextView description) {
+        final android.widget.NumberPicker hour = new android.widget.NumberPicker(act);
+        final android.widget.NumberPicker minute = new android.widget.NumberPicker(act);
+        tuneMutePickerFling(hour);
+        tuneMutePickerFling(minute);
+        hour.setMinValue(0);
+        hour.setMaxValue(23);
+        hour.setValue(selected.get(java.util.Calendar.HOUR_OF_DAY));
+        hour.setFormatter(twoDigitFormatter());
+        minute.setMinValue(0);
+        minute.setMaxValue(59);
+        minute.setValue(selected.get(java.util.Calendar.MINUTE));
+        minute.setFormatter(twoDigitFormatter());
+
+        LinearLayout wheels = new LinearLayout(act);
+        wheels.setOrientation(LinearLayout.HORIZONTAL);
+        wheels.setPadding(dp(act, 28), dp(act, 6), dp(act, 28), 0);
+        wheels.addView(muteWheelColumn(act, hour,
+                        UiLanguage.text(act, "\u65f6", "Hour")),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        wheels.addView(muteWheelColumn(act, minute,
+                        UiLanguage.text(act, "\u5206", "Minute")),
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        showMutePickerSheet(act,
+                UiLanguage.text(act, "选择截止时间", "Choose end time"), wheels,
+                UiLanguage.text(act, "上一步", "Back"), new MuteSheetAction() {
+                    @Override public void run(Dialog dialog) {
+                        dialog.dismiss();
+                        showFakeMuteDateStep(act, selected, description);
+                    }
+                }, UiLanguage.text(act, "确定", "OK"), new MuteSheetAction() {
+                    @Override public void run(Dialog dialog) {
+                        selected.set(java.util.Calendar.HOUR_OF_DAY, hour.getValue());
+                        selected.set(java.util.Calendar.MINUTE, minute.getValue());
+                        selected.set(java.util.Calendar.SECOND, 0);
+                        selected.set(java.util.Calendar.MILLISECOND, 0);
+                        if (Main.setFakeMuteUntilMillis(selected.getTimeInMillis())) {
+                            dialog.dismiss();
+                            if (description != null) {
+                                description.setText(fakeMuteDescription());
+                            }
+                            Toast.makeText(act, Main.isFakeMuteEnabled()
+                                            ? UiLanguage.text(act,
+                                            "截止时间已更新，本地禁言保持开启",
+                                            "Deadline updated; local mute remains enabled")
+                                            : UiLanguage.text(act,
+                                            "截止时间已保存，打开开关后启用",
+                                            "Deadline saved; turn on the switch to enable it"),
+                                    Toast.LENGTH_LONG).show();
+                        } else {
+                            Toast.makeText(act, "截止时间必须晚于当前时间",
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+    }
+
+    private static LinearLayout muteWheelColumn(Activity act,
+                                                android.widget.NumberPicker picker,
+                                                String localizedLabel) {
+        LinearLayout column = new LinearLayout(act);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setGravity(Gravity.CENTER_HORIZONTAL);
+        TextView label = new TextView(act);
+        label.setText(localizedLabel);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setTextColor(isDark(act) ? 0xFFA8A8AD : 0xFF72767D);
+        label.setGravity(Gravity.CENTER);
+        label.setPadding(0, 0, 0, dp(act, 4));
+        column.addView(label, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        column.addView(picker, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return column;
+    }
+
+    /** Keep the native wheel but let a decisive swipe travel farther and retain momentum. */
+    private static void tuneMutePickerFling(android.widget.NumberPicker picker) {
+        if (picker == null) return;
+        picker.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        try {
+            java.lang.reflect.Field field = android.widget.NumberPicker.class
+                    .getDeclaredField("mFlingScroller");
+            field.setAccessible(true);
+            Object value = field.get(picker);
+            if (value instanceof android.widget.Scroller) {
+                ((android.widget.Scroller) value).setFriction(
+                        android.view.ViewConfiguration.getScrollFriction() * 0.42f);
+            }
+        } catch (Throwable ignored) {}
+        try {
+            java.lang.reflect.Field maximum = android.widget.NumberPicker.class
+                    .getDeclaredField("mMaximumFlingVelocity");
+            maximum.setAccessible(true);
+            int current = maximum.getInt(picker);
+            if (current > 0) maximum.setInt(picker, Math.min(32000, current * 2));
+        } catch (Throwable ignored) {}
+    }
+
+    private interface MuteSheetAction {
+        void run(Dialog dialog);
+    }
+
+    private static void showMutePickerSheet(
+            final Activity act, String title, View content,
+            String secondaryLabel, final MuteSheetAction secondary,
+            String primaryLabel, final MuteSheetAction primary) {
+        final boolean dark = isDark(act);
+        final Dialog dialog = new Dialog(
+                act, android.R.style.Theme_Translucent_NoTitleBar);
+        final FrameLayout backdrop = new FrameLayout(act);
+        backdrop.setBackgroundColor(0x52000000);
+        final LinearLayout panel = new LinearLayout(act);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(act, 20), dp(act, 18), dp(act, 20), dp(act, 18));
+        GradientDrawable panelBackground = new GradientDrawable();
+        panelBackground.setColor(dark ? 0xFF28282B : 0xFFFFFFFF);
+        panelBackground.setCornerRadii(new float[]{
+                dp(act, 24), dp(act, 24), dp(act, 24), dp(act, 24), 0, 0, 0, 0});
+        panel.setBackground(panelBackground);
+        if (android.os.Build.VERSION.SDK_INT >= 21) panel.setElevation(dp(act, 16));
+
+        TextView heading = new TextView(act);
+        heading.setText(title);
+        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        heading.setTextColor(dark ? 0xFFF2F2F3 : 0xFF1B1B1D);
+        heading.setPadding(dp(act, 2), 0, dp(act, 2), dp(act, 12));
+        panel.addView(heading);
+        panel.addView(content, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actions = new LinearLayout(act);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        actions.setPadding(0, dp(act, 14), 0, 0);
+        TextView secondaryButton = muteSheetButton(
+                act, secondaryLabel, dark, false);
+        TextView primaryButton = muteSheetButton(
+                act, primaryLabel, dark, true);
+        actions.addView(secondaryButton);
+        LinearLayout.LayoutParams primaryParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(act, 40));
+        primaryParams.leftMargin = dp(act, 8);
+        actions.addView(primaryButton, primaryParams);
+        panel.addView(actions);
+
+        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+        backdrop.addView(panel, panelParams);
+        backdrop.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) { dialog.dismiss(); }
+        });
+        panel.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {}
+        });
+        secondaryButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {
+                if (secondary == null) dialog.dismiss();
+                else secondary.run(dialog);
+            }
+        });
+        primaryButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {
+                if (primary != null) primary.run(dialog);
+            }
+        });
+        dialog.setContentView(backdrop);
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+        }
+        panel.setTranslationY(dp(act, 36));
+        panel.animate().translationY(0f).setDuration(220L).start();
+    }
+
+    private static TextView muteSheetButton(
+            Activity act, String label, boolean dark, boolean primary) {
+        TextView button = new TextView(act);
+        button.setText(label);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        button.setGravity(Gravity.CENTER);
+        button.setTextColor(primary ? 0xFFFFFFFF
+                : (dark ? 0xFFE1E1E4 : 0xFF3E4249));
+        button.setPadding(dp(act, 16), 0, dp(act, 16), 0);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(primary ? BRAND : (dark ? 0xFF38383C : 0xFFF0F1F4));
+        background.setCornerRadius(dp(act, 10));
+        button.setBackground(background);
+        button.setClickable(true);
+        button.setFocusable(true);
+        button.setMinHeight(dp(act, 40));
+        return button;
+    }
+
+    private static android.widget.NumberPicker.Formatter twoDigitFormatter() {
+        return new android.widget.NumberPicker.Formatter() {
+            @Override public String format(int value) {
+                return String.format(java.util.Locale.US, "%02d", value);
+            }
+        };
+    }
+
+    /** 仿"编辑聊天记录"样式的可点击行（标题+说明+右箭头）。 */
+    private static View toolActionRow(final Activity act, String title, String desc,
+                                      int textColor, int subColor, View.OnClickListener onClick) {
+        return toolActionRow(act, null, title, desc, textColor, subColor, onClick);
+    }
+
+    private static View toolActionRow(final Activity act, String iconName,
+                                      String title, String desc,
+                                      int textColor, int subColor,
+                                      View.OnClickListener onClick) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        // The home hub uses DeepSeek's compact native settings-row rhythm. Rows elsewhere keep
+        // their roomier reading layout because they often carry longer explanations.
+        final boolean compactHubRow = iconName != null && iconName.length() > 0;
+        final int verticalPadding = compactHubRow ? 10 : 16;
+        row.setPadding(dp(act, 16), dp(act, verticalPadding),
+                dp(act, 16), dp(act, verticalPadding));
+        if (compactHubRow) row.setMinimumHeight(dp(act, 48));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setBackground(controlBackground(
+                0x00000000,
+                isDark(act) ? 0x24FFFFFF : 0x14000000,
+                0f));
+
+        if (iconName != null && iconName.length() > 0) {
+            View icon = createHubIcon(act, iconName, textColor);
+            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(
+                    dp(act, 27), dp(act, 27));
+            iconLp.rightMargin = dp(act, 14);
+            row.addView(icon, iconLp);
+        }
+
+        LinearLayout labels = new LinearLayout(act);
+        labels.setOrientation(LinearLayout.VERTICAL);
         TextView t = new TextView(act);
         t.setText(UiLanguage.dynamic(act, title));
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, compactHubRow ? 15 : 16);
         t.setTextColor(textColor);
         labels.addView(t, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -2044,7 +3527,8 @@ public final class DeekseepUi {
         d.setTextColor(subColor);
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        dlp.topMargin = dp(act, 4);
+        dlp.topMargin = dp(act, compactHubRow ? 2 : 4);
+        if (desc == null || desc.trim().length() == 0) d.setVisibility(View.GONE);
         labels.addView(d, dlp);
         row.addView(labels, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -2058,41 +3542,187 @@ public final class DeekseepUi {
         return row;
     }
 
+    /** Uses DeepSeek's own vectors first; the bundled official Material path is the fallback. */
+    private static View createHubIcon(Context context, String name, int color) {
+        FrameLayout holder = new FrameLayout(context);
+        String hostName = hostDrawableForHubIcon(name);
+        View glyph = null;
+        if (hostName != null) {
+            try {
+                int id = context.getResources().getIdentifier(
+                        hostName, "drawable", "com.deepseek.chat");
+                if (id != 0) {
+                    android.graphics.drawable.Drawable drawable =
+                            context.getResources().getDrawable(id).mutate();
+                    if (android.os.Build.VERSION.SDK_INT >= 21) drawable.setTint(color);
+                    android.widget.ImageView image = new android.widget.ImageView(context);
+                    image.setImageDrawable(drawable);
+                    image.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+                    image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                    glyph = image;
+                }
+            } catch (Throwable ignored) {}
+        }
+        if (glyph == null) glyph = new HubMaterialGlyphView(context, name, color);
+        // Previous category glyphs filled 27dp. An 18dp visual is exactly one third smaller,
+        // while the 27dp holder preserves the established text alignment and hit rhythm.
+        FrameLayout.LayoutParams visual = new FrameLayout.LayoutParams(
+                dp(context, 18), dp(context, 18), Gravity.CENTER);
+        holder.addView(glyph, visual);
+        return holder;
+    }
+
+    private static String hostDrawableForHubIcon(String name) {
+        if ("ds_category_chat".equals(name)) return "ic_ds_new_chat_outline_20";
+        if ("ds_category_account".equals(name)) return "ic_profile";
+        if ("ds_category_appearance".equals(name)) return "ic_enhance_outline_20";
+        if ("ds_category_debug".equals(name)) return "ic_warning_outline_20";
+        if ("ds_category_engineering".equals(name)) return "ic_branch_outline_20";
+        if ("ds_category_help".equals(name)) return "ic_help_outline";
+        if ("ds_project_license".equals(name)) return "ic_info_outline";
+        return null;
+    }
+
+    private static android.graphics.drawable.Drawable moduleDrawable(
+            Context context, String name) {
+        try {
+            Context module = context.createPackageContext(
+                    "com.dsmod.probe", Context.CONTEXT_IGNORE_SECURITY);
+            int id = module.getResources().getIdentifier(
+                    name, "drawable", "com.dsmod.probe");
+            if (id != 0) {
+                return android.os.Build.VERSION.SDK_INT >= 21
+                        ? module.getResources().getDrawable(id, module.getTheme())
+                        : module.getResources().getDrawable(id);
+            }
+        } catch (Throwable ignored) {
+            // The host may not be allowed to create the module package context.
+        }
+        java.io.InputStream input = null;
+        try {
+            ClassLoader loader = DeekseepUi.class.getClassLoader();
+            if (loader == null) return null;
+            input = loader.getResourceAsStream("sponsor_qr".equals(name)
+                    ? "META-INF/com.dsmod.probe.project/sponsor_qr.png"
+                    : "META-INF/com.dsmod.probe.icons/" + name + ".png");
+            if (input == null) return null;
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeStream(input);
+            return bitmap == null ? null
+                    : new android.graphics.drawable.BitmapDrawable(
+                            context.getResources(), bitmap);
+        } catch (Throwable ignored) {
+            return null;
+        } finally {
+            if (input != null) try { input.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void showOpenSourceDialog(final Activity act) {
+        String license = readBundledText(
+                "META-INF/com.dsmod.probe.project/gpl_3_0.txt", 96 * 1024);
+        if (license.length() == 0) license = "GNU General Public License version 3";
+        final TextView body = new TextView(act);
+        body.setText(license);
+        body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        body.setTextColor(isDark(act) ? 0xFFECECEC : 0xFF1A1A1A);
+        body.setPadding(dp(act, 20), dp(act, 8), dp(act, 20), dp(act, 8));
+        android.widget.ScrollView scroll = new android.widget.ScrollView(act);
+        scroll.addView(body, new android.widget.ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        new android.app.AlertDialog.Builder(act)
+                .setTitle("GNU GPL-3.0-only")
+                .setView(scroll)
+                .setNeutralButton("GitHub", new android.content.DialogInterface.OnClickListener() {
+                    @Override public void onClick(android.content.DialogInterface dialog, int which) {
+                        try {
+                            act.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(REPOSITORY)));
+                        } catch (Throwable error) {
+                            Toast.makeText(act, REPOSITORY, Toast.LENGTH_LONG).show();
+                        }
+                    }
+                })
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
+    private static void showSponsorDialog(final Activity act) {
+        final String sponsor = "https://afdian.com/a/lllucccian";
+        new android.app.AlertDialog.Builder(act)
+                .setTitle(UiLanguage.text(act, "赞助开发者", "Sponsor the developer"))
+                .setItems(new String[]{
+                                UiLanguage.text(act, "通过爱发电赞助", "Sponsor via Afdian"),
+                                UiLanguage.text(act, "通过微信赞助", "Sponsor via WeChat")},
+                        new android.content.DialogInterface.OnClickListener() {
+                            @Override public void onClick(
+                                    android.content.DialogInterface dialog, int which) {
+                                if (which == 0) {
+                                    try {
+                                        act.startActivity(new Intent(
+                                                Intent.ACTION_VIEW, Uri.parse(sponsor)));
+                                    } catch (Throwable error) {
+                                        Toast.makeText(act, sponsor, Toast.LENGTH_LONG).show();
+                                    }
+                                    return;
+                                }
+                                android.widget.ImageView image = new android.widget.ImageView(act);
+                                image.setAdjustViewBounds(true);
+                                image.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+                                image.setPadding(dp(act, 16), dp(act, 8), dp(act, 16), 0);
+                                android.graphics.drawable.Drawable qr =
+                                        moduleDrawable(act, "sponsor_qr");
+                                if (qr != null) image.setImageDrawable(qr);
+                                new android.app.AlertDialog.Builder(act)
+                                        .setTitle(UiLanguage.text(act,
+                                                "微信赞赏码", "WeChat donation code"))
+                                        .setView(image)
+                                        .setPositiveButton(UiLanguage.text(
+                                                act, "完成", "Done"), null)
+                                        .show();
+                            }
+                        })
+                .setNegativeButton(UiLanguage.text(act, "取消", "Cancel"), null)
+                .show();
+    }
+
+    private static String readBundledText(String path, int limit) {
+        java.io.InputStream input = null;
+        try {
+            ClassLoader loader = DeekseepUi.class.getClassLoader();
+            input = loader == null ? null : loader.getResourceAsStream(path);
+            if (input == null) return "";
+            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                if (count == 0) continue;
+                if (output.size() + count > limit) break;
+                output.write(buffer, 0, count);
+            }
+            return new String(output.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Throwable ignored) {
+            return "";
+        } finally {
+            if (input != null) try { input.close(); } catch (Throwable ignored) {}
+        }
+    }
+
     private static void showExperimentalHelpPage(final Activity act) {
         final String[][] items = {
-            {"【功能】聊天背景、贴纸与气泡",
-                "从“实验性功能 → 聊天外观”导入图片后，可设为背景、页面贴纸或两侧气泡顶部贴纸。背景可选全屏、上/中/下半屏，裁剪、完整显示或拉伸，并支持取景、旋转、不透明度、景深和界面绑定。横向取景、纵向取景与旋转位于预览图正下方的独立折叠区，可一边调节一边查看效果。连续缩放条每次松手会回到中点，可反复缩放且没有固定上限；也可点“精确倍率”直接输入。缩小后，截断模式让范围外保持透明，镜像模式会反射图片边缘补齐，边缘像素延展会把最外圈像素一直铺到画布边界。动态位移可统一设置，也可分别设置聊天、侧栏和设置界面。大陆版与 Google Play 版共用同一配置和渲染链路。"},
-            {"【问题】为什么半屏背景仍显示在别处，或者缩小后出现空白？",
-                "解决办法：半屏有上方、中间和下方三个位置，先确认“显示范围”选项；容器会在半屏边界处裁切旋转和位移后的图片。选择“截断”时，缩小后留下透明区域是预期效果；需要反射补齐时改为“镜像延展”，需要沿用图片边缘颜色时改为“边缘像素延展”。横图还可在预览图下方展开横向/纵向取景，决定主体保留位置。"},
-            {"【问题】为什么背景缩放条松手后回到中间？",
-                "解决办法：这是无固定上限缩放的设计。中点代表本次缩放的起点，向左或向右连续调整，松手后自动把当前倍率作为新的起点；可以反复拖动继续放大或缩小。需要准确倍率时点“精确倍率”输入大于 0 的数值，1 表示原始适配大小。"},
-            {"【问题】为什么背景图或贴纸没有显示，或者看起来遮住界面？",
-                "解决办法：确认聊天外观总开关已打开，并在背景图“高级选项”中勾选当前界面；贴纸会在聊天与设置页保留，登录页等其他路由会自动隐藏。背景层不会拦截点击，但不透明度过高会降低文字可读性，可调低背景不透明度。"},
-            {"【功能】专家模式图片上传",
-                "开启后，专家模式可选择相册图片。图片会先保存到 DeepSeek 私有目录，并由视觉模型生成客观描述，再把描述交给专家模型；同一会话后续轮会继续捕获图片上下文。视觉识别结果和服务器能力不作保证。"},
-            {"【功能】本地 API 服务",
-                "首次进入会校验 DeepSeek 已设为不限制电池优化且允许后台活动，未通过时不会启动监听。OpenAI 格式提供 /v1/models、/v1/chat/completions 和 /v1/responses；Anthropic 格式提供 /v1/messages 与 /v1/messages/count_tokens。两种格式均支持普通 JSON、SSE、深度思考和 Agent 工具结果回传。"},
-            {"【功能】AI 主动消息",
-                "开启后，模块会按你设置的分钟间隔唤醒 DeepSeek，并使用绑定对话的近期上下文生成自然的主动消息。点按功能说明即可修改间隔，范围为 15 分钟到 7 天。请在想绑定的对话中直接说“以后心跳时来找我闲聊”；在另一个对话重新约定会切换周期心跳的绑定，不会建立全局约定。也可以说“5 天后晚上 6:37 来找我”安排只属于当前对话的一次性心跳，或让 AI 取消单次、周期或全部心跳。AI 会调用真实的本地调度能力，内部执行指令不会显示；模型回复会写入任务所属对话，无论 DeepSeek 是否在前台，模块应用都会同时发送系统通知，点按通知会回到该对话。关闭周期心跳不会删除已经确认的一次性任务，除非明确要求 AI 一并取消。该功能默认关闭，通知需要在模块应用中授权，系统省电策略可能让时间略有延迟。"},
-            {"【问题】为什么专家模式第一轮能发图，后续轮却提示不支持？",
-                "解决办法：新版会按会话捕获每一轮完整图片 fragment，并在发送点识别专家模型。安装后先冷启动，再新建专家会话测试；服务器若调整模型能力仍可能拒绝，此时可关闭功能改用普通视觉模型。"},
-            {"【问题】为什么本地 API 返回 401、503 或连接被拒绝？",
-                "解决办法：401 表示 Authorization: Bearer 后的密钥不匹配，可从控制页重新复制；503 表示原生传输或 PoW 尚未初始化，保持应用前台数秒后重试。连接被拒绝通常表示 DeepSeek 已被彻底退出、开关关闭或端口被占用；重新打开应用后查看控制页中的实际端口。"},
-            {"【问题】为什么本地 API 遇到 429 后会等待一段时间？",
-                "解决办法：这是原生上游限流。网关会串行发送并进行有限冷却；不要让客户端立即高频重试，客户端超时建议至少 180 秒。控制页和私有诊断日志会显示排队、限流与恢复原因。"},
-            {"【问题】为什么 Codex 能聊天但没有完整 apply_patch 工具？",
-                "解决办法：自定义 provider 的 wire_api 使用 responses；需要 Codex 完整内建工具目录时把 model 设为 gpt-5.4。它只是兼容别名，实际仍调用本机默认模型。若工具已返回但 Codex 拒绝执行，请检查工作区、sandbox 和 approval 权限。"},
-            {"【问题】为什么 API 调用没有出现在聊天列表？",
-                "解决办法：这是预期行为。API 复用独立隐藏会话以降低会话创建限流，但侧栏、编辑器和云目录会过滤它们；关闭服务时才集中走原生删除链清理，不会用每次创建和删除污染正常聊天。"},
-            {"【问题】Claude Code 的 /clear 或 /new 为什么看起来还在旧对话？",
-                "解决办法：这两个命令由 Claude Code 本地处理，不会请求 /v1/messages；API 只能隔离命令成功后的下一次请求。新版会同时按 Claude 会话 UUID 和首条用户消息指纹隔离隐藏分支。若命令后旧内容仍显示，先确认只输入命令并单独按一次回车；某些粘贴/补全场景第一次回车只是确认候选。清屏后询问一个仅旧对话知道的随机词即可判断是否真的串上下文。"},
-            {"【问题】为什么请求开始后不会立刻显示 thinking？",
-                "解决办法：这是修正后的正常顺序。服务会先完成排队、PoW 和原生请求启动，再发送 Anthropic message_start 与 thinking；这样等待本地处理时不会伪装成模型已经开始思考。"},
-            {"【建议】怎样更稳妥地使用这些功能？",
-                "按需开启，一次只启用需要的选项；编辑重要内容前先备份，不共享 API Key，并保留 Agent 沙箱与操作确认。宿主更新后如有异常，可关闭对应开关并重启 DeepSeek。"}
+            {"【功能】聊天背景、贴纸与气泡", "导入图片并调整取景、缩放、透明度和界面。"},
+            {"【功能】空间动效", "控制背景视差、层次和动态强度。"},
+            {"【功能】专家模式图片上传", "把会话图片交给视觉模型，再继续专家对话。"},
+            {"【功能】本地 API 服务", "提供本地兼容接口、SSE 和 Agent 工具结果。"},
+            {"【功能】AI 心跳", "按当前对话设置周期或一次性心跳提醒。"},
+            {"【功能】问答工具", "模型提出选项，你选择或输入后继续。"},
+            {"【功能】Agent 工具与权限", "管理工具开关、执行权限和 Shizuku/Root 模式。"},
+            {"【问题】背景图或贴纸没有显示？", "检查聊天外观开关和当前界面绑定，必要时重启 DeepSeek。"},
+            {"【问题】本地 API 连接失败？", "检查服务开关、密钥、端口和后台运行权限。"},
+            {"【问题】心跳没有写入对话？", "确认目标对话已绑定，并允许通知和后台活动。"},
+            {"【问题】Agent 只输出调用文字？", "开启 Agent 和对应工具权限，再重新发送请求。"},
         };
+
         showHelpItemsPage(act, "实验性功能 · 帮助与问题",
-                "这里收录聊天外观、专家模式图片中继和本地 API 的完整说明。点一下条目展开。", items);
+                "功能说明与必要排查。点一下条目展开。", items);
     }
 
     private static void showHelpItemsPage(final Activity act, String pageTitle,
@@ -2152,6 +3782,7 @@ public final class DeekseepUi {
         cardLp.setMargins(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16));
         scroll.addView(card, cardLp);
         buildAccordionItems(act, card, textColor, subColor, divColor, hint, items);
+        addBuildFooter(act, card, subColor);
         UiLanguage.localizeTree(act, root);
         dialog.setContentView(root);
         Window window = dialog.getWindow();
@@ -2193,7 +3824,7 @@ public final class DeekseepUi {
             titleRow.setPadding(dp(act, 16), dp(act, 14), dp(act, 16), dp(act, 14));
             titleRow.setClickable(true);
             TextView itemTitle = new TextView(act);
-            itemTitle.setText(UiLanguage.dynamic(act, items[i][0]));
+            itemTitle.setText("• " + UiLanguage.dynamic(act, items[i][0]));
             itemTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
             itemTitle.setTextColor(textColor);
             titleRow.addView(itemTitle, new LinearLayout.LayoutParams(
@@ -2242,10 +3873,10 @@ public final class DeekseepUi {
         }));
     }
 
-    private static void addBuildFooter(Activity act, LinearLayout card, int subColor) {
+    static void addBuildFooter(Activity act, LinearLayout card, int subColor) {
         TextView info = new TextView(act);
         info.setText(UiLanguage.dynamic(act, "模块版本：" + BuildInfo.MODULE_VERSION
-                + "\nlibxposed API：" + BuildInfo.API_VERSION
+                + "\nXposed interface：" + BuildInfo.API_VERSION
                 + "\n编译时间：" + BuildInfo.BUILD_DATE
                 + "\nDeepSeek 版本：" + installedVersion(act, act.getPackageName())));
         info.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
@@ -2277,7 +3908,7 @@ public final class DeekseepUi {
     /** Hidden page reached only through the three-tap footer easter egg on every channel. */
     private static void showEasterEggPage(final Activity act) {
         if (act == null || act.isFinishing()) return;
-        if (!BuildInfo.GOOGLE_PLAY) Main.ensureEmbeddedPromptInstalled(act);
+        if (!HostCompat.isGooglePlay()) Main.ensureEmbeddedPromptInstalled(act);
         final boolean dark = isDark(act);
         final int bg = dark ? 0xFF1B1B1D : 0xFFF5F6F8;
         final int bar = dark ? 0xFF232326 : 0xFFFFFFFF;
@@ -2331,7 +3962,7 @@ public final class DeekseepUi {
         scroll.addView(card, cardParams);
 
         TextView note = new TextView(act);
-        note.setText("此页面功能仅供本地测试。液态玻璃尚未完成，可能导致显示异常甚至应用闪退。");
+        note.setText("此页面保留快捷开关。液态玻璃会按设备能力选择实时折射、共享模糊或静态磨砂。");
         note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         note.setTextColor(sub);
         note.setLineSpacing(dp(act, 2), 1f);
@@ -2346,11 +3977,11 @@ public final class DeekseepUi {
         glassLabels.setOrientation(LinearLayout.VERTICAL);
         glassLabels.addView(labelText(act, "启用全局液态玻璃", 15, text, true));
         glassLabels.addView(labelText(act,
-                "仅测试版本可启用；功能尚未完成，可能异常或闪退",
+                "按 Android 版本、性能和节电状态自动降级",
                 12, sub, false));
         glassRow.addView(glassLabels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch glass = new Switch(act);
+        final Switch glass = new HubInsetSwitch(act);
         tintSwitch(glass, dark);
         glass.setChecked(ChatAppearance.load().liquidGlassEnabled);
         glass.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -2375,15 +4006,18 @@ public final class DeekseepUi {
         LinearLayout shakeLabels = new LinearLayout(act);
         shakeLabels.setOrientation(LinearLayout.VERTICAL);
         shakeLabels.addView(labelText(act, "陀螺仪背景", 15, text, true));
-        shakeLabels.addView(labelText(act,
-                "晃动手机时背景轻微漂移并回弹；需先设置背景图",
-                12, sub, false));
+        final TextView shakeStateLabel = labelText(act,
+                ChatAppearance.load().shakeParallaxEnabled
+                        ? "已开启 · 点按进入专属设置"
+                        : "已关闭 · 点按进入专属设置",
+                12, sub, false);
+        shakeLabels.addView(shakeStateLabel);
         shakeRow.addView(shakeLabels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         final boolean[] spatialToggleSync = new boolean[1];
         final Switch[] spatialToggleRef = new Switch[1];
         final TextView[] spatialStateRef = new TextView[1];
-        final Switch shake = new Switch(act);
+        final Switch shake = new HubInsetSwitch(act);
         tintSwitch(shake, dark);
         shake.setChecked(ChatAppearance.load().shakeParallaxEnabled);
         shake.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -2407,9 +4041,38 @@ public final class DeekseepUi {
                                 "已关闭 · 点按进入专属设置");
                     }
                 }
+                shakeStateLabel.setText(checked
+                        ? "已开启 · 点按进入专属设置"
+                        : "已关闭 · 点按进入专属设置");
             }
         });
         shakeRow.addView(shake);
+        shakeRow.setClickable(true);
+        shakeRow.setFocusable(true);
+        shakeRow.setBackground(controlBackground(
+                0x00000000, dark ? 0x24FFFFFF : 0x14000000, 0f));
+        shakeRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {
+                ShakeParallaxUi.show(act,
+                        new ShakeParallaxUi.StateListener() {
+                            @Override public void onShakeStateChanged(boolean enabled) {
+                                spatialToggleSync[0] = true;
+                                shake.setChecked(enabled);
+                                if (enabled && spatialToggleRef[0] != null) {
+                                    spatialToggleRef[0].setChecked(false);
+                                }
+                                spatialToggleSync[0] = false;
+                                shakeStateLabel.setText(enabled
+                                        ? "已开启 · 点按进入专属设置"
+                                        : "已关闭 · 点按进入专属设置");
+                                if (enabled && spatialStateRef[0] != null) {
+                                    spatialStateRef[0].setText(
+                                            "已关闭 · 点按进入专属设置");
+                                }
+                            }
+                        });
+            }
+        });
         card.addView(shakeRow);
         card.addView(makeDivider(act, divider));
 
@@ -2431,7 +4094,7 @@ public final class DeekseepUi {
         spatialLabels.addView(spatialStateLabel);
         spatialRow.addView(spatialLabels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch spatial = new Switch(act);
+        final Switch spatial = new HubInsetSwitch(act);
         spatialToggleRef[0] = spatial;
         tintSwitch(spatial, dark);
         spatial.setChecked(ChatAppearance.load().spatialDepthEnabled);
@@ -2460,6 +4123,8 @@ public final class DeekseepUi {
         spatialRow.addView(labelText(act, "›", 24, sub, false));
         spatialRow.setClickable(true);
         spatialRow.setFocusable(true);
+        spatialRow.setBackground(controlBackground(
+                0x00000000, dark ? 0x24FFFFFF : 0x14000000, 0f));
         spatialRow.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View ignored) {
                 SpatialMotionUi.show(
@@ -2551,7 +4216,7 @@ public final class DeekseepUi {
                 12, sub, false));
         reduceRow.addView(reduceLabels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch reduceMotion = new Switch(act);
+        final Switch reduceMotion = new HubInsetSwitch(act);
         final boolean[] reduceMotionSync = new boolean[1];
         tintSwitch(reduceMotion, dark);
         reduceMotion.setChecked(
@@ -2589,7 +4254,7 @@ public final class DeekseepUi {
                 12, sub, false));
         recenterRow.addView(recenterLabels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch autoRecenter = new Switch(act);
+        final Switch autoRecenter = new HubInsetSwitch(act);
         final boolean[] autoRecenterSync = new boolean[1];
         tintSwitch(autoRecenter, dark);
         autoRecenter.setChecked(
@@ -2627,7 +4292,7 @@ public final class DeekseepUi {
                 12, sub, false));
         directionRow.addView(directionLabels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch reverseDirection = new Switch(act);
+        final Switch reverseDirection = new HubInsetSwitch(act);
         final boolean[] reverseDirectionSync = new boolean[1];
         tintSwitch(reverseDirection, dark);
         reverseDirection.setChecked(
@@ -2672,7 +4337,7 @@ public final class DeekseepUi {
             }
         });
 
-        if (!BuildInfo.GOOGLE_PLAY) {
+        if (!HostCompat.isGooglePlay()) {
             LinearLayout promptRow = new LinearLayout(act);
             promptRow.setOrientation(LinearLayout.HORIZONTAL);
             promptRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -2685,7 +4350,7 @@ public final class DeekseepUi {
                     12, sub, false));
             promptRow.addView(promptLabels, new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            final Switch prompt = new Switch(act);
+            final Switch prompt = new HubInsetSwitch(act);
             tintSwitch(prompt, dark);
             // The bundled prompt is opt-in and must start disabled on a fresh install.
             prompt.setChecked(Main.isEmbeddedPromptEnabled());
@@ -2840,6 +4505,7 @@ public final class DeekseepUi {
         scroll.addView(hcard, clp);
 
         buildHelpAccordion(act, hcard, textColor, subColor, divColor, dark);
+        addBuildFooter(act, hcard, subColor);
 
         UiLanguage.localizeTree(act, root);
         dlg.setContentView(root);
@@ -2848,6 +4514,7 @@ public final class DeekseepUi {
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(bgColor));
         }
+        trackChildDialog(dlg);
         openWithSlide(dlg, root);
         dlg.setOnKeyListener(new Dialog.OnKeyListener() {
             public boolean onKey(android.content.DialogInterface d, int code, android.view.KeyEvent e) {
@@ -2866,117 +4533,28 @@ public final class DeekseepUi {
                                            final int textColor, final int subColor,
                                            int divColor, boolean dark) {
         TextView headerHint = new TextView(act);
-        headerHint.setText("包含最新功能说明与常见问题。点一下条目展开；问题条目下方均给出解决办法。");
+        headerHint.setText("功能说明与常见问题");
         headerHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         headerHint.setTextColor(subColor);
         headerHint.setPadding(dp(act, 16), dp(act, 14), dp(act, 16), dp(act, 8));
         card.addView(headerHint, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // {标题, 正文}
+        // {标题, 简短说明}
         final String[][] items = {
-            {"【功能】语言自动检测与手动选择",
-                "默认在每次 DeepSeek 启动或回到前台时读取宿主当前语言：中文使用中文，任何其他语言使用英文。"
-                + "也可在 Deekseep 首页的“语言”中固定为 Chinese 或 English；选择“跟随 DeepSeek（自动）”可恢复自动检测。"},
-            {"【功能】系统提示词注入",
-                "选择完整的 TXT/MD 文本后开启开关，模块会在发送请求时把它作为系统指令附加到用户原文前。"
-                + "在线历史、数据库写入和旧数据迁移会清理这段包装，因此正常聊天页只应显示用户真正输入的内容。"},
-            {"【功能】回复保留（去安全审查替换）",
-                "开启后会识别 CONTENT_FILTER 等替换事件，保留本机已经观察到的原始回复，并在冷启动同步时继续保护。"
-                + "它不能改变服务器规则，也不能恢复开关启用前已经丢失的回答。"},
-            {"【功能】聊天记录多选删除",
-                "打开开关后，在 DeepSeek 左侧会话列表长按进入多选，勾选后走宿主原生删除事件，同时清理本地会话表、"
-                + "消息表和 Deekseep 恢复副本。关闭开关会恢复宿主原来的长按菜单。"},
-            {"【功能】编辑聊天记录",
-                "每次打开都会重新合并当前账号数据库、宿主已加载会话和最新内存历史。可修改标题、用户消息、AI 回复、"
-                + "思考内容和思考用时；图片选择会立即保存，不必再点顶部保存。"},
-            {"【功能】新建对话与追加消息",
-                "手机端点编辑器左上角菜单，再点“新建对话”即可建立空白会话；进入任意会话后，底部可直接追加用户消息"
-                + "或 AI 回复。追加动作属于当前会话，不是只能添加首条消息。"},
-            {"【功能】编辑器相册图片",
-                "在用户消息的图片管理中点“从相册选择并上传”。模块把长期副本保存到 DeepSeek files 目录，并建立"
-                + "FileProvider 可读镜像；重启或缓存被清理时会尝试从长期副本重建。AI 消息不能附加用户图片。"},
-            {"【功能】多账号管理与凭证导入导出",
-                "多账号页可添加、切换、移除账号，也可勾选单个或多个账号导出。导入会严格解析完整 JSON，逐个请求"
-                + "DeepSeek 当前用户接口，只有外层和业务层都成功时才整包写入；响应若带账号 ID 还必须一致。导出 TXT 含明文 token，绝不能分享。"},
-            {"【功能】解锁 Google 登录",
-                "开启后，模块只把国内登录页隐藏的 DeepSeek 原生 Google 项插回登录方式列表，微信、手机号等国内入口仍保留。"
-                + "点击后继续使用宿主 Credential Manager 获取 Google ID Token，并交给 DeepSeek 官方 Google 登录接口换票；模块不会读取或记录该 token。"},
-            {"【功能】解锁微信与手机号登录",
-                "这是独立于 Google 的一个联合开关。开启后会在海外登录方式列表中同时补回 DeepSeek 原生微信项和短信手机号项，"
-                + "保留 Google、密码和注册等已有选项；模块不接管凭证，也不会伪造登录成功。"},
-            {"【功能】Markdown、搜索与统计",
-                "Markdown 工具把本地会话导出到应用外部目录；全局搜索覆盖用户输入、AI 回复和思考内容；"
-                + "会话统计按账号汇总会话数、消息数和字数。外部导出文件需自行保护。"},
-            {"【功能】手动与自动数据库备份",
-                "“立即备份”会复制聊天数据库到应用外部目录。自动备份开启后按启动时间间隔保存到应用内部备份目录，"
-                + "并限制保留数量。数据库仍可能在复制时变化，重要操作前建议退出聊天页后再手动备份。"},
-            {"【功能】记录服务器返回（诊断）",
-                "只在排查时开启。它会记录 SSE 事件和部分网络诊断信息，日志可能包含聊天内容或服务器错误；"
-                + "问题确认后应立即关闭，并在分享日志前自行脱敏。"},
-            {"【问题】为什么会提示“当前显示最新内存记录，等待 DeepSeek 落库后再编辑”？",
-                "解决办法：这是为了避免把不完整的内存快照强行写进数据库。先回到原生会话页等待消息加载和落库，"
-                + "再重新点选该会话或关闭后重开编辑器。仍提示时，保持网络可用并冷启动 DeepSeek 后再试。"},
-            {"【问题】为什么会提示“完整在线历史仍在加载”？",
-                "解决办法：当前只拿到增量消息，还没有完整基线，因此禁止追加或物化。先在原生界面打开该对话并等待加载完成，"
-                + "然后回到编辑器重新选择；不要连续点击添加按钮。"},
-            {"【问题】为什么编辑器提示“未找到聊天数据库”或“没有本地或已加载的对话”？",
-                "解决办法：确认 DeepSeek 已登录正确账号，并在原生会话列表打开一次目标对话；随后重新进入编辑器。"
-                + "刚切号时需要等待宿主建立该账号数据库。不要清除 DeepSeek 应用数据。"},
-            {"【问题】为什么保存或添加时提示“在线历史刚刚更新，请重新打开后再试”？",
-                "解决办法：保存前服务器同步了更新版本，模块为防止覆盖新消息而回滚了整个事务。重新点选对话，核对最新内容后"
-                + "再编辑；本次失败不会只写一半。"},
-            {"【问题】为什么新建对话短暂出现后消失，或点开提示“对话已删除”？",
-                "解决办法：新版通过 sidecar 和原生列表并集保护编辑器本地会话，同时允许服务器新增会话进入。请确认安装的是"
-                + "同一最新版模块并完整冷启动；旧版本创建的异常条目可在编辑器打开并重新保存一次。"},
-            {"【问题】为什么点一次“新建对话”偶尔出现两个同名对话？",
-                "解决办法：新版有点击防抖和在途锁。出现时先不要重复点击，关闭编辑器再打开确认；若仍为两个真实条目，"
-                + "勾选多余的一条删除。安装新版后必须完整重启 DeepSeek，不能只覆盖安装后继续旧进程。"},
-            {"【问题】为什么相册图片提示保存失败、写入失败或“对话已经切换”？",
-                "解决办法：保持目标对话不变，确认系统文件选择器授予了读取权限，并重新选择图片。“对话已经切换”是防止异步"
-                + "上传把图片写到错误会话；文件可能已保存，但聊天记录不会被误改。"},
-            {"【问题】为什么旧图片提示“图片凭证刷新失败”？",
-                "解决办法：旧服务器图片可能只有短期访问凭证。先在 DeepSeek 原生聊天页打开该图片并保持网络可用，再回编辑器重试。"
-                + "从新版相册入口添加的图片使用本地长期副本，不依赖服务器长期凭证。"},
-            {"【问题】为什么追加 AI 回复后，用户消息的附带图片消失？",
-                "解决办法：新版在图片选择时立即保存 FILE fragment，追加 USER/AI 前还会再次保存未提交选择。若是旧版本产生的数据，"
-                + "重新选择图片并等待“已持久保存并附加”提示后，再追加回复。"},
-            {"【问题】为什么重启后打开带图片的对话变成空白？",
-                "解决办法：新版会在启动早期恢复 sidecar、消息头和图片镜像。确认未清除 DeepSeek 私有 files 目录，并安装后完整冷启动。"
-                + "若旧版本已经把消息表覆盖为空，模块无法凭空恢复没有备份的数据，可检查数据库备份。"},
-            {"【问题】为什么重启后系统提示词出现在用户消息里？",
-                "解决办法：新版会在在线历史、仓库写入和启动迁移三层清理。保持系统提示词文件不变，完整重启一次让迁移执行；"
-                + "若数据库正被占用，下一次启动会继续重试。"},
-            {"【问题】为什么原回复重启后又变成“这个问题我暂时无法回答”？",
-                "解决办法：必须在回复第一次生成时已开启回复保留，模块才能记录原内容并保护冷启动同步。更新后完整重启；"
-                + "已经只剩模板且没有本地原文副本的旧消息无法恢复。"},
-            {"【问题】为什么多选删除显示已提交，但本地删除为 0 或重启后又出现？",
-                "解决办法：最新版先发送宿主真实 h61 删除事件，再按账号数据库清理会话、消息表和恢复副本。确认当前账号正确并重新打开"
-                + "编辑器刷新；若服务器删除失败，云端副本仍可能重新同步，应在网络恢复后从原生列表再删一次。"},
-            {"【问题】为什么账号 JSON 导入失败或提示凭证无效？",
-                "解决办法：只能导入完整 UTF-8 JSON；id、token、email、mobile_number、status、chat_status、id_profiles 和"
-                + "need_birthday 字段及类型必须齐全。过期 token、外层/业务 code 非 0、网络失败或服务器返回的 ID 不一致都会整包拒绝。"
-                + "请从仍正常登录的设备重新导出，不要手工拼 token。"},
-            {"【问题】为什么导出账号时反复提示明文凭证风险？",
-                "解决办法：这是有意的安全提示，不应关闭。导出文件等同于登录钥匙；只保存到你控制的位置，不通过聊天软件或网盘分享，"
-                + "导入完成后删除文件。模块不会把 token 写进诊断日志。"},
-            {"【问题】为什么添加或切换账号后必须重启 DeepSeek？",
-                "解决办法：宿主会在进程启动时缓存 key_user_info 和账号仓库，运行中只改文件不能保证所有页面一致。模块只重启"
-                + "DeepSeek 自己的进程，让宿主按新凭证冷启动；不会停止其他应用。"},
-            {"【问题】为什么开启后仍看不到 Google 登录，或点击后提示不可用？",
-                "解决办法：先在已登录状态开启“解锁 Google 登录”，再从多账号页添加账号并完整重启 DeepSeek。设备需要可用的"
-                + "Google Play 服务和网络环境。模块只恢复客户端原生入口，不绕过 DeepSeek 服务器的地区、账号或风控判断；"
-                + "若官方接口明确拒绝，请勿反复提交，关闭开关后改用手机号、微信等正常入口。"},
-            {"【问题】为什么海外环境仍看不到微信或手机号登录？",
-                "解决办法：开启“解锁微信与手机号登录”后完整重启 DeepSeek，再进入登录页；它不会随 Google 开关自动开启。"
-                + "微信入口还需要设备安装可用的微信客户端，短信入口需要官方服务支持当前号码与地区。服务器拒绝时模块不会绕过。"},
-            {"【问题】为什么模块启动页显示“待验证”，LSPosed 明明已经启用？",
-                "解决办法：现代 libxposed 不再把模块注入模块应用自身，因此无需在作用域勾选 Deekseep。最新版通过官方 XposedService"
-                + "连接判断模块启用，并由 DeepSeek 目标进程回报实际注入。请只确认模块总开关已开、作用域勾选 DeepSeek，然后启动一次"
-                + "DeepSeek 再返回模块页；不要用旧版的“自我 Hook”状态作为判据。"},
-            {"【问题】为什么搜索、统计或编辑器显示的账号不对？",
-                "解决办法：先在多账号页确认“当前”标记，完成切号重启后再打开工具。编辑器默认只显示当前账号；若启用“显示所有账号”，"
-                + "保存前必须核对顶部账号和目标数据库。"},
+            {"【功能】系统提示词注入", "把选定的提示词附加到请求中。"},
+            {"【功能】心跳与定时提醒", "按当前对话发送主动消息，并可设置或取消提醒。"},
+            {"【功能】Agent 工具", "在实验性功能中管理工具和权限，支持基础操作。"},
+            {"【功能】工具调用日志", "显示工具名称、调用时间和执行结果。"},
+            {"【功能】问答工具", "模型提出选项或问题，你选择或输入后继续对话。"},
+            {"【功能】面板与图形输出", "模型可生成信息面板、进度条和简单图形。"},
+            {"【功能】聊天外观", "自定义气泡、背景图、贴纸和透明度。"},
+            {"【功能】本地 API", "提供兼容接口和本地 Agent 工具调用。"},
+            {"【问题】工具只显示文字，没有真正执行？", "确认实验性功能中的 Agent 开关已开启，并检查工具权限。"},
+            {"【问题】心跳提醒没有出现在对话？", "确认已绑定目标对话，并允许通知和后台运行。"},
+            {"【问题】背景图或聊天外观没有生效？", "重新打开对应页面；部分设置需要重启 DeepSeek。"},
+            {"【问题】编辑或历史记录显示异常？", "先在 DeepSeek 原生页面打开目标对话并等待加载，再重试。"},
+            {"【问题】账号导入失败？", "使用完整 UTF-8 JSON，并确认凭证仍有效。"},
         };
 
         final java.util.List<View> bodies = new java.util.ArrayList<View>();
@@ -2994,7 +4572,7 @@ public final class DeekseepUi {
             titleRow.setFocusable(true);
 
             TextView t = new TextView(act);
-            t.setText(UiLanguage.dynamic(act, items[i][0]));
+            t.setText("• " + UiLanguage.dynamic(act, items[i][0]));
             t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
             t.setTextColor(textColor);
             titleRow.addView(t, new LinearLayout.LayoutParams(

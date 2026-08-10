@@ -3,12 +3,17 @@ package com.dsmod.probe;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.BackgroundColorSpan;
@@ -24,16 +29,26 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Deekseep 聊天数据工具箱（全部基于已验证的 ChatEditorUi 数据层 + 纯 Android 框架 API，
@@ -70,13 +85,8 @@ public final class DeekseepTools {
     }
 
     private static List<File> chatDbs() {
-        List<File> out = new ArrayList<File>();
-        File[] fs = new File(DB_DIR).listFiles();
-        if (fs != null) for (File f : fs) {
-            String n = f.getName();
-            if (n.startsWith("deepseek_chat_") && n.endsWith(".db")) out.add(f);
-        }
-        return out;
+        // 复用 ChatEditorUi.allDbs()：过滤官方写出的 deepseek_chat_*.db 等坏文件
+        return ChatEditorUi.allDbs();
     }
 
     private static File exportBase(Activity act) {
@@ -98,6 +108,11 @@ public final class DeekseepTools {
     private static String shortId(String sid) {
         if (sid == null) return "x";
         return sid.length() > 8 ? sid.substring(0, 8) : sid;
+    }
+
+    private static String shortUuid(String uuid) {
+        if (uuid == null) return "x";
+        return uuid.length() > 8 ? uuid.substring(0, 8) : uuid;
     }
 
     private static void writeText(File f, String text) throws Throwable {
@@ -127,30 +142,285 @@ public final class DeekseepTools {
         UiLanguage.toast(act, "正在导出…", Toast.LENGTH_SHORT).show();
         runBg(act, new Job() {
             public String run() throws Throwable {
-                File base = exportBase(act);
-                int n = 0;
-                for (File f : chatDbs()) {
-                    SQLiteDatabase d = null; Cursor c = null;
-                    try {
-                        d = SQLiteDatabase.openDatabase(f.getPath(), null, SQLiteDatabase.OPEN_READONLY);
-                        c = d.rawQuery("SELECT id,title FROM chat_session_list ORDER BY updated_at DESC", null);
-                        while (c.moveToNext()) {
-                            String sid = c.getString(0), title = c.getString(1);
-                            if (sid == null) continue;
-                            String md = sessionMarkdown(d, title, sid);
-                            writeText(new File(base, sanitize(title != null && title.length() > 0 ? title : sid)
-                                    + "_" + shortId(sid) + ".md"), md);
-                            n++;
-                        }
-                    } catch (Throwable ignored) {
-                    } finally {
-                        if (c != null) try { c.close(); } catch (Throwable ig) {}
-                        if (d != null) try { d.close(); } catch (Throwable ig) {}
-                    }
-                }
-                return n == 0 ? "没有可导出的本地会话" : ("已导出 " + n + " 个会话到\n" + base.getPath());
+                return exportAllForConsole(act, null);
             }
         });
+    }
+
+    static String exportAllForConsole(Activity act, TaskExecutionUi.Logger logger)
+            throws Throwable {
+        File base = exportBase(act);
+        List<File> databases = chatDbs();
+        line(logger, UiLanguage.text(act,
+                "找到 " + databases.size() + " 个账号数据库",
+                "Found " + databases.size() + " account databases"));
+        int exported = 0;
+        int skipped = 0;
+        for (File file : databases) {
+            SQLiteDatabase database = null;
+            Cursor cursor = null;
+            try {
+                line(logger, UiLanguage.text(act, "读取：", "Reading: ") + file.getName());
+                database = SQLiteDatabase.openDatabase(
+                        file.getPath(), null, SQLiteDatabase.OPEN_READONLY);
+                cursor = database.rawQuery(
+                        "SELECT id,title FROM chat_session_list ORDER BY updated_at DESC", null);
+                while (cursor.moveToNext()) {
+                    String sid = cursor.getString(0);
+                    String title = cursor.getString(1);
+                    if (sid == null) continue;
+                    String markdown = sessionMarkdown(database, title, sid);
+                    writeText(new File(base,
+                            sanitize(title != null && title.length() > 0 ? title : sid)
+                                    + "_" + shortId(sid) + ".md"), markdown);
+                    exported++;
+                }
+            } catch (Throwable error) {
+                skipped++;
+                line(logger, UiLanguage.text(act, "跳过：", "Skipped: ")
+                        + file.getName() + " · " + safeMessage(error));
+            } finally {
+                if (cursor != null) try { cursor.close(); } catch (Throwable ignored) {}
+                if (database != null) try { database.close(); } catch (Throwable ignored) {}
+            }
+        }
+        String result = exported == 0
+                ? UiLanguage.text(act, "没有可导出的本地会话", "No local chats to export")
+                : UiLanguage.text(act,
+                "已导出 " + exported + " 个会话",
+                "Exported " + exported + " chats");
+        line(logger, result);
+        if (skipped > 0) {
+            line(logger, UiLanguage.text(act,
+                    "有 " + skipped + " 个数据库未能读取",
+                    skipped + " databases could not be read"));
+        }
+        line(logger, UiLanguage.text(act, "输出目录：", "Output: ") + base.getPath());
+        String portable = exportPortableChatBackup(act, logger);
+        return result + "\n" + base.getPath() + "\n" + portable;
+    }
+
+    private static final class BackupTarget {
+        final Activity activity;
+        final Uri uri;
+        final File file;
+        final OutputStream output;
+        final String label;
+
+        BackupTarget(Activity activity, Uri uri, File file, OutputStream output, String label) {
+            this.activity = activity;
+            this.uri = uri;
+            this.file = file;
+            this.output = output;
+            this.label = label;
+        }
+
+        void finish() {
+            if (Build.VERSION.SDK_INT >= 29 && uri != null) {
+                try {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                    activity.getContentResolver().update(uri, values, null, null);
+                } catch (Throwable ignored) {}
+            }
+        }
+
+        void abort() {
+            try {
+                if (uri != null) activity.getContentResolver().delete(uri, null, null);
+                else if (file != null) file.delete();
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static BackupTarget openPortableBackup(Activity act, String name) throws Throwable {
+        if (Build.VERSION.SDK_INT >= 29) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "application/zip");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH,
+                    Environment.DIRECTORY_DOWNLOADS + "/Deekseep");
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = act.getContentResolver().insert(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) throw new java.io.IOException("cannot create download");
+            OutputStream output = act.getContentResolver().openOutputStream(uri, "w");
+            if (output == null) {
+                act.getContentResolver().delete(uri, null, null);
+                throw new java.io.IOException("cannot open download");
+            }
+            return new BackupTarget(act, uri, null, output,
+                    "Download/Deekseep/" + name);
+        }
+        File file = new File(exportBase(act), name);
+        return new BackupTarget(act, null, file, new FileOutputStream(file), file.getPath());
+    }
+
+    /** Adds a portable, lossless archive beside the human-readable Markdown export. */
+    private static String exportPortableChatBackup(Activity act,
+                                                    TaskExecutionUi.Logger logger)
+            throws Throwable {
+        String name = "deekseep_chat_" + stamp() + ".ds-chat-backup.zip";
+        BackupTarget target = openPortableBackup(act, name);
+        ZipOutputStream zip = null;
+        int sessions = 0;
+        try {
+            zip = new ZipOutputStream(target.output);
+            JSONObject manifest = new JSONObject();
+            manifest.put("format", "deekseep-chat-backup");
+            manifest.put("version", 1);
+            manifest.put("created_at", System.currentTimeMillis());
+            putZipText(zip, "manifest.json", manifest.toString());
+            for (File file : chatDbs()) {
+                SQLiteDatabase database = null;
+                Cursor cursor = null;
+                try {
+                    database = SQLiteDatabase.openDatabase(
+                            file.getPath(), null, SQLiteDatabase.OPEN_READONLY);
+                    cursor = database.rawQuery("SELECT id FROM chat_session_list", null);
+                    while (cursor.moveToNext()) {
+                        String sid = cursor.getString(0);
+                        if (!ChatEditorUi.validSid(sid)) continue;
+                        try {
+                            JSONObject snapshot = ChatEditorUi.snapshotSession(database, sid);
+                            if (snapshot == null) continue;
+                            String entry = "sessions/" + sanitize(snapshot.optString("db_id", ""))
+                                    + "__" + sid + ".json";
+                            putZipText(zip, entry, snapshot.toString());
+                            sessions++;
+                        } catch (Throwable skipped) {
+                            line(logger, UiLanguage.text(act,
+                                    "备份包跳过会话：", "Backup archive skipped chat: ") + sid);
+                        }
+                    }
+                } finally {
+                    if (cursor != null) try { cursor.close(); } catch (Throwable ignored) {}
+                    if (database != null) try { database.close(); } catch (Throwable ignored) {}
+                }
+            }
+            zip.finish();
+            zip.close();
+            zip = null;
+            target.finish();
+            String status = UiLanguage.text(act,
+                    "聊天备份包：" + target.label + "（" + sessions + " 个会话）",
+                    "Chat backup: " + target.label + " (" + sessions + " chats)");
+            line(logger, status);
+            return status;
+        } catch (Throwable error) {
+            if (zip != null) try { zip.close(); } catch (Throwable ignored) {}
+            target.abort();
+            throw error;
+        }
+    }
+
+    private static void putZipText(ZipOutputStream zip, String name, String value)
+            throws Throwable {
+        zip.putNextEntry(new ZipEntry(name));
+        zip.write(value.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
+    static void showChatImport(final Activity act, final Uri uri) {
+        TaskExecutionUi.show(act, "导入聊天记录",
+                "只覆盖服务器已重新下发、且会话 ID 与备份命中的记录。导入后请完整重启 DeepSeek。",
+                new TaskExecutionUi.Task() {
+                    @Override public String run(TaskExecutionUi.Logger logger) throws Throwable {
+                        return importChatBackupForConsole(act, uri, logger);
+                    }
+                });
+    }
+
+    static String importChatBackupForConsole(Activity act, Uri uri,
+                                             TaskExecutionUi.Logger logger) throws Throwable {
+        if (uri == null) throw new IllegalArgumentException("missing backup file");
+        Map<String, File> databases = new HashMap<>();
+        for (File file : chatDbs()) databases.put(ChatEditorUi.uuidOf(file), file);
+        InputStream raw = act.getContentResolver().openInputStream(uri);
+        if (raw == null) throw new java.io.IOException("cannot open backup file");
+        ZipInputStream zip = new ZipInputStream(raw);
+        boolean manifestOk = false;
+        int matched = 0;
+        int missing = 0;
+        int failed = 0;
+        int entries = 0;
+        long total = 0L;
+        try {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (++entries > 10000) throw new java.io.IOException("too many backup entries");
+                if (entry.isDirectory()) continue;
+                byte[] bytes = readZipEntry(zip, 32 * 1024 * 1024);
+                total += bytes.length;
+                if (total > 512L * 1024L * 1024L) {
+                    throw new java.io.IOException("backup is too large");
+                }
+                if ("manifest.json".equals(entry.getName())) {
+                    JSONObject manifest = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
+                    manifestOk = validBackupManifest(manifest);
+                    continue;
+                }
+                if (!manifestOk || !portableSessionEntry(entry.getName())) continue;
+                JSONObject snapshot = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
+                String dbId = snapshot.optString("db_id", "");
+                String sid = snapshot.optString("sid", "");
+                File file = databases.get(dbId);
+                if (file == null || !ChatEditorUi.validSid(sid)) {
+                    missing++;
+                    continue;
+                }
+                SQLiteDatabase database = null;
+                try {
+                    database = SQLiteDatabase.openDatabase(
+                            file.getPath(), null, SQLiteDatabase.OPEN_READWRITE);
+                    if (ChatEditorUi.overwriteMatchingSession(database, snapshot)) matched++;
+                    else missing++;
+                } catch (Throwable error) {
+                    failed++;
+                    line(logger, UiLanguage.text(act,
+                            "覆盖失败：", "Overwrite failed: ") + sid + " · "
+                            + safeMessage(error));
+                } finally {
+                    if (database != null) try { database.close(); } catch (Throwable ignored) {}
+                }
+            }
+        } finally {
+            try { zip.close(); } catch (Throwable ignored) {}
+        }
+        if (!manifestOk) throw new java.io.IOException("not a Deekseep chat backup");
+        String summary = UiLanguage.text(act,
+                "已覆盖 " + matched + " 个命中会话；未命中 " + missing
+                        + " 个；失败 " + failed + " 个。请完整重启 DeepSeek。",
+                "Overwrote " + matched + " matching chats; " + missing
+                        + " unmatched; " + failed + " failed. Fully restart DeepSeek.");
+        line(logger, summary);
+        return summary;
+    }
+
+    static boolean validBackupManifest(JSONObject manifest) {
+        return manifest != null && "deekseep-chat-backup".equals(
+                manifest.optString("format")) && manifest.optInt("version") == 1;
+    }
+
+    static boolean portableSessionEntry(String name) {
+        if (name == null || !name.startsWith("sessions/") || !name.endsWith(".json")
+                || name.contains("..") || name.indexOf('\\') >= 0) return false;
+        String leaf = name.substring("sessions/".length(), name.length() - 5);
+        return leaf.length() > 4 && leaf.indexOf('/') < 0;
+    }
+
+    private static byte[] readZipEntry(ZipInputStream zip, int limit) throws Throwable {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int count;
+        while ((count = zip.read(buffer)) >= 0) {
+            if (count == 0) continue;
+            total += count;
+            if (total > limit) throw new java.io.IOException("backup entry is too large");
+            output.write(buffer, 0, count);
+        }
+        return output.toByteArray();
     }
 
     // ── 功能 2：全局搜索聊天记录（圆角 DeepSeek 风格 + 点击结果跳转到消息）──
@@ -404,11 +674,29 @@ public final class DeekseepTools {
         UiLanguage.toast(act, "正在备份…", Toast.LENGTH_SHORT).show();
         runBg(act, new Job() {
             public String run() throws Throwable {
-                File base = new File(exportBase(act), "backup_" + stamp());
-                int n = doBackupTo(base);
-                return n == 0 ? "没有可备份的数据库" : ("已备份 " + n + " 个数据库到\n" + base.getPath());
+                return backupForConsole(act, null);
             }
         });
+    }
+
+    static String backupForConsole(Activity act, TaskExecutionUi.Logger logger)
+            throws Throwable {
+        File base = new File(exportBase(act), "backup_" + stamp());
+        line(logger, UiLanguage.text(act,
+                "正在扫描聊天数据库", "Scanning chat databases"));
+        int count = doBackupTo(base);
+        if (count == 0) {
+            line(logger, UiLanguage.text(act,
+                    "没有可备份的数据库", "No databases to back up"));
+            return UiLanguage.text(act, "没有可备份的数据库", "No databases to back up");
+        }
+        String result = UiLanguage.text(act,
+                "已备份 " + count + " 个数据库",
+                "Backed up " + count + " databases");
+        line(logger, result);
+        line(logger, UiLanguage.text(act, "备份目录：", "Backup directory: ")
+                + base.getPath());
+        return result + "\n" + base.getPath();
     }
 
     private static int doBackupTo(File dst) {
@@ -418,6 +706,10 @@ public final class DeekseepTools {
         if (fs != null) for (File f : fs) {
             String nm = f.getName();
             if (f.isFile() && nm.startsWith("deepseek_chat") && nm.endsWith(".db")) {
+                String uuid = nm.startsWith("deepseek_chat_")
+                        ? nm.substring("deepseek_chat_".length(), nm.length() - ".db".length())
+                        : nm.substring("deepseek_chat".length(), nm.length() - ".db".length());
+                if (!ChatEditorUi.validDbUuid(uuid)) continue;
                 try { copyFile(f, new File(dst, nm)); n++; } catch (Throwable ignored) {}
             }
         }
@@ -474,58 +766,91 @@ public final class DeekseepTools {
         UiLanguage.toast(act, "统计中…", Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             public void run() {
-                Map<String, String> accounts = ChatEditorUi.loadAccountLabels();
-                int sessions = 0, msgs = 0;
-                long chars = 0;
-                StringBuilder perAcc = new StringBuilder();
-                for (File f : chatDbs()) {
-                    String label = accounts.get(ChatEditorUi.uuidOf(f));
-                    int accSessions = 0, accMsgs = 0;
-                    SQLiteDatabase d = null; Cursor c = null;
-                    try {
-                        d = SQLiteDatabase.openDatabase(f.getPath(), null, SQLiteDatabase.OPEN_READONLY);
-                        c = d.rawQuery("SELECT id FROM chat_session_list", null);
-                        List<String> sids = new ArrayList<String>();
-                        while (c.moveToNext()) if (c.getString(0) != null) sids.add(c.getString(0));
-                        for (String sid : sids) {
-                            accSessions++;
-                            for (ChatEditorUi.Msg m : ChatEditorUi.loadThread(d, sid)) {
-                                accMsgs++;
-                                if (m.body != null) chars += m.body.length();
-                                if (m.think != null) chars += m.think.length();
-                            }
-                        }
-                    } catch (Throwable ignored) {
-                    } finally {
-                        if (c != null) try { c.close(); } catch (Throwable ig) {}
-                        if (d != null) try { d.close(); } catch (Throwable ig) {}
-                    }
-                    sessions += accSessions; msgs += accMsgs;
-                    perAcc.append("• ").append(label == null
-                                    ? ChatEditorUi.uuidOf(f).substring(0, 8) : label)
-                            .append(UiLanguage.text(act, "：", ": "))
-                            .append(accSessions)
-                            .append(UiLanguage.text(act, " 会话 / ", " chats / "))
-                            .append(accMsgs)
-                            .append(UiLanguage.text(act, " 消息\n", " messages\n"));
-                }
-                final String text = UiLanguage.text(act,
-                        "本地账号数：" + chatDbs().size() + "\n"
-                                + "会话总数：" + sessions + "\n"
-                                + "消息总数：" + msgs + "\n"
-                                + "正文+思考总字数：" + chars + "\n\n"
-                                + "按账号：\n" + perAcc,
-                        "Local accounts: " + chatDbs().size() + "\n"
-                                + "Total chats: " + sessions + "\n"
-                                + "Total messages: " + msgs + "\n"
-                                + "Body + reasoning characters: " + chars + "\n\n"
-                                + "By account:\n" + perAcc);
+                final String text = statisticsForConsole(act, null);
                 act.runOnUiThread(new Runnable() {
                     public void run() { showScrollDialog(act,
                             UiLanguage.text(act, "会话数据统计", "Chat data statistics"), text); }
                 });
             }
         }).start();
+    }
+
+    static String statisticsForConsole(Activity act, TaskExecutionUi.Logger logger) {
+        Map<String, String> accounts = ChatEditorUi.loadAccountLabels();
+        List<File> databases = chatDbs();
+        int sessions = 0;
+        int messages = 0;
+        long characters = 0;
+        StringBuilder perAccount = new StringBuilder();
+        line(logger, UiLanguage.text(act,
+                "正在读取 " + databases.size() + " 个账号",
+                "Reading " + databases.size() + " accounts"));
+        for (File file : databases) {
+            String label = accounts.get(ChatEditorUi.uuidOf(file));
+            if (label == null) label = shortUuid(ChatEditorUi.uuidOf(file));
+            int accountSessions = 0;
+            int accountMessages = 0;
+            SQLiteDatabase database = null;
+            Cursor cursor = null;
+            try {
+                database = SQLiteDatabase.openDatabase(
+                        file.getPath(), null, SQLiteDatabase.OPEN_READONLY);
+                cursor = database.rawQuery("SELECT id FROM chat_session_list", null);
+                List<String> ids = new ArrayList<String>();
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(0) != null) ids.add(cursor.getString(0));
+                }
+                for (String sid : ids) {
+                    accountSessions++;
+                    for (ChatEditorUi.Msg message : ChatEditorUi.loadThread(database, sid)) {
+                        accountMessages++;
+                        if (message.body != null) characters += message.body.length();
+                        if (message.think != null) characters += message.think.length();
+                    }
+                }
+            } catch (Throwable error) {
+                line(logger, UiLanguage.text(act, "读取失败：", "Read failed: ")
+                        + label + " · " + safeMessage(error));
+            } finally {
+                if (cursor != null) try { cursor.close(); } catch (Throwable ignored) {}
+                if (database != null) try { database.close(); } catch (Throwable ignored) {}
+            }
+            sessions += accountSessions;
+            messages += accountMessages;
+            String accountLine = "• " + label + UiLanguage.text(act, "：", ": ")
+                    + accountSessions + UiLanguage.text(act, " 会话 / ", " chats / ")
+                    + accountMessages + UiLanguage.text(act, " 消息", " messages");
+            perAccount.append(accountLine).append('\n');
+            line(logger, accountLine);
+        }
+        String result = UiLanguage.text(act,
+                "本地账号数：" + databases.size() + "\n"
+                        + "会话总数：" + sessions + "\n"
+                        + "消息总数：" + messages + "\n"
+                        + "正文+思考总字数：" + characters + "\n\n"
+                        + "按账号：\n" + perAccount,
+                "Local accounts: " + databases.size() + "\n"
+                        + "Total chats: " + sessions + "\n"
+                        + "Total messages: " + messages + "\n"
+                        + "Body + reasoning characters: " + characters + "\n\n"
+                        + "By account:\n" + perAccount);
+        line(logger, UiLanguage.text(act,
+                "汇总：" + sessions + " 个会话，" + messages + " 条消息，"
+                        + characters + " 字",
+                "Summary: " + sessions + " chats, " + messages + " messages, "
+                        + characters + " characters"));
+        return result;
+    }
+
+    private static void line(TaskExecutionUi.Logger logger, String value) {
+        if (logger != null) logger.line(UiLanguageCatalog.toEnglish(value));
+    }
+
+    private static String safeMessage(Throwable error) {
+        if (error == null) return "unknown";
+        String message = error.getMessage();
+        return message == null || message.trim().length() == 0
+                ? error.getClass().getSimpleName() : message.trim();
     }
 
     // ── 通用滚动结果对话框 ─────────────────────────────────────────────

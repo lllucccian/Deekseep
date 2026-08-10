@@ -27,7 +27,7 @@ final class SpatialMotionUi {
     }
 
     private interface ConfigToggle {
-        void apply(ChatAppearance.Config config, boolean checked);
+        boolean apply(ChatAppearance.Config config, boolean checked);
     }
 
     private SpatialMotionUi() {}
@@ -90,6 +90,22 @@ final class SpatialMotionUi {
         scroll.addView(card, cardParams);
 
         ChatAppearance.Config initial = ChatAppearance.load();
+        boolean backgroundReady = ChatAppearance.motionBackgroundReady(initial);
+        boolean sensorReady = ChatAppearance.motionSensorAvailable(activity);
+        boolean saver = SpatialMotionController.isPowerSaveMode(activity);
+        TextView readiness = label(activity,
+                tr(activity,
+                        "背景图：" + (backgroundReady ? "已就绪" : "未设置")
+                                + "  ·  传感器：" + (sensorReady ? "可用" : "不可用")
+                                + "  ·  省电：" + (saver ? "暂停动态" : "无限制"),
+                        "Wallpaper: " + (backgroundReady ? "ready" : "not configured")
+                                + "  ·  Sensor: " + (sensorReady ? "available" : "unavailable")
+                                + "  ·  Power: " + (saver ? "motion paused" : "unrestricted")),
+                12, subColor, false);
+        readiness.setPadding(dp(activity, 16), dp(activity, 14),
+                dp(activity, 16), dp(activity, 14));
+        card.addView(readiness);
+        card.addView(divider(activity, dividerColor));
         addConfigSwitch(
                 activity, card, dark, textColor, subColor,
                 tr(activity, "启用空间动效", "Enable spatial motion"),
@@ -101,10 +117,20 @@ final class SpatialMotionUi {
                         "空间动效设置保存失败",
                         "Could not save spatial-motion settings"),
                 new ConfigToggle() {
-                    @Override public void apply(
+                    @Override public boolean apply(
                             ChatAppearance.Config config, boolean checked) {
+                        if (checked && !ChatAppearance.motionBackgroundReady(config)) {
+                            toast(activity,
+                                    "请先在聊天外观中设置背景图",
+                                    "Set a wallpaper in Chat appearance first");
+                            return false;
+                        }
                         config.spatialDepthEnabled = checked;
-                        if (checked) config.shakeParallaxEnabled = false;
+                        if (checked) {
+                            config.enabled = true;
+                            config.shakeParallaxEnabled = false;
+                        }
+                        return true;
                     }
                 },
                 new StateListener() {
@@ -178,9 +204,10 @@ final class SpatialMotionUi {
                         "外沿延伸设置保存失败",
                         "Could not save outer-edge extension"),
                 new ConfigToggle() {
-                    @Override public void apply(
+                    @Override public boolean apply(
                             ChatAppearance.Config config, boolean checked) {
                         config.spatialEdgeExtendEnabled = checked;
+                        return true;
                     }
                 }, null);
         card.addView(divider(activity, dividerColor));
@@ -196,9 +223,10 @@ final class SpatialMotionUi {
                         "减少动态效果设置保存失败",
                         "Could not save reduced-motion setting"),
                 new ConfigToggle() {
-                    @Override public void apply(
+                    @Override public boolean apply(
                             ChatAppearance.Config config, boolean checked) {
                         config.spatialReduceMotion = checked;
+                        return true;
                     }
                 }, null);
         card.addView(divider(activity, dividerColor));
@@ -214,9 +242,10 @@ final class SpatialMotionUi {
                         "自动重新校准设置保存失败",
                         "Could not save automatic recentering"),
                 new ConfigToggle() {
-                    @Override public void apply(
+                    @Override public boolean apply(
                             ChatAppearance.Config config, boolean checked) {
                         config.spatialAutoRecenter = checked;
+                        return true;
                     }
                 }, null);
         card.addView(divider(activity, dividerColor));
@@ -232,10 +261,11 @@ final class SpatialMotionUi {
                         "动效方向设置保存失败",
                         "Could not save motion direction"),
                 new ConfigToggle() {
-                    @Override public void apply(
+                    @Override public boolean apply(
                             ChatAppearance.Config config, boolean checked) {
                         config.spatialDirectionMultiplier =
                                 checked ? -1f : 1f;
+                        return true;
                     }
                 }, null);
         card.addView(divider(activity, dividerColor));
@@ -257,6 +287,7 @@ final class SpatialMotionUi {
             }
         });
         card.addView(recenter);
+        DeekseepUi.addBuildFooter(activity, card, subColor);
 
         back.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View ignored) {
@@ -306,7 +337,7 @@ final class SpatialMotionUi {
         row.addView(labels, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        final Switch toggle = new Switch(activity);
+        final Switch toggle = new HubInsetSwitch(activity);
         tintSwitch(toggle, dark);
         toggle.setChecked(checked);
         final boolean[] syncing = new boolean[1];
@@ -317,7 +348,12 @@ final class SpatialMotionUi {
                         if (syncing[0]) return;
                         ChatAppearance.Config config =
                                 ChatAppearance.load();
-                        mutation.apply(config, value);
+                        if (!mutation.apply(config, value)) {
+                            syncing[0] = true;
+                            button.setChecked(!value);
+                            syncing[0] = false;
+                            return;
+                        }
                         if (!ChatAppearance.save(config)) {
                             syncing[0] = true;
                             button.setChecked(!value);

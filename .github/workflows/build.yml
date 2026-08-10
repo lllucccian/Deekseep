@@ -36,7 +36,7 @@ jobs:
       - name: Upload APKs and checksums
         uses: actions/upload-artifact@v7
         with:
-          name: deekseep-stable-v1.7.2
+          name: deekseep-mainland-universal-v1.7.3
           path: dist/
           if-no-files-found: error
           retention-days: 14

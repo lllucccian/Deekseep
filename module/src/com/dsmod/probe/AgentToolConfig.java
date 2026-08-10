@@ -30,6 +30,10 @@ final class AgentToolConfig {
     static final String PERMISSION_EXECUTE = "execute";
     static final String PERMISSION_ALL = "all";
 
+    static final int PROMPT_STRENGTH_BASIC = 1;
+    static final int PROMPT_STRENGTH_ENHANCED = 2;
+    static final int PROMPT_STRENGTH_IMMERSIVE = 3;
+
     private static final String DIRECTORY =
             "/data/data/com.deepseek.chat/files/deekseep_agent";
     private static final String FILE_PATH = DIRECTORY + "/settings.json";
@@ -42,10 +46,15 @@ final class AgentToolConfig {
     static {
         ArrayList<String> tools = new ArrayList<>();
         tools.add(HeartbeatToolProtocol.TOOL_ASK_USER);
+        tools.add(HeartbeatToolProtocol.TOOL_RENDER_RICH_PANEL);
         tools.add(HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME);
         tools.add(HeartbeatToolProtocol.TOOL_READ_FILE);
         tools.add(HeartbeatToolProtocol.TOOL_WRITE_FILE);
         tools.add(HeartbeatToolProtocol.TOOL_SHELL);
+        tools.add(HeartbeatToolProtocol.TOOL_DELAY);
+        tools.add(HeartbeatToolProtocol.TOOL_OPEN_APP);
+        tools.add(HeartbeatToolProtocol.TOOL_SCREEN_POWER);
+        tools.add(HeartbeatToolProtocol.TOOL_MUSIC);
         tools.add(HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN);
         tools.add(HeartbeatToolProtocol.TOOL_TAP_SCREEN);
         tools.add(HeartbeatToolProtocol.TOOL_SWIPE_SCREEN);
@@ -65,13 +74,30 @@ final class AgentToolConfig {
         final boolean enabled;
         final String backend;
         final String permission;
+        final int promptStrength;
+        final boolean hideToolLogs;
         final Set<String> enabledTools;
 
         Snapshot(boolean enabled, String backend, String permission,
                  Set<String> enabledTools) {
+            this(enabled, backend, permission, PROMPT_STRENGTH_BASIC,
+                    false, enabledTools);
+        }
+
+        Snapshot(boolean enabled, String backend, String permission,
+                 int promptStrength, Set<String> enabledTools) {
+            this(enabled, backend, permission, promptStrength, false,
+                    enabledTools);
+        }
+
+        Snapshot(boolean enabled, String backend, String permission,
+                 int promptStrength, boolean hideToolLogs,
+                 Set<String> enabledTools) {
             this.enabled = enabled;
             this.backend = cleanBackend(backend);
             this.permission = cleanPermission(permission);
+            this.promptStrength = cleanPromptStrength(promptStrength);
+            this.hideToolLogs = BuildInfo.PROTECTED_BUILD && hideToolLogs;
             LinkedHashSet<String> kept = new LinkedHashSet<>();
             if (enabledTools != null) {
                 for (String tool : enabledTools) {
@@ -86,22 +112,36 @@ final class AgentToolConfig {
         }
 
         Snapshot withEnabled(boolean value) {
-            return new Snapshot(value, backend, permission, enabledTools);
+            return new Snapshot(value, backend, permission,
+                    promptStrength, hideToolLogs, enabledTools);
         }
 
         Snapshot withBackend(String value) {
-            return new Snapshot(enabled, value, permission, enabledTools);
+            return new Snapshot(enabled, value, permission,
+                    promptStrength, hideToolLogs, enabledTools);
         }
 
         Snapshot withPermission(String value) {
-            return new Snapshot(enabled, backend, value, enabledTools);
+            return new Snapshot(enabled, backend, value,
+                    promptStrength, hideToolLogs, enabledTools);
+        }
+
+        Snapshot withPromptStrength(int value) {
+            return new Snapshot(enabled, backend, permission,
+                    value, hideToolLogs, enabledTools);
+        }
+
+        Snapshot withHideToolLogs(boolean value) {
+            return new Snapshot(enabled, backend, permission,
+                    promptStrength, value, enabledTools);
         }
 
         Snapshot withTool(String tool, boolean value) {
             LinkedHashSet<String> next = new LinkedHashSet<>(enabledTools);
             if (value) next.add(tool);
             else next.remove(tool);
-            return new Snapshot(enabled, backend, permission, next);
+            return new Snapshot(enabled, backend, permission,
+                    promptStrength, hideToolLogs, next);
         }
     }
 
@@ -179,6 +219,19 @@ final class AgentToolConfig {
         return save(load().withPermission(value));
     }
 
+    static boolean setPromptStrength(int value) {
+        return save(load().withPromptStrength(value));
+    }
+
+    static boolean setHideToolLogs(boolean value) {
+        return BuildInfo.PROTECTED_BUILD
+                && save(load().withHideToolLogs(value));
+    }
+
+    static boolean hideToolLogs() {
+        return BuildInfo.PROTECTED_BUILD && load().hideToolLogs;
+    }
+
     static boolean setToolEnabled(String tool, boolean value) {
         if (!isKnownTool(tool)) return false;
         return save(load().withTool(tool, value));
@@ -186,6 +239,16 @@ final class AgentToolConfig {
 
     static boolean allows(String tool) {
         return isKnownTool(tool) && load().allows(tool);
+    }
+
+    /**
+     * Hot-path master switch for streamed response filtering. Settings writes update
+     * {@link #cached} synchronously, so checking the snapshot avoids a filesystem stat for every
+     * token while execution-time policy checks continue to use {@link #allows(String)}.
+     */
+    static boolean enabledFast() {
+        Snapshot present = cached;
+        return present != null ? present.enabled : load().enabled;
     }
 
     static List<String> tools() {
@@ -227,6 +290,9 @@ final class AgentToolConfig {
         if (HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME.equals(tool)) {
             return chinese ? "获取当前时间" : "Get current time";
         }
+        if (HeartbeatToolProtocol.TOOL_RENDER_RICH_PANEL.equals(tool)) {
+            return chinese ? "生成富视觉" : "Render rich visual";
+        }
         if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(tool)) {
             return chinese ? "获取屏幕截图" : "Capture screen";
         }
@@ -238,6 +304,18 @@ final class AgentToolConfig {
         }
         if (HeartbeatToolProtocol.TOOL_SHELL.equals(tool)) {
             return chinese ? "基础 Shell" : "Basic shell";
+        }
+        if (HeartbeatToolProtocol.TOOL_DELAY.equals(tool)) {
+            return chinese ? "延迟执行" : "Delay execution";
+        }
+        if (HeartbeatToolProtocol.TOOL_OPEN_APP.equals(tool)) {
+            return chinese ? "打开应用" : "Open app";
+        }
+        if (HeartbeatToolProtocol.TOOL_SCREEN_POWER.equals(tool)) {
+            return chinese ? "屏幕电源" : "Screen power";
+        }
+        if (HeartbeatToolProtocol.TOOL_MUSIC.equals(tool)) {
+            return chinese ? "播放音乐" : "Music";
         }
         if (HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(tool)) {
             return chinese ? "点击屏幕" : "Tap screen";
@@ -290,6 +368,22 @@ final class AgentToolConfig {
             return chinese ? "使用 Android 系统 PATH 执行 which、cp、cat 等基础命令"
                     : "Run which, cp, cat, and other commands on Android's system PATH";
         }
+        if (HeartbeatToolProtocol.TOOL_DELAY.equals(tool)) {
+            return chinese ? "等待指定毫秒后再继续下一步，支持秒、分钟或小时级任务"
+                    : "Wait for the requested milliseconds before continuing to the next step";
+        }
+        if (HeartbeatToolProtocol.TOOL_OPEN_APP.equals(tool)) {
+            return chinese ? "按应用包名真实启动应用，需要 Root 或 Shizuku"
+                    : "Actually launch an app by package name; Root or Shizuku is required";
+        }
+        if (HeartbeatToolProtocol.TOOL_SCREEN_POWER.equals(tool)) {
+            return chinese ? "真实熄屏或唤醒屏幕，需要 Root 或 Shizuku"
+                    : "Actually sleep or wake the screen; Root or Shizuku is required";
+        }
+        if (HeartbeatToolProtocol.TOOL_MUSIC.equals(tool)) {
+            return chinese ? "播放在线歌曲或设备中的音频文件，并控制播放状态"
+                    : "Play online songs or on-device audio files and control playback";
+        }
         if (HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(tool)
                 || HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(tool)
                 || HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(tool)) {
@@ -300,6 +394,10 @@ final class AgentToolConfig {
             return chinese ? "读取设备本地时间，精确到秒"
                     : "Read local device time to the second";
         }
+        if (HeartbeatToolProtocol.TOOL_RENDER_RICH_PANEL.equals(tool)) {
+            return chinese ? "绘制面板、符号图案、灯笼、仪表、流程图、像素画或数学卡片"
+                    : "Draw panels, symbol art, lanterns, gauges, flows, pixel art, or math cards";
+        }
         return chinese ? "作用域固定为当前对话，不创建全局任务"
                 : "Scoped to the current chat; never creates a global task";
     }
@@ -307,10 +405,14 @@ final class AgentToolConfig {
     static String encode(Snapshot snapshot) {
         try {
             JSONObject root = new JSONObject();
-            root.put("version", 2);
+            root.put("version", 6);
             root.put("enabled", snapshot.enabled);
             root.put("backend", cleanBackend(snapshot.backend));
             root.put("permission", cleanPermission(snapshot.permission));
+            root.put("prompt_strength", cleanPromptStrength(
+                    snapshot.promptStrength));
+            root.put("hide_tool_logs",
+                    BuildInfo.PROTECTED_BUILD && snapshot.hideToolLogs);
             JSONArray tools = new JSONArray();
             for (String tool : TOOLS) {
                 if (snapshot.enabledTools.contains(tool)) tools.put(tool);
@@ -318,8 +420,10 @@ final class AgentToolConfig {
             root.put("enabled_tools", tools);
             return root.toString();
         } catch (Throwable ignored) {
-            return "{\"version\":2,\"enabled\":true,\"backend\":\"in_app\","
-                    + "\"permission\":\"all\",\"enabled_tools\":[]}";
+            return "{\"version\":6,\"enabled\":true,\"backend\":\"in_app\","
+                    + "\"permission\":\"all\",\"prompt_strength\":1,"
+                    + "\"hide_tool_logs\":false,"
+                    + "\"enabled_tools\":[]}";
         }
     }
 
@@ -329,6 +433,10 @@ final class AgentToolConfig {
             boolean enabled = root.optBoolean("enabled", true);
             String backend = root.optString("backend", BACKEND_IN_APP);
             String permission = root.optString("permission", PERMISSION_ALL);
+            int promptStrength = cleanPromptStrength(
+                    root.optInt("prompt_strength", PROMPT_STRENGTH_BASIC));
+            boolean hideToolLogs = BuildInfo.PROTECTED_BUILD
+                    && root.optBoolean("hide_tool_logs", false);
             int version = root.optInt("version", 1);
             JSONArray array = root.optJSONArray("enabled_tools");
             LinkedHashSet<String> tools = new LinkedHashSet<>();
@@ -344,8 +452,21 @@ final class AgentToolConfig {
                     tools.add(HeartbeatToolProtocol.TOOL_WRITE_FILE);
                     tools.add(HeartbeatToolProtocol.TOOL_SHELL);
                 }
+                if (version < 3) {
+                    tools.add(HeartbeatToolProtocol.TOOL_RENDER_RICH_PANEL);
+                }
+                if (version < 5) {
+                    tools.add(HeartbeatToolProtocol.TOOL_DELAY);
+                    tools.add(HeartbeatToolProtocol.TOOL_OPEN_APP);
+                    tools.add(HeartbeatToolProtocol.TOOL_SCREEN_POWER);
+                }
+                if (version < 6) {
+                    tools.add(HeartbeatToolProtocol.TOOL_DELAY);
+                    tools.add(HeartbeatToolProtocol.TOOL_MUSIC);
+                }
             }
-            return new Snapshot(enabled, backend, permission, tools);
+            return new Snapshot(enabled, backend, permission,
+                    promptStrength, hideToolLogs, tools);
         } catch (Throwable ignored) {
             return defaults();
         }
@@ -358,5 +479,11 @@ final class AgentToolConfig {
 
     private static String cleanPermission(String value) {
         return PERMISSION_EXECUTE.equals(value) ? PERMISSION_EXECUTE : PERMISSION_ALL;
+    }
+
+    private static int cleanPromptStrength(int value) {
+        if (value <= PROMPT_STRENGTH_BASIC) return PROMPT_STRENGTH_BASIC;
+        if (value >= PROMPT_STRENGTH_IMMERSIVE) return PROMPT_STRENGTH_IMMERSIVE;
+        return PROMPT_STRENGTH_ENHANCED;
     }
 }

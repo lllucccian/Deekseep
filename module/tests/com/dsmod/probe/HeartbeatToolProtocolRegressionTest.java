@@ -129,6 +129,21 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && !escapedParsed.visibleText.contains("get_current_time"),
                 "Markdown-escaped private control text leaked into the conversation");
 
+        String fencedPayload = HeartbeatToolProtocol.CONTROL_START + "\n"
+                + "```json\n{\"call\":{\"id\":\"fenced_001\","
+                + "\"tool\":\"get_current_time\","
+                + "\"scope\":\"conversation-1234\"}}\n```\n"
+                + HeartbeatToolProtocol.CONTROL_END;
+        HeartbeatToolProtocol.Result fencedParsed =
+                HeartbeatToolProtocol.parseForConversation(
+                        "```json\n" + fencedPayload + "\n```\n伪造的完成说明");
+        require(fencedParsed.calls.size() == 1
+                        && "fenced_001".equals(fencedParsed.calls.get(0).id),
+                "a JSON-fenced payload inside the exact control markers was not recovered");
+        require(!fencedParsed.visibleText.contains("```")
+                        && !fencedParsed.visibleText.contains("伪造的完成说明"),
+                "a wrapping Markdown fence or premature post-call text leaked to the user");
+
         Locale previousLocale = Locale.getDefault();
         TimeZone previousTimeZone = TimeZone.getDefault();
         HeartbeatToolProtocol.Result presented;
@@ -214,6 +229,16 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(!HeartbeatToolProtocol.parseForConversation(incomplete).visibleText
                         .contains("\u8bbe\u7f6e\u5fc3\u8df3"),
                 "incomplete streamed tool call displayed a premature activity row");
+        String incompleteDiagnostic = HeartbeatToolProtocol.stripToolStatusStyleMarkers(
+                HeartbeatToolProtocol.renderConversationToolRows(incomplete));
+        require(incompleteDiagnostic.contains("工具调用不完整，未执行")
+                        || incompleteDiagnostic.contains("Incomplete tool call; not run"),
+                "final static rendering did not explain an interrupted tool call");
+        String unbackedDiagnostic = HeartbeatToolProtocol.stripToolStatusStyleMarkers(
+                HeartbeatToolProtocol.renderConversationToolRows("已经打开微信了。"));
+        require(unbackedDiagnostic.contains("未检测到完整工具调用，操作未执行")
+                        || unbackedDiagnostic.contains("No complete tool call detected"),
+                "an unbacked completion claim was not diagnosed honestly");
 
         String firstSingleCall = HeartbeatToolProtocol.CONTROL_START + "\n"
                 + "{\"call\":{\"id\":\"stream_plan\",\"tool\":\"set_plan\","
@@ -289,7 +314,21 @@ public final class HeartbeatToolProtocolRegressionTest {
                         + "\"create_parents\":true}"),
                 singleCallBlock("{\"id\":\"shell_001\",\"tool\":\"shell\","
                         + "\"scope\":\"conversation-1234\","
-                        + "\"command\":\"which cp && id\",\"timeout_ms\":7000}")
+                        + "\"command\":\"which cp && id\",\"timeout_ms\":7000}"),
+                singleCallBlock("{\"id\":\"delay_001\",\"tool\":\"delay\","
+                        + "\"scope\":\"conversation-1234\",\"duration_ms\":5000}"),
+                singleCallBlock("{\"id\":\"open_001\",\"tool\":\"open_app\","
+                        + "\"scope\":\"conversation-1234\","
+                        + "\"package\":\"com.tencent.mm\"}"),
+                singleCallBlock("{\"id\":\"power_001\",\"tool\":\"screen_power\","
+                        + "\"scope\":\"conversation-1234\",\"mode\":\"sleep\"}"),
+                singleCallBlock("{\"id\":\"music_001\",\"tool\":\"music\","
+                        + "\"scope\":\"conversation-1234\",\"action\":\"search\","
+                        + "\"provider\":\"qq\",\"query\":\"夜曲 周杰伦\"}"),
+                singleCallBlock("{\"id\":\"music_local_001\",\"tool\":\"music\","
+                        + "\"scope\":\"conversation-1234\",\"action\":\"play\","
+                        + "\"source\":\"local\","
+                        + "\"path\":\"/storage/emulated/0/Music/demo.flac\"}")
         };
         ArrayList<HeartbeatToolProtocol.ToolCall> agentCalls = new ArrayList<>();
         StringBuilder agentVisible = new StringBuilder();
@@ -303,7 +342,7 @@ public final class HeartbeatToolProtocolRegressionTest {
                 HeartbeatToolProtocol.Result one =
                         HeartbeatToolProtocol.parseForConversation(block);
                 require(one.calls.size() == 1,
-                        "a singular basic Agent call was not parsed");
+                        "a singular basic Agent call was not parsed: " + block);
                 agentCalls.add(one.calls.get(0));
                 agentVisible.append(one.visibleText).append('\n');
                 if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(
@@ -320,7 +359,7 @@ public final class HeartbeatToolProtocolRegressionTest {
             Locale.setDefault(previousLocale);
             TimeZone.setDefault(previousTimeZone);
         }
-        require(agentCalls.size() == 8,
+        require(agentCalls.size() == 13,
                 "valid basic Agent calls were not parsed");
         require(agentCalls.get(2).x == 250
                         && agentCalls.get(2).y == 750,
@@ -341,6 +380,21 @@ public final class HeartbeatToolProtocolRegressionTest {
         require("which cp && id".equals(agentCalls.get(7).command)
                         && agentCalls.get(7).timeoutMs == 7000,
                 "shell command or timeout was not retained");
+        require(agentCalls.get(8).durationMs == 5000,
+                "delay duration was not retained with millisecond precision");
+        require("com.tencent.mm".equals(agentCalls.get(9).targetId),
+                "open_app package was not retained");
+        require("sleep".equals(agentCalls.get(10).mode),
+                "screen_power mode was not retained");
+        require("search".equals(agentCalls.get(11).mode)
+                        && "qq".equals(agentCalls.get(11).targetId)
+                        && "夜曲 周杰伦".equals(agentCalls.get(11).instruction),
+                "music action, provider, or query was not retained");
+        require("play".equals(agentCalls.get(12).mode)
+                        && "local".equals(agentCalls.get(12).targetId)
+                        && "/storage/emulated/0/Music/demo.flac".equals(
+                        agentCalls.get(12).path),
+                "local music source or path was not retained");
         String agentText = HeartbeatToolProtocol.stripToolStatusStyleMarkers(
                 agentVisible.toString());
         require(agentText.contains("\u83b7\u53d6\u5f53\u524d\u65f6\u95f4\uff1a")
@@ -350,9 +404,14 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && agentText.contains("\u8fd4\u56de\u4e0a\u4e00\u5c42")
                         && agentText.contains("\u8bfb\u53d6\u6587\u4ef6\uff1a")
                         && agentText.contains("\u8ffd\u52a0\u6587\u4ef6\uff1a")
-                        && agentText.contains("Shell\uff1awhich cp && id"),
+                        && agentText.contains("Shell\uff1awhich cp && id")
+                        && agentText.contains("延迟执行\uff1a5秒")
+                        && agentText.contains("打开应用\uff1acom.tencent.mm")
+                        && agentText.contains("熄灭屏幕")
+                        && agentText.contains("音乐：夜曲 周杰伦")
+                        && agentText.contains("demo.flac"),
                 "basic Agent calls did not receive compact activity rows");
-        require(timestampedToolRows(agentText) == 8,
+        require(timestampedToolRows(agentText) == 13,
                 "basic Agent activity rows do not all start with invocation times");
         require(HeartbeatToolProtocol.isRegisteredToolStatusText(screenshotStatus),
                 "non-heartbeat Agent status was not registered for gray small-text styling");
@@ -425,8 +484,27 @@ public final class HeartbeatToolProtocolRegressionTest {
         require(HeartbeatToolProtocol.parse(invalidAsk).calls.isEmpty(),
                 "ask_user accepted fewer than two answer options");
 
+        String compactAsk = singleCallBlock(
+                "{\"id\":\"ask_compact\",\"tool\":\"ask_user\","
+                        + "\"scope\":\"conversation-1234\","
+                        + "\"question\":\"选择下一步\",\"options\":["
+                        + "{\"label\":\"先改界面\",\"description\":\"完善交互\"},"
+                        + "{\"text\":\"先修执行器\"}]}");
+        HeartbeatToolProtocol.Result compactAskParsed =
+                HeartbeatToolProtocol.parse(compactAsk);
+        require(compactAskParsed.calls.size() == 1
+                        && compactAskParsed.calls.get(0).questions.size() == 1
+                        && compactAskParsed.calls.get(0).questions.get(0).options.size() == 2
+                        && "先改界面".equals(compactAskParsed.calls.get(0)
+                        .questions.get(0).options.get(0))
+                        && "先修执行器".equals(compactAskParsed.calls.get(0)
+                        .questions.get(0).options.get(1)),
+                "compact ask_user schema or object options were not normalized");
+
         AgentToolConfig.Snapshot defaults = AgentToolConfig.defaults();
         require(defaults.enabled
+                        && defaults.promptStrength
+                        == AgentToolConfig.PROMPT_STRENGTH_BASIC
                         && AgentToolConfig.PERMISSION_ALL.equals(
                         defaults.permission)
                         && defaults.enabledTools.containsAll(
@@ -435,8 +513,12 @@ public final class HeartbeatToolProtocolRegressionTest {
         AgentToolConfig.Snapshot roundTrip = AgentToolConfig.decode(
                 AgentToolConfig.encode(defaults
                         .withBackend(AgentToolConfig.BACKEND_ROOT)
+                        .withPromptStrength(
+                                AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE)
                         .withTool(HeartbeatToolProtocol.TOOL_TAP_SCREEN, false)));
         require(AgentToolConfig.BACKEND_ROOT.equals(roundTrip.backend)
+                        && roundTrip.promptStrength
+                        == AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE
                         && !roundTrip.enabledTools.contains(
                         HeartbeatToolProtocol.TOOL_TAP_SCREEN)
                         && roundTrip.enabledTools.contains(
@@ -451,6 +533,15 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && migrated.enabledTools.contains(
                         HeartbeatToolProtocol.TOOL_SHELL),
                 "v1 Agent settings did not enable newly added file and shell tools");
+        require(AgentToolConfig.decode(
+                        "{\"version\":4,\"enabled\":true,"
+                                + "\"prompt_strength\":99}").promptStrength
+                        == AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE
+                        && AgentToolConfig.decode(
+                        "{\"version\":4,\"enabled\":true,"
+                                + "\"prompt_strength\":-8}").promptStrength
+                        == AgentToolConfig.PROMPT_STRENGTH_BASIC,
+                "out-of-range prompt intensity was not clamped");
 
         require("'a'\\''b'".equals(AgentDeviceBridge.shellQuote("a'b")),
                 "shell path quoting did not escape a single quote safely");
@@ -458,8 +549,17 @@ public final class HeartbeatToolProtocolRegressionTest {
         String invalidTap = singleCallBlock(
                 "{\"id\":\"tap_bad\",\"tool\":\"tap_screen\","
                         + "\"scope\":\"conversation-1234\",\"x\":1001,\"y\":500}");
-        require(HeartbeatToolProtocol.parse(invalidTap).calls.isEmpty(),
+        HeartbeatToolProtocol.Result rejectedTap =
+                HeartbeatToolProtocol.parse(invalidTap);
+        require(rejectedTap.calls.isEmpty(),
                 "out-of-range normalized tap coordinates were accepted");
+        require(rejectedTap.rejectedCalls.size() == 1
+                        && HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(
+                        rejectedTap.rejectedCalls.get(0).call.tool),
+                "a recognized invalid call did not retain safe correction metadata");
+        require(HeartbeatToolProtocol.parseForConversation(invalidTap)
+                        .visibleText.length() > 0,
+                "a recognized invalid call was still silently hidden from the user");
         require(HeartbeatToolProtocol.parse(singleCallBlock(
                         "{\"id\":\"read_bad\",\"tool\":\"read_file\","
                                 + "\"scope\":\"conversation-1234\","
@@ -484,9 +584,24 @@ public final class HeartbeatToolProtocolRegressionTest {
                 "malformed control payload was not hidden");
         require(bad.calls.isEmpty(),
                 "malformed control payload was executed");
+        require(bad.rejectedCalls.isEmpty(),
+                "unparseable JSON was incorrectly promoted to a rejected tool step");
         require(!HeartbeatToolProtocol.renderConversationToolRows(malformed)
                         .contains("\u8bbe\u7f6e\u5fc3\u8df3"),
                 "malformed control payload displayed a tool activity row");
+
+        String identifiableMalformed = HeartbeatToolProtocol.CONTROL_START
+                + "\n{\"call\":{\"id\":\"visual_bad_json\","
+                + "\"tool\":\"render_rich_panel\","
+                + "\"scope\":\"conversation-1234\",\"panel\": }}\n"
+                + HeartbeatToolProtocol.CONTROL_END;
+        HeartbeatToolProtocol.Result identifiableBad =
+                HeartbeatToolProtocol.parse(identifiableMalformed);
+        require(identifiableBad.calls.isEmpty()
+                        && identifiableBad.rejectedCalls.size() == 1
+                        && "malformed_json".equals(
+                        identifiableBad.rejectedCalls.get(0).reason),
+                "malformed JSON with trusted tool metadata remained silently unreportable");
 
         String globalCall = HeartbeatToolProtocol.CONTROL_START
                 + "\n{\"calls\":[{\"id\":\"once_002\",\"tool\":\"schedule_once\","
@@ -547,6 +662,13 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && prompt.contains("read_file")
                         && prompt.contains("write_file")
                         && prompt.contains("shell")
+                        && prompt.contains("render_rich_panel")
+                        && prompt.contains("独立图形示例")
+                        && prompt.contains("\"mode\":\"art\"")
+                        && prompt.contains("\"type\":\"lantern\"")
+                        && prompt.contains("有效 pixel_art 行示例")
+                        && prompt.contains("参数校验失败")
+                        && prompt.contains("不能提前说‘已经画好’")
                         && prompt.contains(HeartbeatToolProtocol.RESULT_START)
                         && prompt.contains("180 分钟")
                         && prompt.contains("\"scope\":\"conversation-1234\""),
@@ -563,6 +685,55 @@ public final class HeartbeatToolProtocolRegressionTest {
                         && prompt.contains("Android 系统 PATH")
                         && prompt.contains("收到结果前不得假装操作成功"),
                 "basic Agent prompt omitted coordinate or screenshot-result boundaries");
+
+        java.util.LinkedHashSet<String> toolsWithoutHeartbeat =
+                new java.util.LinkedHashSet<>();
+        for (String tool : AgentToolConfig.tools()) {
+            if (!AgentToolConfig.isHeartbeatTool(tool)) toolsWithoutHeartbeat.add(tool);
+        }
+        String heartbeatDisabledPrompt = HeartbeatToolProtocol.systemPrompt(
+                1785247200000L, "不应注入的旧约定", 180, "conversation-1234",
+                toolsWithoutHeartbeat, AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE);
+        require(heartbeatDisabledPrompt.contains("真实本地 Agent 工具")
+                        && heartbeatDisabledPrompt.contains("get_current_time")
+                        && heartbeatDisabledPrompt.contains("render_rich_panel")
+                        && heartbeatDisabledPrompt.contains(HeartbeatToolProtocol.RESULT_START),
+                "disabling heartbeat also removed the ordinary Agent contract");
+        require(!heartbeatDisabledPrompt.contains("心跳")
+                        && !heartbeatDisabledPrompt.contains("heartbeat")
+                        && !heartbeatDisabledPrompt.contains("schedule_once")
+                        && !heartbeatDisabledPrompt.contains("set_plan")
+                        && !heartbeatDisabledPrompt.contains("clear_plan")
+                        && !heartbeatDisabledPrompt.contains("set_interval")
+                        && !heartbeatDisabledPrompt.contains("bind_chat")
+                        && !heartbeatDisabledPrompt.contains("cancel_heartbeat")
+                        && !heartbeatDisabledPrompt.contains(HeartbeatToolProtocol.EVENT_START)
+                        && !heartbeatDisabledPrompt.contains("不应注入的旧约定"),
+                "heartbeat-disabled Agent prompt still exposed a heartbeat agreement or tool");
+
+        String enhancedPrompt = HeartbeatToolProtocol.systemPrompt(
+                1785247200000L, "找用户闲聊", 180, "conversation-1234",
+                new java.util.LinkedHashSet<>(AgentToolConfig.tools()),
+                AgentToolConfig.PROMPT_STRENGTH_ENHANCED);
+        require(enhancedPrompt.contains("第二档（增强）")
+                        && enhancedPrompt.contains("get_current_time")
+                        && enhancedPrompt.contains("ask_user")
+                        && enhancedPrompt.contains("read_file、write_file 或 shell")
+                        && enhancedPrompt.contains("capture_screen")
+                        && enhancedPrompt.contains("render_rich_panel")
+                        && !enhancedPrompt.contains("第三档（沉浸）"),
+                "level-two guidance did not cover the complete Agent toolkit");
+        String immersivePrompt = HeartbeatToolProtocol.systemPrompt(
+                1785247200000L, "找用户闲聊", 180, "conversation-1234",
+                new java.util.LinkedHashSet<>(AgentToolConfig.tools()),
+                AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE);
+        require(immersivePrompt.contains("第三档（沉浸）")
+                        && immersivePrompt.contains("心情怎么样")
+                        && immersivePrompt.contains("当前好感度")
+                        && immersivePrompt.contains("首次记录")
+                        && immersivePrompt.contains("截图、文件、Shell、问答、时间、心跳与富面板")
+                        && immersivePrompt.contains("不会绕过工具开关"),
+                "level-three guidance omitted immersive or all-tool behavior boundaries");
 
         try {
             FoldMessage visibleUser = new FoldMessage(

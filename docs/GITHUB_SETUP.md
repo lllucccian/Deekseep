@@ -8,13 +8,13 @@ This document lists repository-page changes that the owner can make manually aft
 - Current public URL: <https://github.com/lllucccian/Deekseep>
 - Primary repository language reported by GitHub: Java
 - Other reported repository languages: Shell and Python
-- License: MIT
+- License: GNU GPL v3.0
 - Issues: enabled
 - Discussions: disabled at the time of this audit
 - Projects: enabled
 - Wiki: enabled
 - Current topics: `android`, `deepseek`, `libxposed`, `lsposed`, `termux`, `xposed`
-- Latest stable Release at the time of this audit: `v1.7.2`
+- Latest stable Release at the time of this audit: `v1.7.3`
 
 ## 1. Repository name
 

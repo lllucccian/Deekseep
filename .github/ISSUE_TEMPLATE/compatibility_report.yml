@@ -40,7 +40,7 @@ body:
     id: module_version
     attributes:
       label: Deekseep LSPosed version
-      placeholder: "1.7.2"
+      placeholder: "1.7.3"
     validations:
       required: true
 

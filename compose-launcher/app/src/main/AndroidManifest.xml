@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <queries>
+        <package android:name="com.deepseek.chat" />
+        <package android:name="com.tencent.qqmusic" />
+        <package android:name="com.netease.cloudmusic" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:description="@string/moddesc"
+        android:forceQueryable="true"
+        android:label="Deekseep">
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="@string/moddesc" />
+        <meta-data android:name="xposedminversion" android:value="82" />
+        <meta-data android:name="xposedscope" android:resource="@array/xposedscope" />
+
+        <activity
+            android:name="com.dsmod.probe.SettingsActivity"
+            android:exported="true"
+            android:label="Deekseep"
+            android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name="com.dsmod.probe.ProcessManagerActivity"
+            android:exported="true"
+            android:label="Deekseep · Process manager"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+        <activity android:name="com.dsmod.probe.PromptPickerActivity" android:exported="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <activity android:name="com.dsmod.probe.LocalApiKeepAliveActivity" android:exported="true" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="deekseep-module" android:host="local-api-keepalive" />
+            </intent-filter>
+        </activity>
+        <activity android:name="com.dsmod.probe.AgentDelayActivity" android:exported="true" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="deekseep-module" android:host="agent-delay" />
+            </intent-filter>
+        </activity>
+        <activity android:name="com.dsmod.probe.LocalAudioControlActivity" android:exported="true" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <receiver android:name="com.dsmod.probe.AgentDelayReceiver" android:enabled="true" android:exported="false" />
+        <service android:name="com.dsmod.probe.LocalApiKeepAliveService" android:exported="false" android:foregroundServiceType="specialUse" android:stopWithTask="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Keeps the user-enabled DeepSeek localhost API and SSE stream responsive in the background." />
+        </service>
+        <service android:name="com.dsmod.probe.QqMusicPlaybackService" android:exported="false" android:foregroundServiceType="specialUse" android:stopWithTask="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Handles a user-enabled Agent music playback request." />
+        </service>
+        <service android:name="com.dsmod.probe.LocalAudioPlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" android:stopWithTask="false" />
+        <service
+            android:name="com.dsmod.probe.QqMusicSessionAccessService"
+            android:exported="false"
+            android:label="Deekseep music control"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <provider android:name="com.dsmod.probe.XposedActivationProvider" android:authorities="com.dsmod.probe.XposedService" android:exported="true" android:grantUriPermissions="false" />
+        <receiver android:name="com.dsmod.probe.XposedActivationReceiver" android:enabled="true" android:exported="true" />
+        <receiver android:name="com.dsmod.probe.ProactiveHeartbeatReceiver" android:enabled="true" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

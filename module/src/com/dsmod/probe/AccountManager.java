@@ -16,6 +16,7 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.HttpURLConnection;
@@ -46,6 +47,8 @@ final class AccountManager {
     static final String USER_DB = DB_DIR + "/deepseek_chat.db";
     static final String MMKV_KEY = "key_user_info";
     private static final String VERIFY_URL = "https://chat.deepseek.com/api/v0/users/current";
+    private static final String UPDATE_SETTINGS_URL =
+            "https://chat.deepseek.com/api/v0/users/update_settings";
     private static final String RANGERS_PREFS = "applog_stats_240734";
     private static final String RANGERS_ID_KEY = "bd_did";
     private static final int VERIFY_MAX_ATTEMPTS = 2;
@@ -122,6 +125,23 @@ final class AccountManager {
 
     static String currentId(ClassLoader cl) {
         return idOf(readCurrentJson(cl));
+    }
+
+    /** Authenticated headers for the opt-in request debugger; never exposes them in its UI log. */
+    static Map<String, String> currentRequestHeaders(Context context, ClassLoader cl)
+            throws Exception {
+        String json = readCurrentJson(cl);
+        if (json == null || json.trim().length() == 0) {
+            throw new IllegalStateException("DeepSeek account is not signed in");
+        }
+        String token = new JSONObject(json).optString("token", "").trim();
+        if (token.length() == 0) {
+            throw new IllegalStateException("Current account token is unavailable");
+        }
+        return validationHeaders(token, appVersion(context), Build.VERSION.SDK_INT,
+                hostLocale(context), validationRangersId(context),
+                validationTimezoneOffsetSeconds(
+                        TimeZone.getDefault(), System.currentTimeMillis()));
     }
 
     // 写入目标账号为当前登录态：MMKV key_user_info + upsert app_user_info 行。
@@ -375,6 +395,56 @@ final class AccountManager {
             }
         }
         return ServerValidation.fail("DeepSeek 暂时限流，请稍后重试");
+    }
+
+    /** Uses DeepSeek's own authenticated settings endpoint; callers must run this off the UI. */
+    static ServerValidation setTrainingAllowed(Context context, ClassLoader loader,
+                                               boolean allowed) {
+        HttpURLConnection connection = null;
+        InputStream stream = null;
+        OutputStream output = null;
+        try {
+            byte[] body = trainingSettingsPayload(allowed).getBytes("UTF-8");
+            connection = (HttpURLConnection) new URL(UPDATE_SETTINGS_URL).openConnection();
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(12000);
+            connection.setReadTimeout(12000);
+            connection.setUseCaches(false);
+            connection.setDoOutput(true);
+            for (Map.Entry<String, String> header
+                    : currentRequestHeaders(context, loader).entrySet()) {
+                connection.setRequestProperty(header.getKey(), header.getValue());
+            }
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            connection.setFixedLengthStreamingMode(body.length);
+            output = connection.getOutputStream();
+            output.write(body);
+            output.flush();
+
+            int http = connection.getResponseCode();
+            stream = http >= 200 && http < 400
+                    ? connection.getInputStream() : connection.getErrorStream();
+            String response = stream == null ? "" : readBoundedUtf8(stream, 512 * 1024);
+            return parseServerResponse(http, response, currentId(loader));
+        } catch (java.net.SocketTimeoutException timeout) {
+            return ServerValidation.fail("连接 DeepSeek 服务器超时");
+        } catch (Throwable error) {
+            return ServerValidation.fail("无法关闭数据用于优化体验");
+        } finally {
+            if (output != null) try { output.close(); } catch (Throwable ignored) {}
+            if (stream != null) try { stream.close(); } catch (Throwable ignored) {}
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    static String trainingSettingsPayload(boolean allowed) {
+        try {
+            return new JSONObject().put("training_allowed", allowed).toString();
+        } catch (Throwable impossible) {
+            return allowed ? "{\"training_allowed\":true}"
+                    : "{\"training_allowed\":false}";
+        }
     }
 
     static String validationUserAgent(String version, int sdkInt) {

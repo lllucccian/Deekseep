@@ -18,6 +18,7 @@ import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -116,7 +117,10 @@ final class AgentSettingsUi {
                     @Override public void onCheckedChanged(
                             CompoundButton button, boolean checked) {
                         if (reverting) return;
-                        if (AgentToolConfig.setEnabled(checked)) return;
+                        if (AgentToolConfig.setEnabled(checked)) {
+                            if (checked) Main.resumeAgentOutbox(activity);
+                            return;
+                        }
                         reverting = true;
                         button.setChecked(!checked);
                         reverting = false;
@@ -124,6 +128,144 @@ final class AgentSettingsUi {
                                 "Agent 设置保存失败", "Could not save Agent settings"),
                                 Toast.LENGTH_SHORT).show();
                     }
+                });
+
+        if (BuildInfo.PROTECTED_BUILD) {
+            mainCard.addView(divider(activity, dividerColor));
+            final Switch hideLogs = switchView(activity, dark);
+            hideLogs.setChecked(initial.hideToolLogs);
+            mainCard.addView(switchRow(activity,
+                    UiLanguage.text(activity,
+                            "隐藏工具调用日志", "Hide tool invocation logs"),
+                    UiLanguage.text(activity,
+                            "开启后不在对话中显示灰色调用记录，工具仍会正常执行",
+                            "Hide grey invocation rows while tools continue to run"),
+                    textColor, subColor, hideLogs));
+            hideLogs.setOnCheckedChangeListener(
+                    new CompoundButton.OnCheckedChangeListener() {
+                        private boolean reverting;
+
+                        @Override public void onCheckedChanged(
+                                CompoundButton button, boolean checked) {
+                            if (reverting) return;
+                            if (AgentToolConfig.setHideToolLogs(checked)) return;
+                            reverting = true;
+                            button.setChecked(!checked);
+                            reverting = false;
+                            Toast.makeText(activity, UiLanguage.text(activity,
+                                    "显示设置保存失败",
+                                    "Could not save display setting"),
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        }
+
+        mainCard.addView(divider(activity, dividerColor));
+        LinearLayout runRow = new LinearLayout(activity);
+        runRow.setOrientation(LinearLayout.HORIZONTAL);
+        runRow.setGravity(Gravity.CENTER_VERTICAL);
+        runRow.setPadding(dp(activity, 16), dp(activity, 13),
+                dp(activity, 14), dp(activity, 13));
+        LinearLayout runLabels = new LinearLayout(activity);
+        runLabels.setOrientation(LinearLayout.VERTICAL);
+        runLabels.addView(text(activity,
+                UiLanguage.text(activity, "运行记录", "Run history"),
+                15, textColor, true));
+        runLabels.addView(text(activity,
+                UiLanguage.text(activity,
+                        "查看状态，重试或取消尚未回传的结果",
+                        "Inspect status and retry or cancel undelivered results"),
+                12, subColor, false));
+        runRow.addView(runLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView runArrow = text(activity, "\u203a", 25, subColor, false);
+        runRow.addView(runArrow);
+        runRow.setClickable(true);
+        runRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View ignored) {
+                AgentRunUi.show(activity);
+            }
+        });
+        mainCard.addView(runRow);
+
+        sectionTitle(content, activity,
+                UiLanguage.text(activity, "工具提示强度", "Tool prompt intensity"),
+                textColor);
+        LinearLayout promptCard = card(activity, cardColor);
+        promptCard.setPadding(dp(activity, 16), dp(activity, 14),
+                dp(activity, 16), dp(activity, 12));
+        content.addView(promptCard);
+        final TextView promptLevel = text(activity,
+                promptStrengthLabel(activity, initial.promptStrength),
+                15, textColor, true);
+        promptCard.addView(promptLevel);
+        final TextView promptDescription = text(activity,
+                promptStrengthDescription(activity, initial.promptStrength),
+                12, subColor, false);
+        promptDescription.setLineSpacing(dp(activity, 1), 1f);
+        LinearLayout.LayoutParams promptDescriptionParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT);
+        promptDescriptionParams.topMargin = dp(activity, 4);
+        promptCard.addView(promptDescription, promptDescriptionParams);
+
+        final SeekBar promptStrength = new SeekBar(activity);
+        promptStrength.setMax(2);
+        promptStrength.setKeyProgressIncrement(1);
+        promptStrength.setProgress(initial.promptStrength - 1);
+        promptStrength.setSplitTrack(false);
+        promptStrength.setProgressTintList(
+                android.content.res.ColorStateList.valueOf(DeekseepUi.BRAND));
+        promptStrength.setThumbTintList(
+                android.content.res.ColorStateList.valueOf(DeekseepUi.BRAND));
+        promptStrength.setContentDescription(UiLanguage.text(activity,
+                "三级工具提示强度", "Three-level tool prompt intensity"));
+        LinearLayout.LayoutParams promptSliderParams =
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 42));
+        promptSliderParams.topMargin = dp(activity, 7);
+        promptCard.addView(promptStrength, promptSliderParams);
+
+        LinearLayout promptLabels = new LinearLayout(activity);
+        promptLabels.setOrientation(LinearLayout.HORIZONTAL);
+        promptLabels.addView(promptTick(activity,
+                UiLanguage.text(activity, "基础", "Basic"), subColor, Gravity.START));
+        promptLabels.addView(promptTick(activity,
+                UiLanguage.text(activity, "增强", "Enhanced"), subColor, Gravity.CENTER));
+        promptLabels.addView(promptTick(activity,
+                UiLanguage.text(activity, "沉浸", "Immersive"), subColor, Gravity.END));
+        promptCard.addView(promptLabels, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        promptStrength.setOnSeekBarChangeListener(
+                new SeekBar.OnSeekBarChangeListener() {
+                    private boolean reverting;
+
+                    @Override public void onProgressChanged(
+                            SeekBar seekBar, int progress, boolean fromUser) {
+                        int level = Math.max(
+                                AgentToolConfig.PROMPT_STRENGTH_BASIC,
+                                Math.min(AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE,
+                                        progress + 1));
+                        promptLevel.setText(promptStrengthLabel(activity, level));
+                        promptDescription.setText(
+                                promptStrengthDescription(activity, level));
+                        if (!fromUser || reverting) return;
+                        if (AgentToolConfig.setPromptStrength(level)) return;
+                        reverting = true;
+                        int previous = AgentToolConfig.load().promptStrength;
+                        seekBar.setProgress(previous - 1);
+                        reverting = false;
+                        Toast.makeText(activity, UiLanguage.text(activity,
+                                "提示词强度保存失败",
+                                "Could not save prompt intensity"),
+                                Toast.LENGTH_SHORT).show();
+                    }
+
+                    @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+
+                    @Override public void onStopTrackingTouch(SeekBar seekBar) {}
                 });
 
         sectionTitle(content, activity,
@@ -182,6 +324,15 @@ final class AgentSettingsUi {
                             });
                 }
             });
+        }
+        if (!AgentToolConfig.BACKEND_IN_APP.equals(initial.backend)) {
+            AgentDeviceBridge.probe(activity, initial.backend,
+                    new AgentDeviceBridge.StatusCallback() {
+                        @Override public void onStatus(
+                                AgentDeviceBridge.Status status) {
+                            backendStatus.setText(status.detail);
+                        }
+                    });
         }
 
         sectionTitle(content, activity,
@@ -258,18 +409,7 @@ final class AgentSettingsUi {
                     });
         }
 
-        TextView footer = text(activity,
-                UiLanguage.text(activity,
-                        "当前为 1.7.4 实验分支。文件内容和 Shell 输出会作为隐藏工具结果"
-                                + "返回当前对话；请选择合适的后端，并只开启你需要的工具。",
-                        "This is the experimental 1.7.4 branch. File content and shell output "
-                                + "return to the current chat as hidden tool results. Choose the "
-                                + "appropriate backend and only enable tools you need."),
-                12, subColor, false);
-        footer.setGravity(Gravity.CENTER);
-        footer.setPadding(dp(activity, 14), dp(activity, 22),
-                dp(activity, 14), dp(activity, 6));
-        content.addView(footer);
+        DeekseepUi.addBuildFooter(activity, content, subColor);
 
         UiLanguage.localizeTree(activity, root);
         dialog.setContentView(root);
@@ -473,6 +613,46 @@ final class AgentSettingsUi {
                         + "and control the foreground UI");
     }
 
+    private static TextView promptTick(
+            Context context, String value, int color, int gravity) {
+        TextView label = text(context, value, 11, color, false);
+        label.setGravity(gravity);
+        label.setSingleLine(true);
+        label.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return label;
+    }
+
+    private static String promptStrengthLabel(Context context, int value) {
+        if (value >= AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE) {
+            return UiLanguage.text(context,
+                    "第三档 · 沉浸", "Level 3 · Immersive");
+        }
+        if (value >= AgentToolConfig.PROMPT_STRENGTH_ENHANCED) {
+            return UiLanguage.text(context,
+                    "第二档 · 增强", "Level 2 · Enhanced");
+        }
+        return UiLanguage.text(context,
+                "第一档 · 基础", "Level 1 · Basic");
+    }
+
+    private static String promptStrengthDescription(Context context, int value) {
+        if (value >= AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE) {
+            return UiLanguage.text(context,
+                    "更主动地组合全部已启用工具；闲聊和人设中可用面板表现心情、好感与阶段变化",
+                    "More proactively combines every enabled tool; casual and role-play chats "
+                            + "may visualize mood, affinity, and state changes");
+        }
+        if (value >= AgentToolConfig.PROMPT_STRENGTH_ENHANCED) {
+            return UiLanguage.text(context,
+                    "让模型在普通聊天和工作中按语境适度使用全部已启用工具",
+                    "Lets the model use every enabled tool contextually in casual and work chats");
+        }
+        return UiLanguage.text(context,
+                "保持当前策略，只在用户明确要求或完成任务确实需要时调用",
+                "Keeps the current policy and calls tools only when explicitly requested or needed");
+    }
+
     private static void sectionTitle(
             LinearLayout parent, Context context, String value, int color) {
         TextView title = text(context, value, 14, color, true);
@@ -500,7 +680,7 @@ final class AgentSettingsUi {
     }
 
     private static Switch switchView(Context context, boolean dark) {
-        Switch value = new Switch(context);
+        Switch value = new HubInsetSwitch(context);
         int[][] states = new int[][]{
                 new int[]{android.R.attr.state_checked},
                 new int[]{-android.R.attr.state_checked}
