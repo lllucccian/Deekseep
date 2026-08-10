@@ -1,21 +1,12 @@
 package com.dsmod.probe;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.res.Resources;
-import android.media.AudioManager;
-import android.net.Uri;
 import android.os.Handler;
-import android.os.Bundle;
 import android.os.Looper;
-import android.os.ResultReceiver;
 import android.os.SystemClock;
 import android.system.Os;
 import android.util.Base64;
-import android.view.KeyEvent;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -24,19 +15,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Execution backend for Agent screen, file and basic shell actions.
@@ -47,8 +33,6 @@ import java.util.concurrent.TimeUnit;
  */
 final class AgentDeviceBridge {
     static final String RISH_RESOURCE =
-            "META-INF/com.dsmod.probe.agent/rish_shizuku_runtime_payload.dat";
-    private static final String RISH_LEGACY_RESOURCE =
             "META-INF/com.dsmod.probe.agent/.rish_shizuku_runtime_payload.dat";
     private static final String RISH_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_agent/rish_shizuku.dex";
@@ -134,19 +118,6 @@ final class AgentDeviceBridge {
                                     ? "Root connected"
                                     : "Shizuku connected (shell identity)")
                             : friendlyFailure(context, backend, command);
-                    if (connected) {
-                        boolean backgroundAllowed = allowDeepSeekBackground(
-                                context, backend);
-                        if (backgroundAllowed) {
-                            detail += UiLanguage.text(context,
-                                    "，已自动允许后台运行",
-                                    "; background execution allowed automatically");
-                        } else {
-                            detail += UiLanguage.text(context,
-                                    "，后台白名单未变更（不影响连接）",
-                                    "; background allow-list was unchanged");
-                        }
-                    }
                     result = new Status(connected, detail);
                 }
                 final Status delivered = result;
@@ -242,291 +213,6 @@ final class AgentDeviceBridge {
                 });
             }
         });
-    }
-
-    static void executeMusic(final Context context,
-                             final HeartbeatToolProtocol.ToolCall call,
-                             final StatusCallback callback) {
-        EXECUTOR.execute(new Runnable() {
-            @Override public void run() {
-                Status result;
-                try {
-                    if ("local".equals(call.targetId)) {
-                        result = controlLocalAudio(context, call);
-                    } else if ("search".equals(call.mode)) {
-                        result = searchAndPlayMusic(context, call.targetId, call.instruction);
-                    } else {
-                        int code = musicKey(call.mode);
-                        if (code == 0) {
-                            result = new Status(false, UiLanguage.text(context,
-                                    "不支持的音乐操作", "Unsupported music action"));
-                        } else {
-                            AudioManager audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-                            if (audio == null) throw new IllegalStateException("AudioManager unavailable");
-                            long now = SystemClock.uptimeMillis();
-                            audio.dispatchMediaKeyEvent(new KeyEvent(now, now,
-                                    KeyEvent.ACTION_DOWN, code, 0));
-                            audio.dispatchMediaKeyEvent(new KeyEvent(now, now,
-                                    KeyEvent.ACTION_UP, code, 0));
-                            result = new Status(true, UiLanguage.text(context,
-                                    "已发送媒体控制指令", "Media control command sent"));
-                        }
-                    }
-                } catch (Throwable error) {
-                    result = new Status(false, error.getClass().getSimpleName()
-                            + ": " + String.valueOf(error.getMessage()));
-                }
-                final Status delivered = result;
-                new Handler(Looper.getMainLooper()).post(new Runnable() {
-                    @Override public void run() {
-                        if (callback != null) callback.onStatus(delivered);
-                    }
-                });
-            }
-        });
-    }
-
-    private static Status controlLocalAudio(
-            Context context, HeartbeatToolProtocol.ToolCall call) {
-        if (context == null) return new Status(false, "Context unavailable");
-        String path = call.path;
-        AgentToolConfig.Snapshot settings = AgentToolConfig.load();
-        if ("play".equals(call.mode) && path.length() > 0
-                && AgentToolConfig.BACKEND_ROOT.equals(settings.backend)) {
-            String lower = path.toLowerCase(Locale.US);
-            int dot = lower.lastIndexOf('.');
-            String suffix = dot >= 0 && lower.substring(dot + 1).matches("[a-z0-9]{1,8}")
-                    ? lower.substring(dot) : ".audio";
-            String staged = "/data/user/0/com.dsmod.probe/files/agent_audio/current" + suffix;
-            String command = "/system/bin/mkdir -p /data/user/0/com.dsmod.probe/files/agent_audio"
-                    + " && /system/bin/cp " + shellQuote(path) + " " + shellQuote(staged)
-                    + " && owner=$(/system/bin/stat -c %u:%g /data/user/0/com.dsmod.probe)"
-                    + " && /system/bin/chown \"$owner\" " + shellQuote(staged)
-                    + " && /system/bin/chmod 600 " + shellQuote(staged);
-            CommandResult copy = runCommand(context, AgentToolConfig.BACKEND_ROOT,
-                    command, 30_000L, false, 4096);
-            if (copy.exitCode != 0) {
-                return new Status(false, "Could not stage local audio: "
-                        + combinedCommandOutput(copy));
-            }
-            path = staged;
-        }
-        String requestId = "audio_" + Long.toHexString(System.nanoTime());
-        final String playbackPath = path;
-        try {
-            final CountDownLatch latch = new CountDownLatch(1);
-            final boolean[] succeeded = new boolean[]{false};
-            final String[] detail = new String[]{"Local audio bridge returned no result"};
-            ResultReceiver receiver = new ResultReceiver(new Handler(Looper.getMainLooper())) {
-                @Override protected void onReceiveResult(int code, Bundle data) {
-                    succeeded[0] = data != null && data.getBoolean("success", false);
-                    detail[0] = data == null ? "Local audio bridge returned no data"
-                            : data.getString("detail", "Local audio request completed");
-                    latch.countDown();
-                }
-            };
-            final Intent bridge = new Intent();
-            bridge.setClassName("com.dsmod.probe",
-                    "com.dsmod.probe.LocalAudioControlActivity");
-            bridge.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                    | Intent.FLAG_ACTIVITY_NO_ANIMATION
-                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-            bridge.putExtra(LocalAudioPlaybackService.EXTRA_TOKEN,
-                    LocalAudioPlaybackService.CONTROL_TOKEN);
-            bridge.putExtra(LocalAudioPlaybackService.EXTRA_REQUEST_ID, requestId);
-            bridge.putExtra(LocalAudioPlaybackService.EXTRA_ACTION, call.mode);
-            bridge.putExtra(LocalAudioPlaybackService.EXTRA_PATH, playbackPath);
-            bridge.putExtra(LocalAudioControlActivity.EXTRA_RECEIVER, receiver);
-            final Context launchContext = context;
-            new Handler(Looper.getMainLooper()).post(new Runnable() {
-                @Override public void run() {
-                    try { launchContext.startActivity(bridge); }
-                    catch (Throwable error) {
-                        detail[0] = error.getClass().getSimpleName() + ": "
-                                + String.valueOf(error.getMessage());
-                        latch.countDown();
-                    }
-                }
-            });
-            if (!latch.await(8L, TimeUnit.SECONDS)) {
-                return new Status(false, "Timed out waiting for local audio player");
-            }
-            return new Status(succeeded[0], detail[0]);
-        } catch (Throwable error) {
-            return new Status(false, error.getClass().getSimpleName() + ": "
-                    + String.valueOf(error.getMessage()));
-        }
-    }
-
-    private static Status searchAndPlayMusic(Context context, String requested, String query) {
-        String provider = requested == null ? "auto" : requested;
-        boolean neteaseInstalled = installed(context, "com.netease.cloudmusic");
-        if ("qq".equals(provider) || "auto".equals(provider)) {
-            try {
-                MusicMatch match = searchQqMusic(query);
-                if (match != null && launchQqMusic(context, match.songMid, query)) {
-                    String display = match.title;
-                    if (match.artist.length() > 0) display += " - " + match.artist;
-                    return new Status(true, UiLanguage.text(context,
-                            "已通过 QQ 音乐开始播放：" + display,
-                            "Started playback with QQ Music: " + display));
-                }
-            } catch (Throwable ignored) {
-                // An explicit package intent does not depend on Android package visibility.
-            }
-            return new Status(false, UiLanguage.text(context,
-                    "QQ 音乐未能接收直接播放请求：" + query,
-                    "QQ Music could not accept the direct playback request: " + query));
-        }
-        String packageName;
-        String url;
-        if ("netease".equals(provider) && neteaseInstalled) {
-            packageName = "com.netease.cloudmusic";
-            url = "https://music.163.com/#/search/m/?s=" + Uri.encode(query);
-        } else {
-            packageName = "com.tencent.qqmusic";
-            url = "https://y.qq.com/n/ryqq/search?w=" + Uri.encode(query);
-        }
-        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-        intent.setPackage(packageName);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            context.startActivity(intent);
-        } catch (Throwable first) {
-            return new Status(false, UiLanguage.text(context,
-                    "无法在音乐客户端中播放或搜索：" + query,
-                    "Could not play or search in the music app: " + query));
-        }
-        String providerName = "com.tencent.qqmusic".equals(packageName)
-                ? "QQ 音乐" : "网易云音乐";
-        return new Status(true, UiLanguage.text(context,
-                "未能自动播放，已打开" + providerName + "搜索：" + query,
-                "Automatic playback was unavailable; opened "
-                        + providerName + " search for: " + query));
-    }
-
-    private static MusicMatch searchQqMusic(String query) throws Exception {
-        String endpoint = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp"
-                + "?p=1&n=1&format=json&w=" + Uri.encode(query);
-        HttpURLConnection connection = null;
-        InputStream input = null;
-        try {
-            connection = (HttpURLConnection) new URL(endpoint).openConnection();
-            connection.setConnectTimeout(6000);
-            connection.setReadTimeout(6000);
-            connection.setInstanceFollowRedirects(true);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 Android");
-            if (connection.getResponseCode() / 100 != 2) return null;
-            input = connection.getInputStream();
-            byte[] payload = readLimited(input, 256 * 1024);
-            JSONObject root = new JSONObject(new String(payload, StandardCharsets.UTF_8));
-            JSONObject data = root.optJSONObject("data");
-            JSONObject songData = data == null ? null : data.optJSONObject("song");
-            JSONArray list = songData == null ? null : songData.optJSONArray("list");
-            if (list == null || list.length() == 0) return null;
-            JSONObject song = list.optJSONObject(0);
-            if (song == null) return null;
-            String mid = song.optString("songmid", "").trim();
-            if (!mid.matches("[A-Za-z0-9]{6,32}")) return null;
-            String artist = "";
-            JSONArray singers = song.optJSONArray("singer");
-            if (singers != null && singers.length() > 0) {
-                JSONObject singer = singers.optJSONObject(0);
-                if (singer != null) artist = singer.optString("name", "").trim();
-            }
-            return new MusicMatch(mid, song.optString("songname", query).trim(), artist);
-        } finally {
-            if (input != null) try { input.close(); } catch (Throwable ignored) {}
-            if (connection != null) connection.disconnect();
-        }
-    }
-
-    private static byte[] readLimited(InputStream input, int limit) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(limit, 8192));
-        byte[] buffer = new byte[4096];
-        int count;
-        while ((count = input.read(buffer)) >= 0) {
-            if (count == 0) continue;
-            if (output.size() + count > limit) throw new IOException("response too large");
-            output.write(buffer, 0, count);
-        }
-        return output.toByteArray();
-    }
-
-    private static boolean launchQqMusic(
-            Context context, String songMid, String searchQuery) {
-        try {
-            JSONObject song = new JSONObject();
-            song.put("type", "0");
-            song.put("songid", "");
-            song.put("songmid", songMid);
-            JSONArray songs = new JSONArray();
-            songs.put(song);
-            JSONObject request = new JSONObject();
-            request.put("song", songs);
-            request.put("action", "play");
-            Uri uri = Uri.parse("qqmusic://qq.com/media/playSonglist?p="
-                    + Uri.encode(request.toString())
-                    + "&source=deekseep_agent");
-            AgentToolConfig.Snapshot settings = AgentToolConfig.load();
-            if (AgentToolConfig.BACKEND_ROOT.equals(settings.backend)) {
-                // QQ Music 20.7 exposes a Binder service, but its package whitelist rejects a
-                // third-party module UID. MediaSession.playFromSearch is also ignored by this
-                // release. Its documented song-list deep link does accept songmid reliably, so
-                // use it under Root, immediately restore DeepSeek, and verify QQ's own session.
-                String command = "/system/bin/am start --user 0 --activity-no-animation"
-                        + " -a android.intent.action.VIEW -d " + shellQuote(uri.toString())
-                        + " -p com.tencent.qqmusic >/dev/null 2>&1 || exit $?; "
-                        + "/system/bin/sleep 1; "
-                        + "/system/bin/am start --user 0 --activity-no-animation -n "
-                        + "com.deepseek.chat/com.deepseek.chat.MainActivity"
-                        + " >/dev/null 2>&1 || true; /system/bin/sleep 1; "
-                        + "/system/bin/dumpsys media_session"
-                        + " | /system/bin/sed -n '/QQMusicMediaSession/,/Sessions Stack/p'"
-                        + " | /system/bin/grep -q 'state=PLAYING(3)'"
-                        + " && echo success=true || echo success=false";
-                CommandResult result = runCommand(context,
-                        AgentToolConfig.BACKEND_ROOT, command,
-                        8000L, false, 4096);
-                return result.exitCode == 0
-                        && result.output.contains("success=true");
-            }
-            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-            intent.setPackage("com.tencent.qqmusic");
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static final class MusicMatch {
-        final String songMid;
-        final String title;
-        final String artist;
-
-        MusicMatch(String songMid, String title, String artist) {
-            this.songMid = songMid;
-            this.title = title == null || title.length() == 0 ? songMid : title;
-            this.artist = artist == null ? "" : artist;
-        }
-    }
-
-    private static boolean installed(Context context, String packageName) {
-        try { context.getPackageManager().getPackageInfo(packageName, 0); return true; }
-        catch (Throwable ignored) { return false; }
-    }
-
-    private static int musicKey(String action) {
-        if ("play".equals(action)) return KeyEvent.KEYCODE_MEDIA_PLAY;
-        if ("pause".equals(action)) return KeyEvent.KEYCODE_MEDIA_PAUSE;
-        if ("toggle".equals(action)) return KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
-        if ("next".equals(action)) return KeyEvent.KEYCODE_MEDIA_NEXT;
-        if ("previous".equals(action)) return KeyEvent.KEYCODE_MEDIA_PREVIOUS;
-        if ("stop".equals(action)) return KeyEvent.KEYCODE_MEDIA_STOP;
-        return 0;
     }
 
     private static ToolResult readFile(
@@ -736,30 +422,7 @@ final class AgentDeviceBridge {
         if (HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)) {
             return "input keyevent 4";
         }
-        if (HeartbeatToolProtocol.TOOL_OPEN_APP.equals(call.tool)) {
-            return "monkey -p " + shellQuote(call.targetId)
-                    + " -c android.intent.category.LAUNCHER 1";
-        }
-        if (HeartbeatToolProtocol.TOOL_SCREEN_POWER.equals(call.tool)) {
-            return "input keyevent " + ("sleep".equals(call.mode) ? "223" : "224");
-        }
         return "";
-    }
-
-    /** Best-effort OEM-independent background allow-list setup after real authorization. */
-    private static boolean allowDeepSeekBackground(Context context, String backend) {
-        String packageName = "com.deepseek.chat";
-        String command = "cmd deviceidle whitelist +" + packageName
-                + " >/dev/null 2>&1; allow=$?; "
-                + "cmd appops set " + packageName
-                + " RUN_IN_BACKGROUND allow >/dev/null 2>&1 || true; "
-                + "cmd appops set " + packageName
-                + " RUN_ANY_IN_BACKGROUND allow >/dev/null 2>&1 || true; "
-                + "am set-inactive " + packageName
-                + " false >/dev/null 2>&1 || true; exit $allow";
-        CommandResult result = runCommandWithShizukuRecovery(
-                context, backend, command, 8000L, false);
-        return result.exitCode == 0;
     }
 
     private static int normalized(int value, int size) {
@@ -992,10 +655,6 @@ final class AgentDeviceBridge {
         try {
             ClassLoader loader = AgentDeviceBridge.class.getClassLoader();
             input = loader == null ? null : loader.getResourceAsStream(RISH_RESOURCE);
-            if (input == null && loader != null) {
-                // Older universal builds used the dot-prefixed resource name directly.
-                input = loader.getResourceAsStream(RISH_LEGACY_RESOURCE);
-            }
             byte[] payload = readPayload(input);
             input = null;
             return isValidRishPayload(payload) ? payload : null;

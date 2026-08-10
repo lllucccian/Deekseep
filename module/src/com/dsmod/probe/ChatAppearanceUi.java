@@ -43,161 +43,6 @@ final class ChatAppearanceUi {
         new Page(activity, ChatAppearance.load()).show();
     }
 
-    static void showAssistantAvatar(final Activity activity) {
-        if (activity == null || activity.isFinishing()) return;
-        UiLanguage.refreshHost(activity);
-        final boolean dark = DeekseepUi.isDark(activity);
-        final int cardColor = dark ? 0xFF2A2A2D : 0xFFFFFFFF;
-        final int textColor = dark ? 0xFFECECEC : 0xFF1A1A1A;
-        final int subColor = dark ? 0xFFA8A8AD : 0xFF737780;
-        final int dp = Math.max(1, Math.round(activity.getResources()
-                .getDisplayMetrics().density));
-        final java.io.File custom = ChatAppearance.assistantAvatarFileForRender();
-
-        LinearLayout content = new LinearLayout(activity);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.setPadding(22 * dp, 8 * dp, 22 * dp, 6 * dp);
-
-        ImageView preview = new ImageView(activity);
-        preview.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable previewBackground = new GradientDrawable();
-        previewBackground.setShape(GradientDrawable.OVAL);
-        previewBackground.setColor(dark ? 0xFF343944 : 0xFFF0F3FA);
-        previewBackground.setStroke(dp, dark ? 0xFF596477 : 0xFFD6DDEB);
-        preview.setBackground(previewBackground);
-        preview.setClipToOutline(true);
-        if (custom != null) {
-            Bitmap bitmap = ChatAppearance.loadAssistantAvatarBitmap(custom, 256);
-            if (bitmap != null) preview.setImageBitmap(bitmap);
-        } else {
-            int resource = activity.getResources().getIdentifier(
-                    "assistant_message_avatar", "drawable", activity.getPackageName());
-            if (resource != 0) preview.setImageResource(resource);
-        }
-        content.addView(preview, new LinearLayout.LayoutParams(72 * dp, 72 * dp));
-
-        TextView status = avatarText(activity,
-                custom == null ? "当前使用 DeepSeek 默认头像" : "已使用自定义头像",
-                15, textColor, true);
-        status.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        statusParams.topMargin = 12 * dp;
-        content.addView(status, statusParams);
-
-        TextView requirement = avatarText(activity,
-                "需要在灰度功能管理里面开启“显示助手头像”，否则聊天页不会显示自定义头像。",
-                13, subColor, false);
-        requirement.setGravity(Gravity.CENTER);
-        requirement.setLineSpacing(0f, 1.12f);
-        LinearLayout.LayoutParams requirementParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        requirementParams.topMargin = 8 * dp;
-        content.addView(requirement, requirementParams);
-
-        TextView applyHint = avatarText(activity,
-                "选择后返回聊天或重新进入会话即可生效。", 12, subColor, false);
-        applyHint.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        hintParams.topMargin = 5 * dp;
-        content.addView(applyHint, hintParams);
-
-        LinearLayout actions = new LinearLayout(activity);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        actionsParams.topMargin = 18 * dp;
-        content.addView(actions, actionsParams);
-
-        TextView choose = avatarButton(activity, "选择图片", true, dark);
-        actions.addView(choose, new LinearLayout.LayoutParams(
-                0, 42 * dp, 1f));
-        final AlertDialog dialog = new AlertDialog.Builder(activity)
-                .setTitle(UiLanguage.text(activity,
-                        "自定义 DeepSeek 头像", "Custom DeepSeek avatar"))
-                .setView(content)
-                .setNegativeButton(UiLanguage.text(activity, "关闭", "Close"), null)
-                .create();
-        choose.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View view) {
-                dialog.dismiss();
-                Main.pickGalleryImage(activity, new Main.GalleryPickCallback() {
-                    @Override public void onPicked(Uri uri) {
-                        if (uri == null) {
-                            showAssistantAvatar(activity);
-                            return;
-                        }
-                        ChatAppearance.ImportResult result =
-                                ChatAppearance.importAssistantAvatar(activity, uri);
-                        UiLanguage.toast(activity, result.message,
-                                Toast.LENGTH_SHORT).show();
-                        showAssistantAvatar(activity);
-                    }
-                });
-            }
-        });
-        if (custom != null) {
-            TextView reset = avatarButton(activity, "恢复默认", false, dark);
-            LinearLayout.LayoutParams resetParams = new LinearLayout.LayoutParams(
-                    0, 42 * dp, 1f);
-            resetParams.leftMargin = 8 * dp;
-            actions.addView(reset, resetParams);
-            reset.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View view) {
-                    if (ChatAppearance.removeAssistantAvatar()) {
-                        UiLanguage.toast(activity, "已恢复 DeepSeek 默认头像",
-                                Toast.LENGTH_SHORT).show();
-                    } else {
-                        UiLanguage.toast(activity, "恢复默认头像失败",
-                                Toast.LENGTH_SHORT).show();
-                    }
-                    dialog.dismiss();
-                    showAssistantAvatar(activity);
-                }
-            });
-        }
-        dialog.setOnShowListener(new DialogInterface.OnShowListener() {
-            @Override public void onShow(DialogInterface ignored) {
-                Window window = dialog.getWindow();
-                if (window != null) {
-                    GradientDrawable background = new GradientDrawable();
-                    background.setColor(cardColor);
-                    background.setCornerRadius(18 * dp);
-                    window.setBackgroundDrawable(background);
-                }
-            }
-        });
-        dialog.show();
-    }
-
-    private static TextView avatarText(Context context, String value, float size,
-            int color, boolean medium) {
-        TextView text = new TextView(context);
-        text.setText(UiLanguage.dynamic(context, value));
-        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
-        text.setTextColor(color);
-        if (medium) {
-            text.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        }
-        return text;
-    }
-
-    private static TextView avatarButton(
-            Context context, String value, boolean primary, boolean dark) {
-        TextView button = avatarText(context, value, 14,
-                primary ? Color.WHITE : (dark ? 0xFFE6E8ED : 0xFF315BCB), true);
-        button.setGravity(Gravity.CENTER);
-        int normal = primary ? 0xFF315FE6 : (dark ? 0xFF34363B : 0xFFEDF1FB);
-        int pressed = primary ? 0xFF254AB7 : (dark ? 0xFF474A50 : 0xFFDCE4F7);
-        button.setBackground(DeekseepUi.controlBackground(
-                normal, pressed, DeekseepUi.dp(context, 10)));
-        button.setClickable(true);
-        button.setFocusable(true);
-        return button;
-    }
-
     private static final class Page implements EditorCanvas.Listener {
         final Activity activity;
         final ChatAppearance.Config config;
@@ -339,7 +184,6 @@ final class ChatAppearanceUi {
                     return false;
                 }
             });
-            DeekseepUi.trackChildDialog(dialog);
             DeekseepUi.openWithSlide(dialog, root);
         }
 
@@ -418,7 +262,6 @@ final class ChatAppearanceUi {
             addStickerControls();
             masterContent.addView(divider());
             addResetAction();
-            DeekseepUi.addBuildFooter(activity, card, subColor);
             masterContent.setVisibility(config.enabled ? View.VISIBLE : View.GONE);
             bindControls();
         }
@@ -444,7 +287,7 @@ final class ChatAppearanceUi {
             labelsParams.rightMargin = dp(10);
             row.addView(labels, labelsParams);
 
-            Switch toggle = new HubInsetSwitch(activity);
+            Switch toggle = new Switch(activity);
             tintSwitch(toggle);
             toggle.setChecked(config.enabled);
             toggle.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -477,7 +320,7 @@ final class ChatAppearanceUi {
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             enabledLabelParams.rightMargin = dp(10);
             enabledRow.addView(enabledLabels, enabledLabelParams);
-            bubbleToggle = new HubInsetSwitch(activity);
+            bubbleToggle = new Switch(activity);
             tintSwitch(bubbleToggle);
             bubbleToggle.setChecked(config.bubbleEnabled);
             bubbleToggle.setOnCheckedChangeListener(
@@ -691,27 +534,24 @@ final class ChatAppearanceUi {
             LinearLayout labels = new LinearLayout(activity);
             labels.setOrientation(LinearLayout.VERTICAL);
             labels.addView(label("启用全局液态玻璃", 14, textColor, true));
-            labels.addView(label(
-                    "共享一张背板纹理，在气泡、输入区和侧栏边缘产生柔和折射。",
-                    12, subColor, false), top(3));
             LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             labelParams.rightMargin = dp(10);
             enabledRow.addView(labels, labelParams);
 
-            glassToggle = new HubInsetSwitch(activity);
+            glassToggle = new Switch(activity);
             tintSwitch(glassToggle);
             glassToggle.setChecked(config.liquidGlassEnabled);
+            // The unfinished compositor is not enabled from the normal appearance page. Keep
+            // the switch tappable so the user gets a clear status message instead of a dead UI.
+            glassToggle.setChecked(false);
             glassToggle.setEnabled(true);
-            glassToggle.setAlpha(1f);
-            glassToggle.setOnCheckedChangeListener(
-                    new CompoundButton.OnCheckedChangeListener() {
-                @Override public void onCheckedChanged(
-                        CompoundButton button, boolean checked) {
-                    if (bindingControls) return;
-                    config.liquidGlassEnabled = checked;
-                    bindGlassControls();
-                    persist();
+            glassToggle.setAlpha(0.55f);
+            glassToggle.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View view) {
+                    glassToggle.setChecked(false);
+                    Toast.makeText(activity, t("此功能尚未完善", "This feature is not finished yet"),
+                            Toast.LENGTH_SHORT).show();
                 }
             });
             enabledRow.addView(glassToggle);
@@ -948,7 +788,7 @@ final class ChatAppearanceUi {
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             depthLabelsParams.rightMargin = dp(10);
             depthRow.addView(depthLabels, depthLabelsParams);
-            depthToggle = new HubInsetSwitch(activity);
+            depthToggle = new Switch(activity);
             tintSwitch(depthToggle);
             depthToggle.setChecked(config.depthEnabled);
             depthToggle.setOnCheckedChangeListener(
@@ -979,7 +819,7 @@ final class ChatAppearanceUi {
             motionLabelsParams.rightMargin = dp(10);
             motionRow.addView(motionLabels, motionLabelsParams);
 
-            motionToggle = new HubInsetSwitch(activity);
+            motionToggle = new Switch(activity);
             tintSwitch(motionToggle);
             motionToggle.setChecked(config.motionEnabled);
             motionToggle.setOnCheckedChangeListener(
@@ -1009,7 +849,7 @@ final class ChatAppearanceUi {
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             perScreenLabelsParams.rightMargin = dp(10);
             perScreenRow.addView(perScreenLabels, perScreenLabelsParams);
-            perScreenMotionToggle = new HubInsetSwitch(activity);
+            perScreenMotionToggle = new Switch(activity);
             tintSwitch(perScreenMotionToggle);
             perScreenMotionToggle.setChecked(config.perScreenMotionEnabled);
             perScreenMotionToggle.setOnCheckedChangeListener(
@@ -1793,9 +1633,9 @@ final class ChatAppearanceUi {
             if (glassToggle == null || glassQualityButton == null) return;
             boolean previousBinding = bindingControls;
             bindingControls = true;
-            glassToggle.setChecked(config.liquidGlassEnabled);
+            glassToggle.setChecked(false);
             glassToggle.setEnabled(true);
-            glassToggle.setAlpha(1f);
+            glassToggle.setAlpha(0.55f);
             glassQualityButton.setText(
                     t("渲染画质：", "Rendering quality: ")
                             + glassQualityLabel(config.glassQuality));

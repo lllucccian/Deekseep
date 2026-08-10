@@ -9,10 +9,9 @@ property of their respective owners.
 
 ## Compatibility and local data
 
-Deekseep 1.7.4 ships one merged runtime APK for DeepSeek 2.2.0, 2.3.0, and
-domestic/Google Play 2.3.4 (version codes 245/246). DeepSeek 2.3.1–2.3.3 are
-unsupported. An app update may require a new adaptation, and older hosts may
-have feature gaps.
+Deekseep works with specific DeepSeek Android builds through runtime hooks.
+Choose the APK that matches the documented channel and `versionCode`; an app
+update may require a new adaptation.
 
 Some optional tools edit local conversations or account data. Make a current
 backup before an important edit, deletion, migration, or account change. If a
@@ -31,9 +30,7 @@ accounts you are authorized to manage.
 
 ## Warranty
 
-The project is provided under the GNU GPL-3.0-only license on an “as is” basis, without a
+The project is provided under the MIT License on an “as is” basis, without a
 guarantee of compatibility, availability, or fitness for a particular purpose.
 To the extent permitted by law, authors and contributors are not responsible
 for losses arising from installation or use.
-
-Development sponsorship: <https://www.afdian.com/a/lllucccian>.

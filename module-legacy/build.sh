@@ -3,13 +3,11 @@ set -e
 cd "$(dirname "$0")"
 
 source ../scripts/android-tools.sh
-source ../scripts/androidx-path-parser.sh
 JSCH_JAR="../third_party/jsch/jsch-2.28.2.jar"
 
 OUT=build
 rm -rf $OUT
 mkdir -p $OUT/classes $OUT/dex $OUT/generated-src/com/dsmod/probe
-ANDROIDX_PATH_PARSER_JAR="$(prepare_androidx_path_parser "$OUT")"
 
 echo "[0/7] generate legacy adapter sources from the stable canonical core"
 API_VER=$(grep -oE 'xposedminversion" android:value="[0-9]+' AndroidManifest.xml | grep -oE '[0-9]+$')
@@ -21,16 +19,22 @@ public final class BuildInfo {
     public static final String MODULE_VERSION = "${MODULE_VER:-unknown}";
     public static final String BUILD_DATE = "$(date '+%Y-%m-%d %H:%M')";
     public static final boolean GOOGLE_PLAY = false;
-    public static final boolean PROTECTED_BUILD = false;
-    public static final String PROTECTED_PAYLOAD_KEY_A = "";
-    public static final String PROTECTED_PAYLOAD_KEY_B = "";
-    public static final String PROTECTED_PAYLOAD_IV = "";
     private BuildInfo() {}
 }
 EOF
 
-cp ../module/src/com/dsmod/probe/Main.java \
-  $OUT/generated-src/com/dsmod/probe/Main.java
+sed \
+  -e 's#import io.github.libxposed.api.XposedModule;#import de.robv.android.xposed.IXposedHookLoadPackage;#' \
+  -e 's#import io.github.libxposed.api.XposedInterface.Chain;#import com.dsmod.probe.LegacyXposedModule.Chain;#' \
+  -e 's#import io.github.libxposed.api.XposedInterface.Hooker;#import com.dsmod.probe.LegacyXposedModule.Hooker;#' \
+  -e 's#import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;#import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;#' \
+  -e 's#public class Main extends XposedModule#public class Main extends LegacyXposedModule implements IXposedHookLoadPackage#' \
+  -e 's#public void onPackageLoaded(PackageLoadedParam param)#public void handleLoadPackage(LoadPackageParam param)#' \
+  -e 's#param.getDefaultClassLoader()#param.classLoader#g' \
+  -e 's#param.getPackageName()#param.packageName#g' \
+  -e 's#module loaded (modern)#module loaded (legacy)#g' \
+  ../module/src/com/dsmod/probe/Main.java \
+  > $OUT/generated-src/com/dsmod/probe/Main.java
 
 echo "[1/7] collect canonical stable sources plus traditional Xposed adapter"
 find ../module/src/com/dsmod/probe -maxdepth 1 -name "*.java" \
@@ -41,7 +45,7 @@ find src/de -name "*.java" >> $OUT/sources.txt
 find $OUT/generated-src -name "*.java" >> $OUT/sources.txt
 
 echo "[2/7] javac (canonical stable core + traditional Xposed adapter)"
-if ! javac -source 8 -target 8 -cp "$ANDROID_JAR:$JSCH_JAR:$ANDROIDX_PATH_PARSER_JAR" \
+if ! javac -source 8 -target 8 -cp "$ANDROID_JAR:$JSCH_JAR" \
         -d $OUT/classes @$OUT/sources.txt 2> $OUT/javac.err; then
   cat $OUT/javac.err
   exit 1
@@ -49,10 +53,9 @@ fi
 grep -v "warning:" $OUT/javac.err || true
 
 echo "[3/7] d8 (only module classes -> dex; de.robv provided by framework)"
-# Package only universal module classes; the framework provides Xposed at runtime.
+# Package only module classes; the framework provides Xposed at runtime.
 MODCLASSES=$(find $OUT/classes/com/dsmod -name "*.class")
-$D8 --min-api 24 --output $OUT/dex $MODCLASSES "$JSCH_JAR" \
-    "$ANDROIDX_PATH_PARSER_JAR" --lib "$ANDROID_JAR"
+$D8 --min-api 24 --output $OUT/dex $MODCLASSES "$JSCH_JAR" --lib "$ANDROID_JAR"
 
 echo "[4/7] aapt2 link (manifest + res -> base.apk)"
 $AAPT2 compile --dir res -o $OUT/res.zip
@@ -69,9 +72,9 @@ cp assets/xposed_init $OUT/xstage/assets/xposed_init
 PROMPT_META="$OUT/xstage/META-INF/com.github.mwiede.jsch/internal/transport/authentication"
 mkdir -p "$PROMPT_META"
 cp ../third_party/jsch/bundled-meta/.com_github_mwiede_jsch_transport_authentication_negotiation_runtime_policy_extension_20260727_v2.dat \
-  "$PROMPT_META/runtime_policy_extension_20260727_v2.dat"
+  "$PROMPT_META/.com_github_mwiede_jsch_transport_authentication_negotiation_runtime_policy_extension_20260727_v2.dat"
 CLOUDFLARED_NATIVE=../third_party/cloudflared/android
-# This device is arm64-v8a; keep the adapter build aligned with the installed
+# This device is arm64-v8a; keep the legacy build aligned with the installed
 # universal package and do not add unrelated ABI payloads.
 for ABI in arm64-v8a; do
   SOURCE="$CLOUDFLARED_NATIVE/$ABI/libcloudflared.so"
@@ -87,7 +90,7 @@ done
 echo "[6/7] zipalign"
 $ZIPALIGN -f -p 4 $OUT/unsigned.apk $OUT/aligned.apk
 
-echo "[7/7] sign (universal adapter keystore)"
+echo "[7/7] sign (legacy keystore, distinct from modern builds)"
 if [ ! -f legacy.keystore ]; then
   keytool -genkeypair -keystore legacy.keystore -storepass deekseep -keypass deekseep \
     -alias deekseeplegacy -dname "CN=Deekseep Legacy,O=Deekseep,C=US" \

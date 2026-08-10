@@ -7,70 +7,32 @@ English | [简体中文](README_CN.md)
 [![Latest Release](https://img.shields.io/github/v/release/lllucccian/Deekseep?display_name=tag&sort=semver)](https://github.com/lllucccian/Deekseep/releases/latest)
 [![GitHub Downloads](https://img.shields.io/github/downloads/lllucccian/Deekseep/total?label=Downloads)](https://github.com/lllucccian/Deekseep/releases)
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3ddc84)](#requirements)
-[![Universal Xposed](https://img.shields.io/badge/Xposed-universal-2f6feb)](#requirements)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![libxposed API 102](https://img.shields.io/badge/libxposed-API%20102-2f6feb)](#requirements)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > [!NOTE]
 > Deekseep is an independent enhancement module. Check that the APK matches
 > your DeepSeek version, and back up important data before using chat, account,
 > or experimental tools.
 
-## 1.7.4 release
-
-The 1.7.4 release refactors the module and settings UI into searchable
-**Chat**, **Account & Privacy**, **Appearance**, **Debugging**, and
-**Engineering** categories. It also adds compact switch controls, aligned
-execution buttons, and clearer settings entry points (the small gear button to
-the right of a feature name).
-
-Highlights:
-
-• Basic Agent tools (download and inspect the available tools in the app).
-• Automatic continue-generation for server-paused long thinking.
-• A visible **Reply-ready notification** switch.
-• Local mute/ban and custom home greeting.
-• Custom assistant avatar (requires **Show assistant avatar** in the Feature Flag Manager).
-• Whale rotation and deep-sea text-wave effects.
-• On-screen Hook logs and crash recording/tests.
-• Custom DeepSeek requests, hot-update blocking, cache cleanup, and process management.
-• Long-context file upload for the local API.
-• Foreground-heartbeat persistence without a mandatory background-running exemption.
-• Battery optimization exemptions for DeepSeek are still recommended.
-
-The music Agent tool requires the latest QQ Music **20.7 or newer**; after
-granting Root, it can play music automatically in the background. The native
-settings injection is experimental and may cause the host app to crash.
-“Disable data used for service improvement” actively turns off that host
-setting and prevents it from being enabled again. When a background response
-finishes, the new notification returns you to the conversation; the switch is
-in the Chat section beside automatic continue-generation.
-
-This release is one merged domestic/Google Play runtime APK and is strongly
-recommended with DeepSeek **2.3.4** (version codes 245/246). DeepSeek 2.2.0
-and 2.3.0 remain supported with possible feature gaps; **2.3.1–2.3.3 are not
-supported**. Some features may still be unavailable or abnormal on older host
-builds—please report reproducible problems so they can be fixed quickly.
-
-Support development at [爱发电](https://www.afdian.com/a/lllucccian).
-
 ## Compatibility at a glance
 
 > [!TIP]
-> Deekseep LSPosed 1.7.4 ships one universal APK. Its compatibility layer
-> covers domestic and Google Play DeepSeek 2.2.0, 2.3.0, and 2.3.4 host
-> symbol families at runtime.
+> Deekseep LSPosed 1.7.2 is build-specific. Choose the package labelled for
+> your Mainland China or Google Play `versionCode`.
 
-- Domestic or Google Play build: DeepSeek 2.2.0, 2.3.0 (`versionCode 237`), or 2.3.4 (`versionCode 245/246`) — supported by the universal APK.
+- Mainland China official build: DeepSeek 2.2.2 (`versionCode 233`) — supported by the stable API 102 and Legacy APKs.
+- Google Play build: DeepSeek 2.2.2 (`versionCode 236`) — supported only by the separately labelled Google Play API 102 APK.
 - Android: 7.0 or newer (API 24+).
-- Framework: an Xposed-compatible LSPosed environment exposing the traditional entry; API 82 through 102 are covered by the regression matrix.
+- Recommended framework: current LSPosed with libxposed API 102.
+- Traditional compatibility: Xposed API 82+ through the mainland Legacy APK.
 - Module scope: `com.deepseek.chat` only.
 
 ## Download
 
-### [Download Deekseep LSPosed 1.7.4](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Deekseep.apk)
+### [Download Deekseep LSPosed 1.7.2 — recommended stable API 102](https://github.com/lllucccian/Deekseep/releases/download/v1.7.2/deekseep-stable-api102-v1.7.2.apk)
 
-This is the only maintained module APK. The runtime detects the domestic or
-Google Play host and selects its mapping internally.
+This recommended APK is for the mainland China DeepSeek 2.2.2 build (`233`) on current LSPosed. Google Play users must download `deekseep-google-play-2.2.2-v1.7.2.apk` from the [1.7.2 release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.2). Verify the DeepSeek `versionCode` before installing.
 
 ## Screenshot
 
@@ -123,7 +85,7 @@ This is an independent third-party project. It is not part of, affiliated with, 
 ### Interface and compatibility tools
 
 - Open the Deekseep LSPosed settings entry inside DeepSeek, with Chinese/English selection and automatic host-language detection.
-- Use the single universal Xposed-compatible package; its runtime table selects the supported host generation.
+- Choose a modern libxposed API 102 package, a traditional Xposed compatibility package, or the exact Google Play mapping for the supported host build.
 
 See the [feature reference](docs/FEATURES.md) and [Experimental Features notice](docs/EXPERIMENTAL_FEATURES.md) for behavior and limits.
 
@@ -132,7 +94,7 @@ See the [feature reference](docs/FEATURES.md) and [Experimental Features notice]
 - Android 7.0 / API 24 or newer.
 - The official DeepSeek Android app in one of the exact supported channel builds listed above.
 - A supported LSPosed/Xposed loading environment and any root/framework setup required by that environment.
-- An Xposed-compatible LSPosed environment that can load the traditional entry; API 82 through 102 are verified.
+- Current LSPosed with libxposed API 102 for the recommended APK, or a traditional Xposed API 82+ environment for the mainland Legacy APK.
 - LSPosed/Xposed scope set to `com.deepseek.chat`.
 - A current backup of important conversations before using database, account, deletion, or experimental tools.
 
@@ -140,32 +102,51 @@ The repository does not distribute the official DeepSeek APK, a rooting solution
 
 ## Installation
 
-1. In Android app information, verify the installed DeepSeek channel and version code (2.2.0, `237` for 2.3.0, or `245/246` for 2.3.4).
+1. In Android app information, verify the installed DeepSeek channel, version `2.2.2`, and `versionCode` (`233` mainland or `236` Google Play).
 2. Back up important DeepSeek conversations and local files.
-3. Download the universal Deekseep APK and enable it in the compatible Xposed framework.
+3. Download exactly one matching Deekseep LSPosed APK. Use the recommended API 102 APK for mainland `233`; use the labelled Google Play APK for `236`; use Legacy only with a traditional Xposed-compatible environment.
 4. Install the module APK and enable it in the LSPosed/Xposed manager.
 5. Select only `com.deepseek.chat` as the module scope. Do not add the modern module application itself to scope.
 6. Force-stop DeepSeek, then open it again. A full device reboot is normally unnecessary; use one only if your framework does not reload the module after restarting the target app.
 7. Read the short first-use note, select **Got it**, then open DeepSeek Settings and choose the injected Deekseep entry.
 
-The universal APK uses package ID `com.dsmod.probe`. See the full [installation guide](docs/INSTALLATION.md).
+Modern and Legacy APKs share the package ID `com.dsmod.probe` but use different development signing keys. When switching interfaces, disable and uninstall the old module APK before installing the other one; this does not uninstall DeepSeek. See the full [installation guide](docs/INSTALLATION.md).
+
+## Download variants
+
+The default download above is the stable API 102 build for mainland `233`. Other current and historical packages are listed here so they are not mistaken for the normal download.
+
+<details>
+<summary>Current, legacy, test, and diagnostic builds</summary>
+
+| APK or source variant | Intended use | Xposed interface | Support and diagnostics |
+|---|---|---|---|
+| `deekseep-stable-api102-v1.7.2.apk` | Mainland DeepSeek 2.2.2 (`233`) on current LSPosed | libxposed API 102 | Current stable and recommended mainland build. Optional diagnostics are off by default. |
+| `deekseep-google-play-2.2.2-v1.7.2.apk` | Google Play DeepSeek 2.2.2 (`236`) | libxposed API 102 | Current exact-build Google Play package. Optional diagnostics are off by default. |
+| `deekseep-stable-legacy-v1.7.2.apk` | Mainland DeepSeek 2.2.2 (`233`) on FPA/older compatible frameworks | Traditional Xposed API 82+ | Current stable compatibility build; not the default for current LSPosed. Optional diagnostics are off by default. |
+| `deekseep-test-api102-v1.7.apk` | Historical direct-Compose/message-menu experiments | libxposed API 102 | Discontinued after 1.7.0, not maintained, and not recommended. Exact host compatibility and additional logging need confirmation. |
+| `deekseep-test-legacy-v1.7.apk` | Historical experiments for traditional Xposed/FPA | Traditional Xposed API 82+ | Discontinued after 1.7.0, not maintained, and not recommended. Exact host compatibility and additional logging need confirmation. |
+| `deekseep-api102-load-probe-v0.1.apk` | Diagnose whether API 102 loads for `com.deepseek.chat` | libxposed API 102 | Historical diagnostic-only probe. It reports load activity and may write a marker; it contains none of the normal module features. |
+
+The historical APKs remain on the [1.7.0 release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.0) for reference. Starting with 1.7.1, test and diagnostic APKs are excluded from stable releases. Never enable multiple Deekseep LSPosed variants for the same DeepSeek process.
+
+</details>
 
 ## Compatibility table
 
 | App channel | App version | Version code | Status | Notes |
 |---|---:|---:|---|---|
-| Domestic or Google Play | 2.2.0 | Varies | ✅ Supported with possible gaps | Use the merged runtime; 2.2.x symbol coverage is retained. |
-| Domestic or Google Play | 2.3.0 | 237 | ✅ Supported with possible gaps | The runtime selects the 2.3.0 map. |
-| Domestic or Google Play | 2.3.4 | 245/246 | ✅ Recommended | One APK selects the channel-specific map at runtime. |
-| Any channel | 2.3.1–2.3.3 | Varies | ❌ Unsupported | Upgrade to 2.3.4. |
+| Mainland China official build | 2.2.2 | 233 | ✅ Supported | Use stable API 102 on current LSPosed or Legacy on traditional Xposed API 82+. |
+| Google Play build | 2.2.2 | 236 | ✅ Supported | Use only the separately labelled Google Play API 102 APK. |
+| Older or other DeepSeek builds | Needs confirmation | Unknown | 🧪 Not tested | Hooks use build-specific obfuscated symbols; do not assume compatibility. |
 
 ## Troubleshooting
 
 - The Deekseep LSPosed entry does not appear: verify the exact app channel/version, install the matching APK, enable only one module variant, scope `com.deepseek.chat`, and fully force-stop DeepSeek before reopening Settings.
-- The module is enabled but hooks do not work: check the launcher activation state, use only one module variant, and do not self-scope the module app. Disable other modules that may hook the same screen or request path.
+- The module is enabled but hooks do not work: check the launcher activation state and framework interface. For modern LSPosed, use API 102 and do not self-scope the module app. Disable other modules that may hook the same screen or request path.
 - The DeepSeek version is incompatible: disable Deekseep LSPosed and confirm the unmodified app works. Use only documented version codes; an app update may require a new symbol mapping.
-- The framework entry is incompatible: use an Xposed-compatible LSPosed build that supports the traditional universal entry; the supported matrix is API 82 through 102.
-- The host is unsupported: upgrade to DeepSeek 2.3.4; 2.3.1–2.3.3 are intentionally not supported.
+- The LSPosed API is incompatible: use the API 102 APK on current LSPosed. Use the mainland Legacy APK only for traditional Xposed API 82+/compatible FPA, and do not install both.
+- The Google Play build does not work: confirm DeepSeek is exactly 2.2.2 (`236`) and that the APK filename contains `google-play-2.2.2`. The mainland `233` packages cannot be substituted.
 - Features fail after a DeepSeek update: disable the module, restart DeepSeek, and report the new channel, `versionName`, and `versionCode`. Future app versions are not automatically supported.
 - Multi-account tools fail: back up current account data, test one add/import operation at a time, and retain the original active account until validation succeeds. Never post exported account JSON publicly.
 - Image tools fail: verify the system photo picker can read the file and test one image first. Expert image relay is experimental and can fail because of server permissions, model routing, proof-of-work, or changed host internals.
@@ -206,17 +187,8 @@ DeepSeek. Product names and trademarks belong to their respective owners. See
 the concise [project notice](DISCLAIMER.md) for compatibility, data, and
 privacy notes.
 
-## Acknowledgements
-
-The settings information hierarchy and interaction ideas were reviewed against
-WeKit as a UI reference only; no WeKit source code or assets were copied.
-Third-party libraries and their licenses are listed in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
 ## License
 
-Project-owned source and documentation are licensed under [GNU GPL-3.0-only](LICENSE). Third-party components and notices are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Project-owned source and documentation are available under the [MIT License](LICENSE). Third-party components and notices are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-If Deekseep LSPosed is useful to you, consider giving the repository a ⭐ or
-[sponsoring development](https://www.afdian.com/a/lllucccian) so more DeepSeek
-and LSPosed users can find it.
+If Deekseep LSPosed is useful to you, consider giving the repository a ⭐ so more DeepSeek and LSPosed users can find it.

@@ -238,17 +238,11 @@ final class SpatialMotionController implements Choreographer.FrameCallback {
             dynamicAllowed = false;
             rawTargetX = 0f;
             rawTargetY = 0f;
-            Main.log("spatial motion sensor unavailable");
-        } else {
-            Main.log("spatial motion sensor started");
         }
     }
 
     private void stopSensor() {
-        if (sensorRunning) {
-            poseProvider.stop();
-            Main.log("spatial motion sensor stopped");
-        }
+        if (sensorRunning) poseProvider.stop();
         sensorRunning = false;
     }
 
@@ -626,7 +620,7 @@ final class SpatialMotionController implements Choreographer.FrameCallback {
         }
     }
 
-    static boolean isPowerSaveMode(Context context) {
+    private static boolean isPowerSaveMode(Context context) {
         if (context == null) return false;
         try {
             PowerManager manager = (PowerManager)

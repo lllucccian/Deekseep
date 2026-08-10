@@ -152,8 +152,6 @@ public final class HistoryBridgeRegressionTest {
         check(thread.size() == 2, "snapshot parent chain has wrong size");
         check("question".equals(thread.get(0).body), "user body changed");
         check("answer".equals(thread.get(1).body), "assistant body changed");
-        check(thread.get(0).insertedAt == 1.0d && thread.get(1).insertedAt == 1.0d,
-                "snapshot message timestamps were dropped before editor rendering");
     }
 
     private static void testVersionedMergeAndReplacement() throws Exception {

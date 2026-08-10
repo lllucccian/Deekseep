@@ -241,7 +241,7 @@ public final class LocalApiKeepAliveService extends Service {
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
-        builder.setSmallIcon(NotificationIcons.smallIcon(this))
+        builder.setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setContentTitle(UiLanguage.text(this,
                         "DeepSeek 本地 API 正在运行", "DeepSeek Local API is running"))
                 .setContentText(UiLanguage.text(this,

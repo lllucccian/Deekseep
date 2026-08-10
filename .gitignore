@@ -1,6 +1,5 @@
 # Android build products and local signing material
 **/build/
-**/build-protected/
 dist/
 *.apk
 *.idsig
