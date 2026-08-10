@@ -54,9 +54,10 @@ Support development at [爱发电](https://www.afdian.com/a/lllucccian).
 
 > [!TIP]
 > Deekseep LSPosed 1.7.4 ships one universal APK. Its compatibility layer
-> covers the mainland DeepSeek 2.2.x and 2.3.0 host symbol families.
+> covers domestic and Google Play DeepSeek 2.2.0, 2.3.0, and 2.3.4 host
+> symbol families at runtime.
 
-- Mainland China official build: DeepSeek 2.2.x and 2.3.0 (`versionCode 237`) — supported by the universal APK.
+- Domestic or Google Play build: DeepSeek 2.2.0, 2.3.0 (`versionCode 237`), or 2.3.4 (`versionCode 245/246`) — supported by the universal APK.
 - Android: 7.0 or newer (API 24+).
 - Framework: an Xposed-compatible LSPosed environment exposing the traditional entry; API 82 through 102 are covered by the regression matrix.
 - Module scope: `com.deepseek.chat` only.
@@ -136,7 +137,7 @@ The repository does not distribute the official DeepSeek APK, a rooting solution
 
 ## Installation
 
-1. In Android app information, verify the installed DeepSeek channel and version code (2.2.x or mainland `237` for 2.3.0).
+1. In Android app information, verify the installed DeepSeek channel and version code (2.2.0, `237` for 2.3.0, or `245/246` for 2.3.4).
 2. Back up important DeepSeek conversations and local files.
 3. Download the universal Deekseep APK and enable it in the compatible Xposed framework.
 4. Install the module APK and enable it in the LSPosed/Xposed manager.

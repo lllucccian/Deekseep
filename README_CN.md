@@ -30,7 +30,7 @@
 > [!TIP]
 > Deekseep LSPosed 1.7.4 只发布一个通用安装包，运行时会在支持的宿主符号表之间自动选择。
 
-- 中国大陆官方版：DeepSeek 2.2.x 和 2.3.0（`versionCode 237`），支持通用安装包。
+- 国内版或 Google Play：DeepSeek 2.2.0、2.3.0（`versionCode 237`）或 2.3.4（`versionCode 245/246`），支持融合通用安装包。
 - Android：7.0 及以上（API 24+）。
 - 框架要求：能加载传统 Xposed 入口的 LSPosed/Xposed 环境；API 82～102 已纳入逐版本回归。
 - 模块作用域：只勾选 `com.deepseek.chat`。
@@ -109,7 +109,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 ## 安装步骤
 
-1. 在 Android 应用信息中确认 DeepSeek 渠道和版本号（2.2.x，或中国大陆 2.3.0 的 `versionCode 237`）。
+1. 在 Android 应用信息中确认 DeepSeek 渠道和版本号（2.2.0、2.3.0 的 `versionCode 237`，或 2.3.4 的 `versionCode 245/246`）。
 2. 备份重要的 DeepSeek 聊天记录和本地文件。
 3. 下载通用版 Deekseep APK，并在兼容的 Xposed 框架中启用。
 4. 安装模块 APK，并在 LSPosed/Xposed 管理器中启用。
