@@ -4,23 +4,36 @@
 
 - Android 7.0 or newer.
 - The official DeepSeek Android client installed as `com.deepseek.chat`.
-- A current LSPosed/Xposed build that can load the traditional entry. API 82 through 102 are verified by the compatibility matrix.
+- One supported injection environment:
+  - a current LSPosed build with modern libxposed API support; or
+  - FPA / an older traditional Xposed-compatible environment.
 - A current backup of important conversations.
 
 This repository does not distribute the DeepSeek APK, patched target APKs, or
 framework installers.
 
-## Choose the merged APK
+## Choose One APK
 
-For DeepSeek 2.2.0, 2.3.0 (`versionCode 237`), or 2.3.4 domestic/Google Play
-(`versionCode 245/246`), install:
+For current LSPosed with mainland DeepSeek 2.2.2 (`versionCode 233`), install:
 
 ```text
-Deekseep.apk
+deekseep-stable-api102-v1.7.2.apk
 ```
 
-The runtime detects the installed channel and chooses its mapping. DeepSeek
-2.3.1–2.3.3 are unsupported; upgrade to 2.3.4.
+For FPA or an older framework with mainland DeepSeek 2.2.2 (`233`), install:
+
+```text
+deekseep-stable-legacy-v1.7.2.apk
+```
+
+For Google Play DeepSeek 2.2.2 (`versionCode 236`) on current LSPosed, install:
+
+```text
+deekseep-google-play-2.2.2-v1.7.2.apk
+```
+
+The mainland and Google Play APKs are not interchangeable. Check the installed
+DeepSeek version code before installation.
 
 The former modern and legacy test editions are discontinued in 1.7.1 and are
 not release downloads. Maintained optional tools now live on the dedicated
@@ -30,12 +43,13 @@ See [Build Variants](VARIANTS.md) for the full comparison.
 
 ## Install on Current LSPosed
 
-1. Download `Deekseep.apk` and verify its SHA-256 value against
-   `SOURCE-SHA256.txt`.
+1. Download the stable API 102 asset and verify its SHA-256 value against
+   `SHA256SUMS.txt`.
 2. Install the APK.
 3. Enable Deekseep in LSPosed.
 4. Select `com.deepseek.chat` in the module scope. Do not select the module app
-   itself.
+   itself for activation detection; modern libxposed does not self-hook module
+   applications.
 5. Force-stop DeepSeek.
 6. Start DeepSeek, read the short first-use note, and select **Got it**.
 7. Open DeepSeek Settings. The Deekseep entry should appear on the settings
@@ -44,7 +58,31 @@ See [Build Variants](VARIANTS.md) for the full comparison.
 The launcher reports **Enabled** when the official Xposed service connects and
 **Active** after the DeepSeek target process sends its UID-validated heartbeat.
 
-Only one Deekseep package should be enabled for a given DeepSeek process.
+## Install with FPA or Traditional Xposed
+
+1. Download the matching legacy asset.
+2. Follow the injector's normal patch/install process for a traditional Xposed
+   module.
+3. Scope the module to DeepSeek. A legacy injector may expose its own activation
+   convention, but the stable modern self-scope rule does not apply to it.
+4. Restart the target process.
+5. Open the module launcher once so its activation handshake can complete.
+6. Open DeepSeek Settings and verify the Deekseep entry.
+
+FPA behavior varies by version. The traditional APK includes manifest Xposed
+metadata and `assets/xposed_init`; the modern APK does not.
+
+## Switching Modern and Legacy Interfaces
+
+The modern and legacy stable APKs both use `com.dsmod.probe` but are signed by
+different development keys. Android will report an incompatible package or
+signature if one is installed over the other.
+
+1. Disable the old module in the framework.
+2. Uninstall the old module APK. This does not uninstall DeepSeek.
+3. Install the new interface variant.
+4. Enable only the new module and reselect scope.
+5. Force-stop and restart DeepSeek.
 
 ## First Safe Configuration
 

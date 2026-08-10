@@ -3,7 +3,6 @@ package com.dsmod.probe;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
@@ -33,9 +32,6 @@ public final class XposedActivationProvider extends ContentProvider {
     static final String METHOD_GET_PUBLIC_TUNNEL = "GetLocalApiPublicTunnel";
     static final String METHOD_SET_PINGGY_TUNNEL = "SetLocalApiPinggyTunnel";
     static final String METHOD_GET_PINGGY_TUNNEL = "GetLocalApiPinggyTunnel";
-    static final String METHOD_GET_QQ_MUSIC_STATUS = "GetQqMusicStatus";
-    static final String METHOD_CONTROL_LOCAL_AUDIO = "ControlLocalAudio";
-    static final String METHOD_GET_LOCAL_AUDIO_STATUS = "GetLocalAudioStatus";
 
     private static final String METHOD_SEND_BINDER = "SendBinder";
     private static final String SERVICE_DESCRIPTOR = "io.github.libxposed.service.IXposedService";
@@ -88,55 +84,7 @@ public final class XposedActivationProvider extends ContentProvider {
         if (METHOD_GET_PINGGY_TUNNEL.equals(method)) {
             return getPinggyTunnel();
         }
-        if (METHOD_GET_QQ_MUSIC_STATUS.equals(method)) {
-            return QqMusicPlaybackService.status(arg);
-        }
-        if (METHOD_CONTROL_LOCAL_AUDIO.equals(method)) {
-            return controlLocalAudio(extras);
-        }
-        if (METHOD_GET_LOCAL_AUDIO_STATUS.equals(method)) {
-            return LocalAudioPlaybackService.status(arg);
-        }
         return null;
-    }
-
-    private Bundle controlLocalAudio(Bundle extras) {
-        Bundle result = new Bundle();
-        Context context = getContext();
-        int callingUid = Binder.getCallingUid();
-        if (context == null || !uidOwnsPackage(context, callingUid, TARGET_PACKAGE)) {
-            result.putBoolean("accepted", false);
-            result.putString("error", "caller is not DeepSeek");
-            return result;
-        }
-        String requestId = extras == null ? "" : extras.getString("request_id", "");
-        String action = extras == null ? "" : extras.getString("action", "");
-        String path = extras == null ? "" : extras.getString("path", "");
-        if (!requestId.matches("[A-Za-z0-9_-]{4,80}")) {
-            result.putBoolean("accepted", false);
-            result.putString("error", "invalid request id");
-            return result;
-        }
-        try {
-            Intent control = new Intent(context, LocalAudioPlaybackService.class);
-            control.setAction(LocalAudioPlaybackService.ACTION_CONTROL);
-            control.putExtra(LocalAudioPlaybackService.EXTRA_TOKEN,
-                    LocalAudioPlaybackService.CONTROL_TOKEN);
-            control.putExtra(LocalAudioPlaybackService.EXTRA_REQUEST_ID, requestId);
-            control.putExtra(LocalAudioPlaybackService.EXTRA_ACTION, action);
-            control.putExtra(LocalAudioPlaybackService.EXTRA_PATH, path);
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
-                context.startForegroundService(control);
-            } else {
-                context.startService(control);
-            }
-            result.putBoolean("accepted", true);
-        } catch (Throwable error) {
-            result.putBoolean("accepted", false);
-            result.putString("error", error.getClass().getSimpleName() + ": "
-                    + String.valueOf(error.getMessage()));
-        }
-        return result;
     }
 
     private Bundle setLocalApiKeepAlive(Bundle extras) {

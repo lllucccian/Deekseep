@@ -1,10 +1,21 @@
 # Third-Party Notices
 
-## Xposed compatibility adapter
+## libxposed API
 
-The maintained domestic and Google Play packages use the traditional Xposed
-entry and a small in-tree compatibility adapter. No modern-only API archive is
-required or packaged.
+The modern module projects contain an unmodified `classes.jar` extracted from
+the official libxposed API 102 AAR as their compile-only `libs/api.jar`.
+
+- Project: libxposed API
+- Version: 102.0.0
+- Source: https://github.com/libxposed/api
+- Release: https://github.com/libxposed/api/releases/tag/102.0.0
+- License: Apache License 2.0
+- JAR SHA-256:
+  `a515dd7a53cd7a47c05e101dff77d61acb3091a97b20a885b9ea3494412db985`
+
+The complete license is included at
+[third_party/libxposed-api-LICENSE.txt](third_party/libxposed-api-LICENSE.txt).
+The JAR is not packaged in Deekseep APKs; it is used only during compilation.
 
 ## OmniRoute DeepSeek tool bridge
 
@@ -36,21 +47,3 @@ for the current ABI at installation time.
 
 The complete license, binary checksums, and reproducible fetch information are
 included under [third_party/cloudflared](third_party/cloudflared/NOTICE.md).
-
-## Google Material Symbols
-
-The standalone module application uses Google Material Symbols through the
-Compose icon package. The interface layout, data presentation, theme fallback,
-and application code are implemented in this project.
-
-- Project: Google Material Symbols
-- Source: https://github.com/google/material-design-icons
-- License: Apache License 2.0
-
-## WeKit UI reference
-
-The settings information hierarchy and a few interaction ideas were reviewed
-against the WeKit project as a visual and product reference. Deekseep does not
-copy WeKit source code, assets, or implementation. WeKit remains the property
-of its original authors; consult its repository for the applicable license and
-notices.

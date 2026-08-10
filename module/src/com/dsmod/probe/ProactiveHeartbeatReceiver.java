@@ -35,8 +35,6 @@ public final class ProactiveHeartbeatReceiver extends BroadcastReceiver {
             "com.dsmod.probe.action.PROACTIVE_HEARTBEAT_REQUEST";
     static final String ACTION_RESPONSE =
             "com.dsmod.probe.action.PROACTIVE_HEARTBEAT_RESPONSE";
-    static final String ACTION_REPLY_READY =
-            "com.dsmod.probe.action.DEEPSEEK_REPLY_READY";
     static final String ACTION_TASK_CONFIG =
             "com.dsmod.probe.action.CONFIGURE_PROACTIVE_TASK";
     static final String ACTION_TASK_CANCEL =
@@ -55,7 +53,6 @@ public final class ProactiveHeartbeatReceiver extends BroadcastReceiver {
     static final String EXTRA_TASK_REMINDER = "task_reminder";
     static final String EXTRA_TASK_KIND = "task_kind";
     static final String EXTRA_CONVERSATION_ID = "conversation_id";
-    static final String EXTRA_RESPONSE_ID = "response_id";
     static final String EXTRA_CANCEL_MODE = "cancel_mode";
     static final String EXTRA_CANCEL_TARGET_ID = "cancel_target_id";
     static final String TASK_KIND_REMINDER = "reminder";
@@ -72,7 +69,6 @@ public final class ProactiveHeartbeatReceiver extends BroadcastReceiver {
     private static final String KEY_CONVERSATION_ID = "conversation_id";
     private static final String TASK_KEY_PREFIX = "task_";
     private static final String CHANNEL_ID = "deekseep_proactive_messages";
-    private static final String REPLY_CHANNEL_ID = "deekseep_reply_ready";
     private static final int ALARM_REQUEST_CODE = 0xD5B1;
     private static final int NOTIFICATION_ID = 0xD5B2;
     private static final int DEFAULT_INTERVAL_MINUTES = 180;
@@ -189,12 +185,6 @@ public final class ProactiveHeartbeatReceiver extends BroadcastReceiver {
                 postMessageNotification(context, message.trim(), taskReminder,
                         taskKind, conversationId);
             }
-            return;
-        }
-        if (ACTION_REPLY_READY.equals(action)) {
-            postReplyReadyNotification(context,
-                    normalizeConversationId(intent.getStringExtra(EXTRA_CONVERSATION_ID)),
-                    intent.getStringExtra(EXTRA_RESPONSE_ID));
         }
     }
 
@@ -408,7 +398,7 @@ public final class ProactiveHeartbeatReceiver extends BroadcastReceiver {
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(context, CHANNEL_ID)
                 : new Notification.Builder(context);
-        builder.setSmallIcon(NotificationIcons.smallIcon(context))
+        builder.setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle(taskReminder
                         && TASK_KIND_REMINDER.equals(normalizeTaskKind(taskKind))
                         ? UiLanguage.text(context, "DeepSeek 提醒你", "DeepSeek reminder")
@@ -417,69 +407,12 @@ public final class ProactiveHeartbeatReceiver extends BroadcastReceiver {
                 .setStyle(new Notification.BigTextStyle().bigText(message))
                 .setCategory(Notification.CATEGORY_MESSAGE)
                 .setAutoCancel(true)
-                .setColor(0xFF426EFE)
                 .setShowWhen(true);
         if (content != null) builder.setContentIntent(content);
         try {
             manager.notify(NOTIFICATION_ID, builder.build());
         } catch (Throwable t) {
             Log.w(TAG, "could not post proactive message notification", t);
-        }
-    }
-
-    private static void postReplyReadyNotification(Context context,
-                                                   String conversationId,
-                                                   String responseId) {
-        NotificationManager manager = (NotificationManager)
-                context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager == null) return;
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel channel = new NotificationChannel(REPLY_CHANNEL_ID,
-                    UiLanguage.text(context, "DeepSeek 回复完成", "DeepSeek replies"),
-                    NotificationManager.IMPORTANCE_DEFAULT);
-            channel.setDescription(UiLanguage.text(context,
-                    "切到后台后，在模型完成回答时通知你",
-                    "Notify when a model response finishes while DeepSeek is in the background"));
-            manager.createNotificationChannel(channel);
-        }
-        Intent launch = context.getPackageManager().getLaunchIntentForPackage(TARGET_PACKAGE);
-        PendingIntent content = null;
-        if (launch != null) {
-            if (conversationId.length() > 0) {
-                launch.putExtra(EXTRA_CONVERSATION_ID, conversationId);
-                launch.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
-                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            }
-            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-            if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
-            int requestCode = conversationId.length() > 0
-                    ? conversationId.hashCode()
-                    : responseId == null ? 0 : responseId.hashCode();
-            content = PendingIntent.getActivity(context, requestCode, launch, flags);
-        }
-        String title = UiLanguage.text(context,
-                "DeepSeek 回复已就绪", "DeepSeek reply is ready");
-        String detail = UiLanguage.text(context,
-                "模型已完成回答，点按返回对话查看",
-                "The model has finished. Tap to return to the conversation.");
-        Notification.Builder builder = Build.VERSION.SDK_INT >= 26
-                ? new Notification.Builder(context, REPLY_CHANNEL_ID)
-                : new Notification.Builder(context);
-        builder.setSmallIcon(NotificationIcons.smallIcon(context))
-                .setContentTitle(title)
-                .setContentText(detail)
-                .setCategory(Notification.CATEGORY_MESSAGE)
-                .setAutoCancel(true)
-                .setColor(0xFF426EFE)
-                .setVisibility(Notification.VISIBILITY_PRIVATE)
-                .setShowWhen(true);
-        if (content != null) builder.setContentIntent(content);
-        String tag = "reply-ready-" + (conversationId.length() > 0
-                ? conversationId : String.valueOf(responseId));
-        try {
-            manager.notify(tag, NOTIFICATION_ID + 1, builder.build());
-        } catch (Throwable t) {
-            Log.w(TAG, "could not post reply-ready notification", t);
         }
     }
 

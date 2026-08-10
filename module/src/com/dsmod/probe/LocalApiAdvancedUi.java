@@ -92,39 +92,8 @@ final class LocalApiAdvancedUi {
         final Bundle initial = Main.localApiPublicTunnelStatus(activity);
         final Bundle initialPinggy = Main.localApiPinggyTunnelStatus(activity);
 
-        LinearLayout relayCard = card(activity, cardColor);
-        content.addView(relayCard, matchWrap());
-        LinearLayout relayRow = new LinearLayout(activity);
-        relayRow.setOrientation(LinearLayout.HORIZONTAL);
-        relayRow.setGravity(Gravity.CENTER_VERTICAL);
-        relayRow.setPadding(dp(activity, 16), dp(activity, 12),
-                dp(activity, 12), dp(activity, 12));
-        LinearLayout relayCopy = new LinearLayout(activity);
-        relayCopy.setOrientation(LinearLayout.VERTICAL);
-        relayCopy.addView(label(activity,
-                "超长上下文转文件", "Move long context to a file", 15, text, true));
-        relayCopy.addView(label(activity,
-                "超过输出上限或 9000 字时自动附加 TXT",
-                "Attach overflow as TXT beyond the output limit or 9,000 characters",
-                12, sub, false));
-        relayRow.addView(relayCopy, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch relayEnabled = new HubInsetSwitch(activity);
-        relayEnabled.setChecked(Main.isLocalApiContextRelayEnabled());
-        relayEnabled.setOnCheckedChangeListener(
-                new CompoundButton.OnCheckedChangeListener() {
-                    @Override public void onCheckedChanged(
-                            CompoundButton button, boolean checked) {
-                        Main.setLocalApiContextRelayEnabled(checked);
-                    }
-                });
-        relayRow.addView(relayEnabled);
-        relayCard.addView(relayRow);
-
         LinearLayout pinggyCard = card(activity, cardColor);
-        LinearLayout.LayoutParams pinggyCardParams = matchWrap();
-        pinggyCardParams.topMargin = dp(activity, 14);
-        content.addView(pinggyCard, pinggyCardParams);
+        content.addView(pinggyCard, matchWrap());
         pinggyCard.addView(section(activity,
                 "一小时临时网址（Pinggy）", "One-hour temporary URL (Pinggy)", text));
         pinggyCard.addView(body(activity,
@@ -197,7 +166,7 @@ final class LocalApiAdvancedUi {
                 12, sub, false));
         enableRow.addView(enableCopy, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        final Switch enabled = new HubInsetSwitch(activity);
+        final Switch enabled = new Switch(activity);
         enabled.setChecked(initial.getBoolean("requested", false));
         enableRow.addView(enabled);
         tunnelCard.addView(enableRow);
@@ -652,7 +621,6 @@ final class LocalApiAdvancedUi {
             }
         });
 
-        DeekseepUi.addBuildFooter(activity, content, sub);
         dialog.setContentView(root);
         Window window = dialog.getWindow();
         if (window != null) {

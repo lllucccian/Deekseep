@@ -1,9 +1,9 @@
 # Building from Source
 
-The repository uses small shell-based Android builds instead of Gradle. The
-universal target compiles Java, converts project classes with D8, packages
-traditional Xposed metadata, aligns the APK, and signs it with a local
-development key. Domestic and Google Play host maps are selected at runtime.
+The repository uses small shell-based Android builds instead of Gradle. Each
+variant compiles Java, converts project classes with D8, links resources with
+AAPT2, packages the appropriate Xposed metadata, aligns the APK, and signs it
+with a local development key.
 
 ## Requirements
 
@@ -33,38 +33,39 @@ cd Deekseep
 bash scripts/build-all.sh
 ```
 
-The final `dist/` directory contains channel build outputs and checksums. The
-GitHub release is intentionally repackaged with only these two assets:
+The final `dist/` directory contains the two mainland 1.7.2 assets:
 
 ```text
-Deekseep.apk
-SOURCE-SHA256.txt
+deekseep-stable-api102-v1.7.2.apk
+deekseep-stable-legacy-v1.7.2.apk
+SHA256SUMS.txt
 ```
 
 The release build runs the stable protocol, account, editor and expert-relay
-regressions, verifies the universal manifest is version 1.7.4, checks both
-channel APKs use the traditional Xposed metadata layout, and refuses test/probe
-APKs in `dist/`.
+regressions, verifies both manifests are version 1.7.2, checks the two Xposed
+metadata layouts, and refuses test/probe APKs in `dist/`.
 
 The old test and load-probe projects are intentionally not release targets.
 See [Build Variants](VARIANTS.md).
 
-`GOOGLE_PLAY_BUILD=true` remains available for local channel parity testing;
-it is not published as a second release APK.
+The Google Play APK is built from `google-play:module/` and added to the same
+GitHub release under the explicit
+`deekseep-google-play-2.2.2-v1.7.2.apk` filename. It cannot be generated from
+the mainland branch because the obfuscated host symbols differ.
 
-## Build One Channel
+## Build One Variant
 
 ```bash
-(cd module-universal && bash build.sh)
-(cd module-universal && GOOGLE_PLAY_BUILD=true bash build.sh)
+(cd module && bash build.sh)
+(cd module-legacy && bash build.sh)
 ```
 
 The unrenamed outputs remain in their project directories:
 
 | Project | Output |
 |---|---|
-| `module-universal/` | `ds-probe-universal.apk` |
-| `module-universal/` with `GOOGLE_PLAY_BUILD=true` | `ds-probe-universal-google-play.apk` |
+| `module/` | `ds-probe.apk` |
+| `module-legacy/` | `ds-probe-legacy.apk` |
 
 ## Termux
 
@@ -84,23 +85,29 @@ When shared storage is available, individual build scripts make a best-effort
 copy of their APK to `/storage/emulated/0/`. A failed optional copy does not fail
 the build.
 
-## Shared Core and Universal Adapter
+## Modern API Dependency
 
-`module/src/com/dsmod/probe` is the canonical 1.7.4 feature core. Both channel
-builds compile the same `Main.java` and feature classes through
-`module-legacy/compat/LegacyXposedModule.java`, so the domestic and Google Play
-packages do not drift.
+The modern project includes `libs/api.jar`, extracted from the official
+libxposed API 102 AAR. It is a compile-only dependency:
 
-The adapter includes small declarations under
+- `javac` uses it to resolve `io.github.libxposed.api` symbols;
+- D8 receives only classes under `com/dsmod`;
+- the final APK must not package libxposed API classes;
+- the framework supplies those classes at runtime.
+
+## Shared Stable Core and Legacy Adapter
+
+`module/src/com/dsmod/probe` is the canonical 1.7.2 mainland feature core. The legacy
+build generates its entry from the same `Main.java` and compiles the same
+feature classes through `module-legacy/compat/LegacyXposedModule.java`. This
+prevents the traditional package from drifting several releases behind the
+modern package.
+
+The legacy project includes small declarations under
 `module-legacy/src/de/robv/android/xposed/`. They expose only compile-time
 signatures. D8 packages only `com/dsmod`, so these stubs do not shadow framework
-classes at runtime.
-
-The traditional entry declares API 82 as its minimum and no maximum. The adapter
-regression executes the complete hook/proceed/fail-open contract once for every
-framework API value from 82 through 102. The release build also verifies that
-every canonical feature class is present in both the mainland and Google Play
-APKs, preventing a channel build from silently omitting a newer feature.
+classes at runtime. `module-legacy/src/com/dsmod/probe` is retained historical
+source and is deliberately excluded by the build script.
 
 ## Generated Files and Signing
 
@@ -122,9 +129,8 @@ relay, response preservation, native-session
 refresh/delete behavior, and the local API protocol/tool bridge:
 
 ```bash
-cd module-universal
+cd module
 bash build.sh
-GOOGLE_PLAY_BUILD=true bash build.sh
 bash test-thinking-regression.sh
 bash test-expert-relay-regression.sh
 (cd ../module-legacy && bash test-adapter-regression.sh)
@@ -158,18 +164,18 @@ checks that the modern and legacy relay gate implementations are identical.
 ## Package Verification
 
 ```bash
-apksigner verify --verbose module-universal/ds-probe-universal.apk
-unzip -l module-universal/ds-probe-universal.apk | grep 'assets/xposed_init'
-unzip -l module-universal/ds-probe-universal-google-play.apk | grep 'assets/xposed_init'
+apksigner verify --verbose module/ds-probe.apk
+unzip -l module/ds-probe.apk | grep 'META-INF/xposed'
+unzip -l module-legacy/ds-probe-legacy.apk | grep 'assets/xposed_init'
 sha256sum dist/*.apk
 ```
 
-Both universal APKs must contain `assets/xposed_init` and neither should contain
-compiled framework stub classes.
+A modern APK must contain `META-INF/xposed` and a legacy APK must contain
+`assets/xposed_init`. Neither should contain compiled API stub classes.
 
 ## Continuous Integration
 
 `.github/workflows/build.yml` installs Android Platform and Build Tools 35,
-builds and tests the domestic and Google Play universal interfaces, and uploads the exact 1.7.4 `dist/`
+builds and tests the two stable mainland interfaces, and uploads the exact 1.7.2 `dist/`
 contents as a workflow artifact on pushes, pull requests, and manual dispatches.
 Test editions are not built or uploaded.

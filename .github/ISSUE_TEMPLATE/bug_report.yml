@@ -16,7 +16,7 @@ body:
     attributes:
       label: Deekseep LSPosed version
       description: Use the version shown by the module or the exact release tag.
-      placeholder: "1.7.3"
+      placeholder: "1.7.2"
     validations:
       required: true
 

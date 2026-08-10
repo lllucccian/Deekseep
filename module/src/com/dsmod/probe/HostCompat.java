@@ -2,7 +2,6 @@ package com.dsmod.probe;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 
 /**
  * Runtime symbols for the supported DeepSeek host generations.
@@ -16,24 +15,12 @@ import java.lang.reflect.Modifier;
 final class HostCompat {
     private static volatile boolean initialized;
     private static volatile boolean v230;
-    private static volatile boolean v234;
-    private static volatile boolean googlePlay;
-    /**
-     * 2.2.1 moved Kotlin Unit out of the Compose helper named {@code ui8}.  The
-     * 2.2.2 host restored the old static singleton shape, so treating both 2.2
-     * builds as one mapping would make reflection call a non-static field with a
-     * null receiver and disable the entire bubble/input hook.
-     */
-    private static volatile boolean legacyUnitUsesTi8;
 
     private HostCompat() {}
 
     static synchronized void initialize(ClassLoader loader) {
         if (initialized) return;
-        googlePlay = classExists(loader, "com.pairip.licensecheck.LicenseActivity");
-        v234 = hasCompletionRequest(loader, googlePlay ? "gz0" : "nx0");
-        v230 = v234 || hasV230CompletionRequest(loader);
-        legacyUnitUsesTi8 = !v230 && hasNonStaticUi8Unit(loader);
+        v230 = hasV230CompletionRequest(loader);
         initialized = true;
     }
 
@@ -41,75 +28,17 @@ final class HostCompat {
         return v230;
     }
 
-    static boolean isV234() {
-        return v234;
-    }
-
-    static boolean isGooglePlay() {
-        return googlePlay;
-    }
-
-    static String diagnosticSummary() {
-        return "channel=" + (googlePlay ? "google-play" : "mainland")
-                + "\ngeneration=" + (v234 ? "2.3.4" : v230 ? "2.3.0" : "2.2.x")
-                + "\nlegacyUnit=" + (legacyUnitUsesTi8 ? "ti8" : "ui8");
-    }
-
-    /** 2.3.0 moved the canonical editor session state list from field e to f. */
-    static String editorSessionStateField() {
-        return v230 ? "f" : "e";
-    }
-
     static String generationName() {
-        if (v234) return googlePlay ? "2.3.4/code246-gp" : "2.3.4/code245-cn";
         return v230 ? "2.3.0/code237" : "2.2.x";
     }
 
-    /** Native event dispatched by DeepSeek's own "continue generating" button. */
-    static String resumeMessageEventClass() {
-        if (v234) return googlePlay ? "ce1" : "oc1";
-        return v230 ? "ab1" : "ba1";
-    }
-
-    /** Chat ViewModel reducer that consumes every native composer event. */
-    static String resumeMessageHandlerMethod() {
-        return "D";
-    }
-
-    static String unitClass() {
-        if (v234) return googlePlay ? "hy8" : "fu8";
-        if (v230) return "vl8";
-        return legacyUnitUsesTi8 ? "ti8" : "ui8";
-    }
-
-    static String unitField() {
-        return "a";
-    }
-
-    private static boolean hasNonStaticUi8Unit(ClassLoader loader) {
+    /**
+     * The old host also happens to contain an unrelated class named qw0.  Checking the complete
+     * request-constructor shape avoids treating that coincidence as a generation marker.
+     */
+    private static boolean hasV230CompletionRequest(ClassLoader loader) {
         try {
-            Class<?> ui8 = Class.forName("ui8", false, loader);
-            java.lang.reflect.Field field = ui8.getDeclaredField("a");
-            return !java.lang.reflect.Modifier.isStatic(field.getModifiers());
-        } catch (Throwable ignored) {
-            // If the probe itself is unavailable, keep the established 2.2.2
-            // mapping; the normal constructor will report a precise failure.
-            return false;
-        }
-    }
-
-    private static boolean classExists(ClassLoader loader, String name) {
-        try {
-            Class.forName(name, false, loader);
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static boolean hasCompletionRequest(ClassLoader loader, String name) {
-        try {
-            Class<?> candidate = Class.forName(name, false, loader);
+            Class<?> candidate = Class.forName("qw0", false, loader);
             for (Constructor<?> constructor : candidate.getDeclaredConstructors()) {
                 Class<?>[] p = constructor.getParameterTypes();
                 if (p.length == 11
@@ -128,73 +57,13 @@ final class HostCompat {
         return false;
     }
 
-    /**
-     * The old host also happens to contain an unrelated class named qw0.  Checking the complete
-     * request-constructor shape avoids treating that coincidence as a generation marker.
-     */
-    private static boolean hasV230CompletionRequest(ClassLoader loader) {
-        try {
-            // 2.2.x keeps the request data class as ew0.  Some 2.2 builds also contain a
-            // coroutine helper named qw0 whose constructor happens to resemble the 2.3 request
-            // shape when viewed through an obfuscating class loader, so positively identify the
-            // legacy request first instead of relying on qw0 alone.
-            Class<?> legacy = Class.forName("ew0", false, loader);
-            for (Constructor<?> constructor : legacy.getDeclaredConstructors()) {
-                Class<?>[] p = constructor.getParameterTypes();
-                if (p.length == 11
-                        && p[0] == int.class
-                        && p[1] == String.class
-                        && p[2] == Integer.class
-                        && p[3] == String.class
-                        && p[4] == java.util.List.class
-                        && p[5] == boolean.class
-                        && p[6] == boolean.class
-                        && p[7] == String.class
-                        && p[8] == boolean.class
-                        && p[9] == String.class
-                        && p[10] == String.class) {
-                    return false;
-                }
-            }
-        } catch (Throwable ignored) {}
-        try {
-            Class<?> candidate = Class.forName("qw0", false, loader);
-            for (Constructor<?> constructor : candidate.getDeclaredConstructors()) {
-                Class<?>[] p = constructor.getParameterTypes();
-                if (p.length == 11
-                        && p[0] == String.class
-                        && p[2] == String.class
-                        && p[4] == boolean.class
-                        && p[5] == boolean.class
-                        && p[7] == boolean.class
-                        && p[8] == String.class
-                        && p[9] == String.class
-                        && p[10] == int.class) {
-                    // The 2.3 request class implements the ct0 transport contract. Require that
-                    // marker as well so an unrelated old qw0 cannot flip the whole host table.
-                    for (Class<?> iface : candidate.getInterfaces()) {
-                        if (iface != null && "ct0".equals(iface.getSimpleName())) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        } catch (Throwable ignored) {}
-        return false;
-    }
-
     static Class<?> load(ClassLoader loader, String legacyName)
             throws ClassNotFoundException {
         return loader.loadClass(name(legacyName));
     }
 
     static String name(String legacyName) {
-        if (legacyName == null) return null;
-        String v230Name = v230 ? name230(legacyName) : legacyName;
-        return v234 ? name234(v230Name) : v230Name;
-    }
-
-    private static String name230(String legacyName) {
+        if (!v230 || legacyName == null) return legacyName;
         switch (legacyName) {
             // Settings and heartbeat rendering.
             case "u25": return "t55";
@@ -321,208 +190,8 @@ final class HostCompat {
         }
     }
 
-    /** 2.3.4 re-obfuscated both store channels independently. */
-    private static String name234(String name230) {
-        if (name230 == null) return null;
-        if (googlePlay) {
-            switch (name230) {
-                case "qw0": return "gz0";
-                case "ct0": return "tv0";
-                case "aq": return "pq";
-                case "cp": return "qp";
-                case "vv": return "kw";
-                case "tv": return "iw";
-                case "he7": return "lp7";
-                case "ni5": return "bq5";
-                case "bi5": return "jp5";
-                case "ky7": return "oa8";
-                case "n81": return "mb1";
-                case "zb2": return "ag2";
-                case "y41": return "x71";
-                // x71 is the 2.3.4 GP Flow wrapper; its collector is a83. za5 has the same
-                // erased two-argument shape but belongs to an unrelated coroutine contract.
-                case "x23": return "a83";
-                case "xa1": return "zd1";
-                case "t05": return "b75";
-                case "h05": return "o65";
-                case "cc1": return "ef1";
-                case "fh": return "ih";
-                case "mp5": return "fx5";
-                case "hp2": return "kt2";
-                case "k61": return "j91";
-                case "tc": return "ika";
-                case "gt5": return "vu8";
-                case "fp2": return "it2";
-                case "v41": return "u71";
-                case "id3": return "mi3";
-                case "lj5": return "zq5";
-                case "fz5": return "e76";
-                case "qo4": return "ru4";
-                case "hp4": return "iv4";
-                case "ii8": return "uu8";
-                case "ip2": return "lt2";
-                case "lq2": return "tu2";
-                case "nq2": return "vu2";
-                case "ja8": return "pm8";
-                case "hw7": return "k88";
-                case "aw7": return "d88";
-                case "hv0": return "xx0";
-                case "rv7": return "u78";
-                case "sr7": return "n38";
-                case "r94": return "af4";
-                case "mc4": return "zh4";
-                case "vm9": return "c0a";
-                case "vl8": return "hy8";
-                case "w66": return "we6";
-                case "xv0": return "ny0";
-                case "xv7": return "a88";
-                case "zz6": return "la7";
-                case "yt9": return "h7a";
-                case "dt": return "tt";
-                case "cx3": return "r24";
-                case "e32": return "z62";
-                case "b03": return "w43";
-                case "kw0": return "az0";
-                case "lv0": return "by0";
-                case "mw0": return "cz0";
-                case "qv": return "fw";
-                case "rj4": return "ip4";
-                case "td3": return "xi3";
-                case "xd3": return "bj3";
-                case "d22": return "w52";
-                case "c22": return "v52";
-                case "v22": return "p62";
-                case "uy7": return "ya8";
-                case "wg1": return "ak1";
-                case "pe": return "se";
-                case "vc1": return "yf1";
-                case "bx0": return "rz0";
-                case "bp8": return "s19";
-                case "hp8": return "y19";
-                case "so8": return "j19";
-                case "q98": return "sd7";
-                case "m17": return "an9";
-                case "ml9": return "u4a";
-                case "fa1": return "rm1";
-                case "e50": return "c60";
-                case "cw0": return "sy0";
-                case "ac2": return "bg2";
-                // Kotlin immutable empty-list singleton. Do not confuse this with the unrelated
-                // 2.3.4 GP coroutine class that also happens to be named gp7.
-                case "gp7": return "y08";
-                default: return name230;
-            }
-        }
-        switch (name230) {
-            case "qw0": return "nx0";
-            case "ct0": return "gg7";
-            case "aq": return "lq";
-            case "cp": return "mp";
-            case "vv": return "gw";
-            case "tv": return "ew";
-            case "he7": return "ql7";
-            case "ni5": return "no5";
-            case "bi5": return "vn5";
-            case "ky7": return "o68";
-            case "n81": return "t91";
-            case "zb2": return "ce2";
-            case "y41": return "e61";
-            case "x23": return "v53";
-            case "xa1": return "fc1";
-            case "t05": return "n45";
-            case "h05": return "a45";
-            case "cc1": return "kd1";
-            case "fh": return "fh";
-            case "mp5": return "ov5";
-            case "hp2": return "lr2";
-            case "k61": return "q71";
-            case "tc": return "sc";
-            case "gt5": return "gv7";
-            case "fp2": return "jr2";
-            case "v41": return "b61";
-            case "id3": return "ig3";
-            case "lj5": return "lp5";
-            case "fz5": return "i56";
-            case "qo4": return "ks4";
-            case "hp4": return "bt4";
-            case "ii8": return "rq8";
-            case "ip2": return "mr2";
-            case "lq2": return "us2";
-            case "nq2": return "ws2";
-            case "ja8": return "qi8";
-            case "hw7": return "l48";
-            case "aw7": return "e48";
-            case "hv0": return "ew0";
-            case "rv7": return "v38";
-            case "sr7": return "sz7";
-            case "r94": return "wc4";
-            case "mc4": return "sf4";
-            case "vm9": return "uv9";
-            case "vl8": return "fu8";
-            case "w66": return "ad6";
-            case "xv0": return "uw0";
-            case "xv7": return "b48";
-            case "zz6": return "c77";
-            case "yt9": return "v2a";
-            case "dt": return "pt";
-            case "cx3": return "n04";
-            case "e32": return "e52";
-            case "b03": return "r23";
-            case "kw0": return "hx0";
-            case "lv0": return "iw0";
-            case "mw0": return "jx0";
-            case "qv": return "bw";
-            case "rj4": return "an4";
-            case "td3": return "tg3";
-            case "xd3": return "xg3";
-            case "d22": return "b42";
-            case "c22": return "a75";
-            case "v22": return "u42";
-            case "uy7": return "y68";
-            case "wg1": return "gi1";
-            case "pe": return "pe";
-            case "vc1": return "ee1";
-            case "bx0": return "yx0";
-            case "bp8": return "mx8";
-            case "hp8": return "sx8";
-            case "so8": return "dx8";
-            case "q98": return "yh8";
-            case "m17": return "zc";
-            case "ml9": return "tj9";
-            case "fa1": return "xk1";
-            case "e50": return "u50";
-            case "cw0": return "zw0";
-            case "ac2": return "de2";
-            case "gp7": return "dx7";
-            default: return name230;
-        }
-    }
-
     static String method(String legacyOwner, String legacyMethod) {
-        if (legacyOwner == null || legacyMethod == null) return legacyMethod;
-        String mapped = v230 ? method230(legacyOwner, legacyMethod) : legacyMethod;
-        if (!v234) return mapped;
-        if ("mc".equals(legacyOwner) && "e".equals(legacyMethod)) {
-            return googlePlay ? "b" : "d";
-        }
-        if ("mc".equals(legacyOwner) && "f".equals(legacyMethod)) {
-            return googlePlay ? "c" : "e";
-        }
-        if ("mq5".equals(legacyOwner) && "i".equals(legacyMethod)) {
-            return googlePlay ? "m" : "k";
-        }
-        if ("qg5".equals(legacyOwner) && "w".equals(legacyMethod)) {
-            return googlePlay ? "t" : "u";
-        }
-        if ("bm4".equals(legacyOwner) && "w".equals(legacyMethod)) {
-            return googlePlay ? "v" : "u";
-        }
-        // The Play 2.3.4 live-message class inserted one method before the JSON patch helper.
-        if (googlePlay && "mv".equals(legacyOwner) && "i".equals(mapped)) return "j";
-        return mapped;
-    }
-
-    private static String method230(String legacyOwner, String legacyMethod) {
+        if (!v230 || legacyOwner == null || legacyMethod == null) return legacyMethod;
         if ("u25".equals(legacyOwner) && "i".equals(legacyMethod)) return "l";
         if (("fo2".equals(legacyOwner) || "ho2".equals(legacyOwner))
                 && "g".equals(legacyMethod)) return "e";
@@ -555,105 +224,6 @@ final class HostCompat {
             return messageMethod(legacyMethod);
         }
         return legacyMethod;
-    }
-
-    static String sessionMergeMethod() {
-        return v234 ? "x" : (v230 ? "u" : "u");
-    }
-
-    static String sessionReplaceMethod() {
-        return v234 ? "t" : "q";
-    }
-
-    static String sessionReplaceWithTextMethod() {
-        return v234 ? "s" : "p";
-    }
-
-    static String sessionMessageMapField() {
-        return "f";
-    }
-
-    /** Built-in settings analytics dispatcher for versions with a verified symbol table. */
-    static Method settingsEntryMethod(ClassLoader loader) {
-        if (!v234) return null;
-        try {
-            Class<?> owner = Class.forName(googlePlay ? "h7a" : "v2a", false, loader);
-            String expected = googlePlay ? "x" : "z";
-            for (Method method : owner.getDeclaredMethods()) {
-                Class<?>[] p = method.getParameterTypes();
-                if (expected.equals(method.getName())
-                        && p.length == 3
-                        && p[0] == String.class
-                        && p[1] == Boolean.class
-                        && p[2] == int.class) {
-                    method.setAccessible(true);
-                    return method;
-                }
-            }
-        } catch (Throwable ignored) {}
-        return null;
-    }
-
-    /** Native "data used to improve experience" Compose control for every supported host. */
-    static Method trainingControlMethod(ClassLoader loader) {
-        String[][] candidates;
-        if (v234) {
-            candidates = googlePlay
-                    ? new String[][]{{"fe5", "z"}, {"ym9", "j"}}
-                    : new String[][]{{"ym9", "j"}, {"fe5", "z"}};
-        } else if (v230) {
-            candidates = googlePlay
-                    ? new String[][]{{"m12", "r"}, {"zj8", "l"}}
-                    : new String[][]{{"zj8", "l"}, {"m12", "r"}};
-        } else {
-            candidates = new String[][]{{"hf8", "Q"}};
-        }
-        for (String[] candidate : candidates) {
-            Method method = findStaticMethod(loader, candidate[0], candidate[1], 5);
-            if (method == null) continue;
-            Class<?>[] p = method.getParameterTypes();
-            if (p[0] == Boolean.class && p[4] == int.class) return method;
-        }
-        return null;
-    }
-
-    /** Root Compose renderer for the normal/forced client-update dialog. */
-    static Method updateDialogMethod(ClassLoader loader) {
-        String[][] candidates;
-        if (v234) {
-            candidates = googlePlay
-                    ? new String[][]{{"ss6", "c"}, {"fa5", "i"}}
-                    : new String[][]{{"fa5", "i"}, {"ss6", "c"}};
-        } else if (v230) {
-            candidates = googlePlay
-                    ? new String[][]{{"bh6", "c"}, {"w85", "a"}}
-                    : new String[][]{{"w85", "a"}, {"bh6", "c"}};
-        } else {
-            candidates = new String[][]{{"o65", "h"}};
-        }
-        for (String[] candidate : candidates) {
-            Method method = findStaticMethod(loader, candidate[0], candidate[1], 2);
-            if (method == null) continue;
-            Class<?>[] p = method.getParameterTypes();
-            if (p[0] == int.class) return method;
-        }
-        return null;
-    }
-
-    private static Method findStaticMethod(ClassLoader loader, String owner, String name,
-                                           int parameterCount) {
-        try {
-            Class<?> type = Class.forName(owner, false, loader);
-            for (Method method : type.getDeclaredMethods()) {
-                if (name.equals(method.getName())
-                        && Modifier.isStatic(method.getModifiers())
-                        && method.getParameterCount() == parameterCount) {
-                    method.setAccessible(true);
-                    return method;
-                }
-            }
-        } catch (Throwable ignored) {}
-        return null;
     }
 
     /** 2.3.0 inserted methods into the abstract chat-message contract. */

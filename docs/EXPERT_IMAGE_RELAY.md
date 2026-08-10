@@ -3,7 +3,7 @@
 ## Status
 
 Expert image relay is an opt-in experimental feature compiled from the same
-canonical core in both current 1.7.3 channel packages.
+canonical core in both stable 1.7.1 interface packages.
 
 The relay and multi-image flow were device-validated on the legacy experimental
 track on 2026-07-12, then moved into the canonical stable source. The current

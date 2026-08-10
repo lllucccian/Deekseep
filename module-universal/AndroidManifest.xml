@@ -14,18 +14,14 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
     <queries>
         <package android:name="com.deepseek.chat" />
-        <package android:name="com.tencent.qqmusic" />
-        <package android:name="com.netease.cloudmusic" />
     </queries>
 
     <application
@@ -35,7 +31,12 @@
         android:extractNativeLibs="true"
         android:allowBackup="false">
 
-        <!-- The only shipped module entry is the stable Xposed-compatible universal adapter. -->
+        <!--
+          The universal APK intentionally uses the stable rovo89/Xposed API 82 entry. Frameworks
+          reporting API 82, 100, 101, or 102 all retain this compatibility path, while libxposed
+          API 100 and 101 are mutually binary-incompatible and cannot safely share one modern
+          java_init entry.
+        -->
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription" android:value="@string/moddesc" />
         <meta-data android:name="xposedminversion" android:value="82" />
@@ -51,12 +52,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name="com.dsmod.probe.ProcessManagerActivity"
-            android:exported="true"
-            android:label="Deekseep · Process manager"
-            android:theme="@android:style/Theme.Material.NoActionBar" />
 
         <activity
             android:name="com.dsmod.probe.PromptPickerActivity"
@@ -87,36 +82,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name="com.dsmod.probe.AgentDelayActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:taskAffinity=""
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="deekseep-module"
-                    android:host="agent-delay" />
-            </intent-filter>
-        </activity>
-
-        <activity
-            android:name="com.dsmod.probe.LocalAudioControlActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:noHistory="true"
-            android:taskAffinity=""
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-
-        <receiver
-            android:name="com.dsmod.probe.AgentDelayReceiver"
-            android:enabled="true"
-            android:exported="false" />
-
         <!--
           The localhost API executes inside DeepSeek's process. Android may freeze a cached
           activity process even when battery optimisation is disabled, which suspends both the
@@ -135,33 +100,7 @@
                 android:value="Keeps the user-enabled DeepSeek localhost API and SSE stream responsive in the background." />
         </service>
 
-        <service
-            android:name="com.dsmod.probe.QqMusicPlaybackService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:stopWithTask="false">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Handles a user-enabled Agent music playback request." />
-        </service>
-
-        <service
-            android:name="com.dsmod.probe.LocalAudioPlaybackService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false" />
-
-        <service
-            android:name="com.dsmod.probe.QqMusicSessionAccessService"
-            android:exported="false"
-            android:label="Deekseep music control"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
-        <!-- Optional framework activation provider used by the launcher status page. -->
+        <!-- Modern libxposed delivers its service Binder to this exact authority. -->
         <provider
             android:name="com.dsmod.probe.XposedActivationProvider"
             android:authorities="com.dsmod.probe.XposedService"

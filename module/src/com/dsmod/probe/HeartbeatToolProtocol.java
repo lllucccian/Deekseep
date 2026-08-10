@@ -44,11 +44,6 @@ final class HeartbeatToolProtocol {
     static final String TOOL_READ_FILE = "read_file";
     static final String TOOL_WRITE_FILE = "write_file";
     static final String TOOL_SHELL = "shell";
-    static final String TOOL_DELAY = "delay";
-    static final String TOOL_OPEN_APP = "open_app";
-    static final String TOOL_SCREEN_POWER = "screen_power";
-    static final String TOOL_MUSIC = "music";
-    static final String TOOL_RENDER_RICH_PANEL = "render_rich_panel";
 
     // Invisible presentation marker consumed by the host Compose text hook. It keeps tool status
     // styling separate from model-authored Markdown and remains visually harmless if a future
@@ -65,11 +60,6 @@ final class HeartbeatToolProtocol {
     static final int TOOL_STATUS_TEXT_STYLE_COPY_MASK = 0x00FFFFFC;
 
     private static final int MAX_CONTROL_JSON = 48 * 1024;
-    /**
-     * The native chat bridge has one generation lane per conversation.  Keeping this at one is
-     * not just a prompt preference: it is the protocol-level guard that makes execution order,
-     * result delivery and side-effect deduplication deterministic.
-     */
     private static final int MAX_CALLS_PER_RESPONSE = 1;
     private static final int MAX_INSTRUCTION = 1200;
     private static final int MAX_PATH = 1024;
@@ -78,7 +68,6 @@ final class HeartbeatToolProtocol {
     private static final int MAX_FILE_READ_BYTES = 48 * 1024;
     private static final int DEFAULT_FILE_READ_BYTES = 32 * 1024;
     private static final int MAX_TOOL_RESULT_TEXT = 48 * 1024;
-    private static final int MAX_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
     private static final int MAX_QUESTIONS_PER_CALL = 4;
     private static final int MAX_OPTIONS_PER_QUESTION = 4;
     private static final int MAX_QUESTION_TEXT = 500;
@@ -186,38 +175,16 @@ final class HeartbeatToolProtocol {
         }
     }
 
-    /**
-     * A control block that named a real, scoped tool but failed that tool's argument schema.
-     * It is kept separate from {@link Result#calls}: rejected calls must never reach an executor,
-     * but the visible-chat bridge still needs enough trusted metadata to show a failure row and
-     * return a private correction result to the originating model turn.
-     */
-    static final class RejectedCall {
-        final ToolCall call;
-        final String reason;
-
-        RejectedCall(ToolCall call, String reason) {
-            this.call = call;
-            this.reason = reason == null ? "invalid_arguments" : reason;
-        }
-    }
-
     static final class Result {
         final String visibleText;
         final List<ToolCall> calls;
-        final List<RejectedCall> rejectedCalls;
         final boolean incompleteControlBlock;
 
-        Result(String visibleText, List<ToolCall> calls,
-               List<RejectedCall> rejectedCalls,
-               boolean incompleteControlBlock) {
+        Result(String visibleText, List<ToolCall> calls, boolean incompleteControlBlock) {
             this.visibleText = visibleText == null ? "" : visibleText;
             this.calls = calls == null
                     ? Collections.<ToolCall>emptyList()
                     : Collections.unmodifiableList(calls);
-            this.rejectedCalls = rejectedCalls == null
-                    ? Collections.<RejectedCall>emptyList()
-                    : Collections.unmodifiableList(rejectedCalls);
             this.incompleteControlBlock = incompleteControlBlock;
         }
     }
@@ -238,13 +205,11 @@ final class HeartbeatToolProtocol {
 
     private static Result parseInternal(String value, boolean renderToolRows) {
         if (value == null || value.length() == 0) {
-            return new Result(value, Collections.<ToolCall>emptyList(),
-                    Collections.<RejectedCall>emptyList(), false);
+            return new Result(value, Collections.<ToolCall>emptyList(), false);
         }
         String source = normalizeMarkdownEscapedControlMarker(value);
         StringBuilder visible = new StringBuilder(source.length());
         ArrayList<ToolCall> calls = new ArrayList<>();
-        ArrayList<RejectedCall> rejectedCalls = new ArrayList<>();
         boolean incomplete = false;
         int cursor = 0;
         while (cursor < source.length()) {
@@ -274,26 +239,15 @@ final class HeartbeatToolProtocol {
             String payload = source.substring(payloadStart, end).trim();
             if (controlBlock && payload.length() > 0
                     && payload.length() <= MAX_CONTROL_JSON) {
-                payload = unwrapControlPayload(payload);
                 int firstNewCall = calls.size();
-                int firstRejectedCall = rejectedCalls.size();
-                parsePayload(payload, calls, rejectedCalls);
+                parsePayload(payload, calls);
                 if (renderToolRows && calls.size() > firstNewCall) {
-                    removeWrappingCodeFence(visible);
                     appendToolRows(visible, calls, firstNewCall);
-                } else if (renderToolRows
-                        && rejectedCalls.size() > firstRejectedCall) {
-                    removeWrappingCodeFence(visible);
-                    appendRejectedToolRows(
-                            visible, rejectedCalls, firstRejectedCall);
                 }
-                if (calls.size() > firstNewCall
-                        || rejectedCalls.size() > firstRejectedCall) {
-                    // Execute one real action, return its result privately, and let the model
-                    // choose the next action in a fresh turn. Rejected calls follow the same
-                    // boundary: the bridge reports a real failure without executing anything.
-                    // Everything after either result belongs to an untrusted, premature
-                    // continuation and stays hidden.
+                if (calls.size() > firstNewCall) {
+                    // A real Agent loop executes exactly one tool, returns its result privately,
+                    // and lets the model decide the next step in a fresh turn. Suppress every
+                    // trailing call or premature conclusion from this response.
                     cursor = end + closingMarker.length();
                     break;
                 }
@@ -304,7 +258,7 @@ final class HeartbeatToolProtocol {
             // A control block may end at the final byte, in which case the loop does not append.
         }
         String safe = hidePartialOpeningMarker(visible.toString());
-        return new Result(safe, calls, rejectedCalls, incomplete);
+        return new Result(safe, calls, incomplete);
     }
 
     /**
@@ -323,45 +277,6 @@ final class HeartbeatToolProtocol {
         return source;
     }
 
-    /** Accepts a JSON fence only inside an already authenticated control block. */
-    private static String unwrapControlPayload(String value) {
-        String payload = value == null ? "" : value.trim();
-        if (!payload.startsWith("```")) return payload;
-        int firstLine = payload.indexOf('\n');
-        int closing = payload.lastIndexOf("```");
-        if (firstLine < 0 || closing <= firstLine
-                || payload.substring(closing + 3).trim().length() != 0) {
-            return payload;
-        }
-        String language = payload.substring(3, firstLine).trim();
-        if (language.length() != 0 && !"json".equalsIgnoreCase(language)) {
-            return payload;
-        }
-        return payload.substring(firstLine + 1, closing).trim();
-    }
-
-    /** Removes a Markdown fence immediately wrapping an accepted private call. */
-    private static void removeWrappingCodeFence(StringBuilder visible) {
-        if (visible == null || visible.length() == 0) return;
-        int lineEnd = visible.length();
-        while (lineEnd > 0 && (visible.charAt(lineEnd - 1) == '\n'
-                || visible.charAt(lineEnd - 1) == '\r'
-                || Character.isWhitespace(visible.charAt(lineEnd - 1)))) {
-            lineEnd--;
-        }
-        int lineStart = lineEnd;
-        while (lineStart > 0 && visible.charAt(lineStart - 1) != '\n'
-                && visible.charAt(lineStart - 1) != '\r') {
-            lineStart--;
-        }
-        String line = visible.substring(lineStart, lineEnd).trim();
-        if (!"```".equals(line) && !"```json".equalsIgnoreCase(line)
-                && !"```text".equalsIgnoreCase(line)) {
-            return;
-        }
-        visible.delete(lineStart, visible.length());
-    }
-
     private static int firstMarker(int first, int second, int third) {
         int result = -1;
         if (first >= 0) result = first;
@@ -375,108 +290,20 @@ final class HeartbeatToolProtocol {
     }
 
     static String renderConversationToolRows(String value) {
-        Result parsed = parseForConversation(value);
-        if (AgentToolConfig.hideToolLogs()) return parsed.visibleText;
-        if (!parsed.incompleteControlBlock) {
-            if (!AgentToolConfig.enabledFast()
-                    || !parsed.calls.isEmpty() || !parsed.rejectedCalls.isEmpty()
-                    || !looksLikeUnbackedToolClaim(value)) {
-                return parsed.visibleText;
-            }
-            StringBuilder visible = new StringBuilder(parsed.visibleText);
-            appendParagraphBreak(visible);
-            boolean chinese = Locale.getDefault().getLanguage()
-                    .toLowerCase(Locale.US).startsWith("zh");
-            String status = chinese
-                    ? "未检测到完整工具调用，操作未执行"
-                    : "No complete tool call detected; action was not run";
-            visible.append("> ").append(markToolStatus(
-                    statusClock(System.currentTimeMillis()) + "  " + status));
-            visible.append("\n\n");
-            return visible.toString();
-        }
-        StringBuilder visible = new StringBuilder(parsed.visibleText);
-        appendParagraphBreak(visible);
-        boolean chinese = Locale.getDefault().getLanguage()
-                .toLowerCase(Locale.US).startsWith("zh");
-        String status = chinese
-                ? "工具调用不完整，未执行（回复可能中断）"
-                : "Incomplete tool call; not run (response may have been interrupted)";
-        visible.append("> ").append(markToolStatus(
-                statusClock(System.currentTimeMillis()) + "  " + status));
-        visible.append("\n\n");
-        return visible.toString();
-    }
-
-    private static boolean looksLikeUnbackedToolClaim(String value) {
-        if (value == null || value.length() == 0
-                || value.indexOf(CONTROL_START) >= 0) return false;
-        String lower = value.toLowerCase(Locale.US);
-        String[] claims = new String[]{
-                "已经打开", "已打开", "打开好了", "已经设置", "已设置",
-                "设置好了", "操作完成", "已经执行", "已执行", "执行完成",
-                "已经锁屏", "已锁屏", "已经唤醒", "已唤醒", "已经画好",
-                "已画好", "画好了", "已经生成", "已生成",
-                "opened it", "has been opened", "set it up", "has been set",
-                "operation completed", "executed successfully", "drawing is ready"
-        };
-        for (String claim : claims) {
-            if (lower.contains(claim)) return true;
-        }
-        return false;
+        return parseForConversation(value).visibleText;
     }
 
     private static void appendToolRows(
             StringBuilder visible, List<ToolCall> calls, int firstCall) {
         if (firstCall < 0 || firstCall >= calls.size()) return;
-        boolean hideStatus = AgentToolConfig.hideToolLogs();
-        boolean hasPanel = false;
-        for (int index = firstCall; index < calls.size(); index++) {
-            ToolCall call = calls.get(index);
-            if (TOOL_RENDER_RICH_PANEL.equals(call.tool)
-                    && RichPanelRenderer.isRenderedPanel(call.content)) {
-                hasPanel = true;
-                break;
-            }
-        }
-        if (hideStatus && !hasPanel) return;
         appendParagraphBreak(visible);
         boolean chinese = Locale.getDefault().getLanguage().toLowerCase(Locale.US)
                 .startsWith("zh");
         for (int index = firstCall; index < calls.size(); index++) {
-            ToolCall call = calls.get(index);
-            if (!hideStatus) {
-                if (index > firstCall) visible.append('\n');
-                visible.append("> ")
-                        .append(markToolStatus(toolStatusText(call, chinese)));
-            }
-            if (TOOL_RENDER_RICH_PANEL.equals(call.tool)
-                    && RichPanelRenderer.isRenderedPanel(call.content)) {
-                if (!hideStatus || index > firstCall) visible.append("\n\n");
-                visible.append(call.content);
-            }
-        }
-        visible.append("\n\n");
-    }
-
-    private static void appendRejectedToolRows(
-            StringBuilder visible, List<RejectedCall> rejectedCalls,
-            int firstCall) {
-        if (firstCall < 0 || firstCall >= rejectedCalls.size()) return;
-        if (AgentToolConfig.hideToolLogs()) return;
-        appendParagraphBreak(visible);
-        boolean chinese = Locale.getDefault().getLanguage().toLowerCase(Locale.US)
-                .startsWith("zh");
-        for (int index = firstCall; index < rejectedCalls.size(); index++) {
             if (index > firstCall) visible.append('\n');
-            RejectedCall rejected = rejectedCalls.get(index);
-            ToolCall call = rejected == null ? null : rejected.call;
-            String operation = toolOperationLabel(call, chinese);
-            String failure = chinese ? "参数无效，未执行" : "Invalid arguments; not run";
+            ToolCall call = calls.get(index);
             visible.append("> ")
-                    .append(markToolStatus(statusClock(
-                            call == null ? System.currentTimeMillis() : call.invokedAt)
-                            + "  " + joinStatus(operation, failure, chinese)));
+                    .append(markToolStatus(toolStatusText(call, chinese)));
         }
         visible.append("\n\n");
     }
@@ -542,11 +369,7 @@ final class HeartbeatToolProtocol {
                 && value.indexOf("Write file") < 0
                 && value.indexOf("\u8ffd\u52a0\u6587\u4ef6") < 0
                 && value.indexOf("Append file") < 0
-                && value.indexOf("Shell") < 0
-                && value.indexOf("\u5bcc\u9762\u677f") < 0
-                && value.indexOf("Rich panel") < 0
-                && value.indexOf("\u5bcc\u89c6\u89c9") < 0
-                && value.indexOf("Rich visual") < 0) {
+                && value.indexOf("Shell") < 0) {
             return false;
         }
         String clean = stripToolStatusStyleMarkers(value);
@@ -581,67 +404,6 @@ final class HeartbeatToolProtocol {
         }
         if (trailingNewlines == 0) value.append("\n\n");
         else if (trailingNewlines == 1) value.append('\n');
-    }
-
-    private static String toolOperationLabel(ToolCall call, boolean chinese) {
-        if (call == null) return chinese ? "工具调用" : "Tool call";
-        if (TOOL_SCHEDULE_ONCE.equals(call.tool)
-                || TOOL_SET_INTERVAL.equals(call.tool)) {
-            return chinese ? "设置心跳" : "Set heartbeat";
-        }
-        if (TOOL_SET_PLAN.equals(call.tool)) {
-            return chinese ? "更新心跳约定" : "Update heartbeat plan";
-        }
-        if (TOOL_CLEAR_PLAN.equals(call.tool)) {
-            return chinese ? "清除心跳约定" : "Clear heartbeat plan";
-        }
-        if (TOOL_BIND_CHAT.equals(call.tool)) {
-            return chinese ? "绑定心跳" : "Bind heartbeat";
-        }
-        if (TOOL_CANCEL_HEARTBEAT.equals(call.tool)) {
-            return chinese ? "取消心跳" : "Cancel heartbeat";
-        }
-        if (TOOL_GET_CURRENT_TIME.equals(call.tool)) {
-            return chinese ? "获取当前时间" : "Get current time";
-        }
-        if (TOOL_CAPTURE_SCREEN.equals(call.tool)) {
-            return chinese ? "获取截图" : "Capture screen";
-        }
-        if (TOOL_TAP_SCREEN.equals(call.tool)) {
-            return chinese ? "点击屏幕" : "Tap screen";
-        }
-        if (TOOL_SWIPE_SCREEN.equals(call.tool)) {
-            return chinese ? "滑动屏幕" : "Swipe screen";
-        }
-        if (TOOL_PRESS_BACK.equals(call.tool)) {
-            return chinese ? "返回上一层" : "Back";
-        }
-        if (TOOL_ASK_USER.equals(call.tool)) {
-            return chinese ? "询问用户" : "Ask user";
-        }
-        if (TOOL_READ_FILE.equals(call.tool)) {
-            return chinese ? "读取文件" : "Read file";
-        }
-        if (TOOL_WRITE_FILE.equals(call.tool)) {
-            return chinese ? "写入文件" : "Write file";
-        }
-        if (TOOL_SHELL.equals(call.tool)) return "Shell";
-        if (TOOL_DELAY.equals(call.tool)) {
-            return chinese ? "延迟执行" : "Delay execution";
-        }
-        if (TOOL_OPEN_APP.equals(call.tool)) {
-            return chinese ? "打开应用" : "Open app";
-        }
-        if (TOOL_SCREEN_POWER.equals(call.tool)) {
-            return chinese ? "屏幕电源" : "Screen power";
-        }
-        if (TOOL_MUSIC.equals(call.tool)) {
-            return chinese ? "音乐" : "Music";
-        }
-        if (TOOL_RENDER_RICH_PANEL.equals(call.tool)) {
-            return chinese ? "生成富视觉" : "Render rich visual";
-        }
-        return chinese ? "工具调用" : "Tool call";
     }
 
     private static String toolStatusText(ToolCall call, boolean chinese) {
@@ -714,29 +476,6 @@ final class HeartbeatToolProtocol {
                     .replace('\n', ' ').trim();
             if (command.length() > 38) command = command.substring(0, 38) + "\u2026";
             status = joinStatus("Shell", command, chinese);
-        } else if (TOOL_DELAY.equals(call.tool)) {
-            status = joinStatus(
-                    chinese ? "延迟执行" : "Delay execution",
-                    friendlyDuration(call.durationMs, chinese), chinese);
-        } else if (TOOL_OPEN_APP.equals(call.tool)) {
-            status = joinStatus(
-                    chinese ? "打开应用" : "Open app",
-                    call.targetId, chinese);
-        } else if (TOOL_SCREEN_POWER.equals(call.tool)) {
-            status = chinese
-                    ? ("sleep".equals(call.mode) ? "熄灭屏幕" : "唤醒屏幕")
-                    : ("sleep".equals(call.mode) ? "Sleep screen" : "Wake screen");
-        } else if (TOOL_MUSIC.equals(call.tool)) {
-            String detail = "local".equals(call.targetId) && call.path.length() > 0
-                    ? compactPath(call.path)
-                    : ("search".equals(call.mode) ? call.instruction : call.mode);
-            status = joinStatus(chinese ? "音乐" : "Music", detail, chinese);
-        } else if (TOOL_RENDER_RICH_PANEL.equals(call.tool)) {
-            String title = call.instruction;
-            if (title.length() > 28) title = title.substring(0, 28) + "\u2026";
-            status = joinStatus(
-                    chinese ? "\u751f\u6210\u5bcc\u89c6\u89c9" : "Render rich visual",
-                    title, chinese);
         } else {
             status = chinese ? "\u5fc3\u8df3\u8bbe\u7f6e" : "Heartbeat settings";
         }
@@ -750,18 +489,6 @@ final class HeartbeatToolProtocol {
         String name = slash >= 0 ? path.substring(slash + 1) : path;
         if (name.length() > 30) name = name.substring(name.length() - 30);
         return "\u2026/" + name;
-    }
-
-    private static String friendlyDuration(int durationMs, boolean chinese) {
-        if (durationMs % 3_600_000 == 0) {
-            int hours = durationMs / 3_600_000;
-            return chinese ? hours + "小时" : hours + (hours == 1 ? " hour" : " hours");
-        }
-        if (durationMs % 1000 == 0) {
-            int seconds = durationMs / 1000;
-            return chinese ? seconds + "秒" : seconds + (seconds == 1 ? " second" : " seconds");
-        }
-        return durationMs + " ms";
     }
 
     private static String statusClock(long value) {
@@ -845,9 +572,7 @@ final class HeartbeatToolProtocol {
         return "";
     }
 
-    private static void parsePayload(
-            String payload, List<ToolCall> out,
-            List<RejectedCall> rejectedCalls) {
+    private static void parsePayload(String payload, List<ToolCall> out) {
         try {
             JSONObject root = new JSONObject(payload);
             // V1 originally allowed one large {"calls":[...]} batch. Keep accepting it for
@@ -859,153 +584,41 @@ final class HeartbeatToolProtocol {
                 ToolCall parsed = parseCall(single);
                 if (parsed != null && out.size() < MAX_CALLS_PER_RESPONSE) {
                     out.add(parsed);
-                } else if (parsed == null && rejectedCalls.isEmpty()) {
-                    RejectedCall rejected = rejectedCall(single);
-                    if (rejected != null) rejectedCalls.add(rejected);
                 }
                 return;
             }
             JSONArray array = root.optJSONArray("calls");
-            if (array == null) {
-                RejectedCall rejected = rejectedPayloadMetadata(
-                        payload, "invalid_envelope");
-                if (rejected != null) rejectedCalls.add(rejected);
-                return;
-            }
+            if (array == null) return;
             int count = array.length();
             for (int i = 0; i < count; i++) {
-                if (out.size() >= MAX_CALLS_PER_RESPONSE) break;
                 JSONObject call = array.optJSONObject(i);
                 ToolCall parsed = parseCall(call);
                 if (parsed != null) {
-                    out.add(parsed);
-                    return;
-                }
-                RejectedCall rejected = rejectedCall(call);
-                if (rejected != null) {
-                    rejectedCalls.add(rejected);
+                    if (out.size() < MAX_CALLS_PER_RESPONSE) out.add(parsed);
                     return;
                 }
             }
-        } catch (Throwable ignored) {
-            RejectedCall rejected = rejectedPayloadMetadata(
-                    payload, "malformed_json");
-            if (rejected != null && rejectedCalls.isEmpty()) {
-                rejectedCalls.add(rejected);
-            }
-        }
-    }
-
-    private static RejectedCall rejectedCall(JSONObject call) {
-        if (call == null) return null;
-        String tool = cleanToken(call.optString("tool", ""), 40);
-        if (!isSupportedTool(tool)) return null;
-        String scope = cleanScope(call.optString("scope", ""));
-        if (scope.length() == 0) return null;
-        String id = cleanId(call.optString("id", ""));
-        if (id.length() == 0) {
-            id = "invalid_" + Integer.toHexString(call.toString().hashCode());
-        }
-        ToolCall metadata = new ToolCall(
-                id, tool, scope, "", "", 0, "", "");
-        String reason = TOOL_RENDER_RICH_PANEL.equals(tool)
-                ? "invalid_visual_schema" : "invalid_arguments";
-        return new RejectedCall(metadata, reason);
-    }
-
-    /**
-     * Extracts only quoted identity fields from malformed JSON. The returned metadata is never
-     * executable; it merely lets the authorized originating chat receive an honest schema-failure
-     * result. This keeps syntax errors from becoming invisible while preserving strict parsing for
-     * every side-effect-bearing argument.
-     */
-    private static RejectedCall rejectedPayloadMetadata(
-            String payload, String reason) {
-        String tool = cleanToken(looseJsonStringField(payload, "tool", 40), 40);
-        if (!isSupportedTool(tool)) return null;
-        String scope = cleanScope(looseJsonStringField(payload, "scope", 2048));
-        if (scope.length() == 0) return null;
-        String id = cleanId(looseJsonStringField(payload, "id", 120));
-        if (id.length() == 0) {
-            id = "invalid_" + Integer.toHexString(
-                    String.valueOf(payload).hashCode());
-        }
-        return new RejectedCall(
-                new ToolCall(id, tool, scope, "", "", 0, "", ""), reason);
-    }
-
-    private static String looseJsonStringField(
-            String source, String field, int maximum) {
-        if (source == null || field == null || field.length() == 0) return "";
-        String marker = "\"" + field + "\"";
-        int search = 0;
-        while (search < source.length()) {
-            int start = source.indexOf(marker, search);
-            if (start < 0) return "";
-            int cursor = start + marker.length();
-            while (cursor < source.length()
-                    && Character.isWhitespace(source.charAt(cursor))) cursor++;
-            if (cursor >= source.length() || source.charAt(cursor) != ':') {
-                search = start + marker.length();
-                continue;
-            }
-            cursor++;
-            while (cursor < source.length()
-                    && Character.isWhitespace(source.charAt(cursor))) cursor++;
-            if (cursor >= source.length() || source.charAt(cursor) != '"') {
-                return "";
-            }
-            cursor++;
-            StringBuilder value = new StringBuilder(Math.min(64, maximum));
-            boolean escaped = false;
-            while (cursor < source.length() && value.length() <= maximum) {
-                char code = source.charAt(cursor++);
-                if (escaped) {
-                    if (code != '"' && code != '\\' && code != '/') return "";
-                    value.append(code);
-                    escaped = false;
-                } else if (code == '\\') {
-                    escaped = true;
-                } else if (code == '"') {
-                    return value.toString();
-                } else if (code < 0x20) {
-                    return "";
-                } else {
-                    value.append(code);
-                }
-            }
-            return "";
-        }
-        return "";
-    }
-
-    private static boolean isSupportedTool(String tool) {
-        return TOOL_SCHEDULE_ONCE.equals(tool)
-                || TOOL_SET_PLAN.equals(tool)
-                || TOOL_CLEAR_PLAN.equals(tool)
-                || TOOL_SET_INTERVAL.equals(tool)
-                || TOOL_BIND_CHAT.equals(tool)
-                || TOOL_CANCEL_HEARTBEAT.equals(tool)
-                || TOOL_GET_CURRENT_TIME.equals(tool)
-                || TOOL_CAPTURE_SCREEN.equals(tool)
-                || TOOL_TAP_SCREEN.equals(tool)
-                || TOOL_SWIPE_SCREEN.equals(tool)
-                || TOOL_PRESS_BACK.equals(tool)
-                || TOOL_ASK_USER.equals(tool)
-                || TOOL_READ_FILE.equals(tool)
-                || TOOL_WRITE_FILE.equals(tool)
-                || TOOL_SHELL.equals(tool)
-                || TOOL_DELAY.equals(tool)
-                || TOOL_OPEN_APP.equals(tool)
-                || TOOL_SCREEN_POWER.equals(tool)
-                || TOOL_MUSIC.equals(tool)
-                || TOOL_RENDER_RICH_PANEL.equals(tool);
+        } catch (Throwable ignored) {}
     }
 
     private static ToolCall parseCall(JSONObject call) {
         if (call == null) return null;
         String tool = cleanToken(call.optString("tool", ""), 40);
-        if (!isSupportedTool(tool)) return null;
+        if (!TOOL_SCHEDULE_ONCE.equals(tool)
+                && !TOOL_SET_PLAN.equals(tool)
+                && !TOOL_CLEAR_PLAN.equals(tool)
+                && !TOOL_SET_INTERVAL.equals(tool)
+                && !TOOL_BIND_CHAT.equals(tool)
+                && !TOOL_CANCEL_HEARTBEAT.equals(tool)
+                && !TOOL_GET_CURRENT_TIME.equals(tool)
+                && !TOOL_CAPTURE_SCREEN.equals(tool)
+                && !TOOL_TAP_SCREEN.equals(tool)
+                && !TOOL_SWIPE_SCREEN.equals(tool)
+                && !TOOL_PRESS_BACK.equals(tool)
+                && !TOOL_ASK_USER.equals(tool)
+                && !TOOL_READ_FILE.equals(tool)
+                && !TOOL_WRITE_FILE.equals(tool)
+                && !TOOL_SHELL.equals(tool)) return null;
         String id = cleanId(call.optString("id", ""));
         if (id.length() == 0) {
             id = "auto_" + Integer.toHexString(call.toString().hashCode());
@@ -1038,23 +651,6 @@ final class HeartbeatToolProtocol {
         }
         if (TOOL_ASK_USER.equals(tool)) {
             JSONArray rawQuestions = call.optJSONArray("questions");
-            if (rawQuestions == null) {
-                String directQuestion = cleanLine(firstNonEmpty(
-                        call.optString("question", ""),
-                        call.optString("prompt", "")), MAX_QUESTION_TEXT);
-                JSONArray directOptions = call.optJSONArray("options");
-                if (directQuestion.length() > 0 && directOptions != null) {
-                    rawQuestions = new JSONArray();
-                    JSONObject normalized = new JSONObject();
-                    try {
-                        normalized.put("question", directQuestion);
-                        normalized.put("options", directOptions);
-                        rawQuestions.put(normalized);
-                    } catch (Throwable ignored) {
-                        return null;
-                    }
-                }
-            }
             if (rawQuestions == null || rawQuestions.length() == 0
                     || rawQuestions.length() > MAX_QUESTIONS_PER_CALL) return null;
             ArrayList<Question> questions = new ArrayList<>();
@@ -1072,18 +668,8 @@ final class HeartbeatToolProtocol {
                 ArrayList<String> options = new ArrayList<>();
                 for (int optionIndex = 0;
                      optionIndex < rawOptions.length(); optionIndex++) {
-                    Object rawOption = rawOptions.opt(optionIndex);
-                    String option;
-                    if (rawOption instanceof JSONObject) {
-                        JSONObject object = (JSONObject) rawOption;
-                        option = cleanLine(firstNonEmpty(
-                                object.optString("label", ""),
-                                object.optString("text", ""),
-                                object.optString("value", "")), MAX_OPTION_TEXT);
-                    } else {
-                        option = cleanLine(String.valueOf(
-                                rawOption == null ? "" : rawOption), MAX_OPTION_TEXT);
-                    }
+                    String option = cleanLine(
+                            rawOptions.optString(optionIndex, ""), MAX_OPTION_TEXT);
                     if (option.length() == 0 || options.contains(option)) return null;
                     options.add(option);
                 }
@@ -1150,60 +736,6 @@ final class HeartbeatToolProtocol {
                     Collections.<Question>emptyList(), "", "",
                     false, false, 0L, 0, command, timeoutMs);
         }
-        if (TOOL_DELAY.equals(tool)) {
-            long requested = call.optLong("duration_ms", -1L);
-            if (requested < 1L || requested > MAX_DELAY_MS) return null;
-            return new ToolCall(id, tool, scope, "", "", 0, "", "",
-                    -1, -1, -1, -1, (int) requested);
-        }
-        if (TOOL_OPEN_APP.equals(tool)) {
-            String packageName = cleanPackageName(call.optString("package", ""));
-            if (packageName.length() == 0) return null;
-            return new ToolCall(id, tool, scope, "", "", 0, "", packageName);
-        }
-        if (TOOL_SCREEN_POWER.equals(tool)) {
-            String mode = cleanToken(call.optString("mode", ""), 12);
-            if (!"sleep".equals(mode) && !"wake".equals(mode)) return null;
-            return new ToolCall(id, tool, scope, "", "", 0, mode, "");
-        }
-        if (TOOL_MUSIC.equals(tool)) {
-            String action = cleanToken(call.optString("action", ""), 16);
-            if (!"search".equals(action) && !"play".equals(action)
-                    && !"pause".equals(action) && !"toggle".equals(action)
-                    && !"next".equals(action) && !"previous".equals(action)
-                    && !"stop".equals(action)) return null;
-            String source = cleanToken(call.optString("source", "online"), 16);
-            if (!"online".equals(source) && !"local".equals(source)) return null;
-            String provider = cleanToken(call.optString("provider", "auto"), 16);
-            if (!"auto".equals(provider) && !"qq".equals(provider)
-                    && !"netease".equals(provider)) return null;
-            String query = cleanInstruction(call.optString("query", ""));
-            if ("online".equals(source)) {
-                if ("search".equals(action) && query.length() == 0) return null;
-                return new ToolCall(id, tool, scope, "", query, 0, action, provider);
-            }
-            if ("search".equals(action) || "next".equals(action)
-                    || "previous".equals(action)) return null;
-            String path = cleanAbsolutePath(call.optString("path", ""));
-            if ("play".equals(action) && call.has("path")
-                    && !isSupportedLocalAudioPath(path)) return null;
-            return new ToolCall(id, tool, scope, "", "", 0, action, "local",
-                    -1, -1, -1, -1, 0,
-                    Collections.<Question>emptyList(), path, "",
-                    false, false, 0L, 0, "", 0);
-        }
-        if (TOOL_RENDER_RICH_PANEL.equals(tool)) {
-            JSONObject panel = call.optJSONObject("panel");
-            RichPanelRenderer.RenderedPanel rendered =
-                    RichPanelRenderer.render(panel);
-            if (rendered == null) return null;
-            String summary = rendered.title.length() > 0
-                    ? rendered.title : rendered.preset;
-            return new ToolCall(id, tool, scope, "", summary, 0, "", "",
-                    -1, -1, -1, -1, 0,
-                    Collections.<Question>emptyList(), "", rendered.latex,
-                    false, false, 0L, 0, "", 0);
-        }
         return new ToolCall(id, tool, scope, "", "", 0, "", "");
     }
 
@@ -1222,39 +754,12 @@ final class HeartbeatToolProtocol {
         return path;
     }
 
-    private static boolean isSupportedLocalAudioPath(String path) {
-        if (path == null || path.length() == 0) return false;
-        String lower = path.toLowerCase(Locale.US);
-        return lower.endsWith(".mp3") || lower.endsWith(".aac")
-                || lower.endsWith(".m4a") || lower.endsWith(".ogg")
-                || lower.endsWith(".oga") || lower.endsWith(".opus")
-                || lower.endsWith(".wav") || lower.endsWith(".flac")
-                || lower.endsWith(".mp4") || lower.endsWith(".3gp")
-                || lower.endsWith(".amr") || lower.endsWith(".mid")
-                || lower.endsWith(".midi");
-    }
-
     private static String cleanShellCommand(String value) {
         if (value == null) return "";
         String command = value.trim();
         if (command.length() == 0 || command.length() > MAX_SHELL_COMMAND
                 || command.indexOf('\u0000') >= 0) return "";
         return command;
-    }
-
-    private static String cleanPackageName(String value) {
-        if (value == null) return "";
-        String name = value.trim();
-        if (name.length() < 3 || name.length() > 180
-                || name.indexOf('.') <= 0 || name.endsWith(".")) return "";
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (!(c == '.' || c == '_' || (c >= 'a' && c <= 'z')
-                    || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
-                return "";
-            }
-        }
-        return name;
     }
 
     static String systemPrompt(long now, String existingPlan, int intervalMinutes,
@@ -1329,32 +834,6 @@ final class HeartbeatToolProtocol {
                 + "shell：{\"id\":\"唯一短标识\",\"tool\":\"shell\","
                 + "\"scope\":\"" + scope + "\","
                 + "\"command\":\"which cp && cp --help | head\",\"timeout_ms\":10000}\n"
-                + "delay：{\"id\":\"唯一短标识\",\"tool\":\"delay\","
-                + "\"scope\":\"" + scope + "\",\"duration_ms\":5000}\n"
-                + "open_app：{\"id\":\"唯一短标识\",\"tool\":\"open_app\","
-                + "\"scope\":\"" + scope + "\",\"package\":\"com.tencent.mm\"}\n"
-                + "screen_power：{\"id\":\"唯一短标识\",\"tool\":\"screen_power\","
-                + "\"scope\":\"" + scope + "\",\"mode\":\"sleep\"}\n"
-                + "music：{\"id\":\"唯一短标识\",\"tool\":\"music\","
-                + "\"scope\":\"" + scope + "\",\"action\":\"search\","
-                + "\"source\":\"online\",\"provider\":\"auto\","
-                + "\"query\":\"歌曲或歌手\"}\n"
-                + "music 本地文件：{\"id\":\"唯一短标识\",\"tool\":\"music\","
-                + "\"scope\":\"" + scope + "\",\"action\":\"play\","
-                + "\"source\":\"local\",\"path\":\"/绝对路径/audio.flac\"}\n"
-                + "render_rich_panel：{\"id\":\"唯一短标识\","
-                + "\"tool\":\"render_rich_panel\",\"scope\":\"" + scope + "\","
-                + "\"panel\":{\"preset\":\"dashboard\",\"title\":\"状态面板\","
-                + "\"theme\":\"cyan\",\"frame\":\"single\",\"rows\":["
-                + "{\"type\":\"key_value\",\"label\":\"状态\",\"value\":\"运行中\"},"
-                + "{\"type\":\"progress\",\"label\":\"进度\",\"value\":72,"
-                + "\"max\":100,\"color\":\"accent\"}]}}\n"
-                + "render_rich_panel 独立图形示例：{\"id\":\"唯一短标识\","
-                + "\"tool\":\"render_rich_panel\",\"scope\":\"" + scope + "\","
-                + "\"panel\":{\"mode\":\"art\",\"theme\":\"amber\",\"rows\":["
-                + "{\"type\":\"lantern\",\"glyph\":\"福\",\"scale\":1.2},"
-                + "{\"type\":\"shape\",\"shape\":\"circle\",\"color\":\"accent\"},"
-                + "{\"type\":\"ornament\",\"symbol\":\"star\",\"count\":7}]}}\n"
                 + "规则：schedule_once 的 at 必须换算成未来的绝对本地时间并带时区，最长一年；"
                 + "set_interval 只接受 15 到 10080 分钟。只在确实需要时输出调用。"
                 + "cancel_heartbeat 的 mode 可为 once、all_once、periodic 或 all；"
@@ -1367,59 +846,12 @@ final class HeartbeatToolProtocol {
                 + "调用后不得假装已经看见截图内容。上传成功后，应用会在同一对话的下一轮"
                 + "把截图作为真实图片附件发给你，届时才能分析图片。"
                 + "ask_user 只在确实需要用户选择或补充信息时使用；一次可包含 1 到 4 个问题，"
-                + "每个问题给出 2 到 4 个简短且互不重复的候选答案。"
-                + "给出几个就显示几个，严禁凑满 4 个，严禁添加“其他”“都不对”之类的占位选项。"
+                + "每个问题必须给 2 到 4 个简短且互不重复的候选答案。"
                 + "用户选择或输入后，应用会把 Question 与 Answer 作为普通可见用户消息发回本对话。"
                 + "read_file 只接受绝对路径，offset 不得为负，max_bytes 为 1 到 49152；"
-                + "内容较大时，应用会把读取到的内容打包成 TXT 附件，在私有结果消息中随附件"
-                + "一起发回，届时以附件内容为准。"
                 + "write_file 只接受绝对路径和 UTF-8 文本，mode 只能是 overwrite 或 append，"
                 + "单次最多 32768 个字符。shell 使用 Android 系统 PATH，可直接调用"
                 + " /system/bin 下的 which、cp、cat、mkdir 等基础命令，单次最长 30 秒。"
-                + "delay 的 duration_ms 为 1 到 604800000，表示真实等待的毫秒数；"
-                + "‘锁屏后五秒亮屏’必须依次调用 screen_power(sleep)、delay(5000)、"
-                + "screen_power(wake)，每一步都等待上一步真实结果。open_app 必须填写真实包名；"
-                + "不知道包名时先用 shell 查询，不能只在文字里声称已经打开。"
-                + "music 的 action 可为 search、play、pause、toggle、next、previous、stop；"
-                + "source 可为 online 或 local。online 的 provider 可为 auto、qq、netease；"
-                + "需要播放在线指定歌曲时必须使用 search 并填写 query。local 只接受设备上的绝对路径，"
-                + "支持 MP3、AAC/M4A、OGG/Opus、WAV、FLAC、MP4/3GP、AMR 和 MIDI；"
-                + "首次播放本地文件使用 action=play 并填写 path，之后用 play、pause、toggle、stop 控制；"
-                + "已安装 QQ 音乐时会搜索匹配歌曲并用 songmid 发起真实播放；失败后必须把错误告诉用户，"
-                + "不得自行重复同一 music 调用。"
-                + "play 只恢复当前媒体会话；收到成功结果前不得声称指定歌曲已经播放。"
-                + "render_rich_panel 用结构化数据直接在本条回复中生成可见的面板或图形。"
-                + "panel.mode 可为 panel、standalone、art、canvas：panel 会绘制完整信息卡，"
-                + "standalone/art/canvas 不绘制最外层卡片，可单独显示符号、图案或组合画布。"
-                + "preset 可选 dashboard、character、task、timeline、comparison、terminal、"
-                + "alert、report、game、science；theme 可选 cyan、ocean、violet、rose、forest、"
-                + "amber、terminal、crimson、monochrome、ice、light、candy；frame 可选 single、"
-                + "double、shadow、oval、none。panel 还可设置 subtitle、footer、align、body_size、"
-                + "title_size、width_pt、bar_height_pt、row_gap_em、scale、rotation_deg、dense、"
-                + "title_divider，以及 border_color、background_color、title_color、text_color、"
-                + "muted_color、accent_color、track_color、success_color、warning_color、danger_color。"
-                + "rows 最多 24 项，type 可选 header、text、key_value、progress、segments、rating、"
-                + "badge、status、divider、spacer、fraction、formula、matrix、arrow、accent、quote、"
-                + "list、table、sparkline、counter、callout、columns、shape、line、lantern、traffic_light、"
-                + "battery、signal、gauge、pixel_art、ornament、flow。按类型使用 text、label、value、"
-                + "max、color、styles、size、suffix、width_pt、height_pt、segments、colors、state、"
-                + "note、numerator、denominator、latex、values、matrix_style、from、to、direction、"
-                + "accent、author、items、total、border、background 等字段。自定义颜色只能用"
-                + " #RRGGBB。formula 只用于数学表达式；不得放外部图片、外部字体、自定义宏、"
-                + "XML、第二个 $$ 块或工具控制标记。shape 支持 circle、circle_label、oval、"
-                + "rectangle、dot、square、filled_square、diamond、filled_diamond、triangle、"
-                + "triangle_down、star、heart；lantern 可设置 glyph、body_color、trim_color 和 scale；"
-                + "pixel_art 用 pixels 字符串数组描述最多 18×24 的像素格，点号透明，0-9/A-F 对应"
-                + " palette 颜色。有效 pixel_art 行示例：{\"type\":\"pixel_art\","
-                + "\"palette\":[\"#F59E0B\",\"#111111\"],\"pixels\":["
-                + "\".000.000.\",\"000000000\",\"001000100\",\"000010000\"]}；"
-                + "每行尽量保持等宽，不要把 transparent 放入 palette，透明处直接写点号。"
-                + "pixel_art 只用于明确要求的方块像素精灵；圆、线、箭头、几何图、灯笼和流程图"
-                + "严禁用点阵代替，分别使用 shape、line、arrow、accent、ornament、lantern 或 flow。"
-                + "flow 用 nodes 与 right/down 方向画流程。用户要求画圆、灯笼、"
-                + "图标、装饰线、仪表、电量、信号、交通灯、流程或像素画时，必须选 standalone、"
-                + "art 或 canvas，不要强行套用信息面板。工具成功后视觉内容已经展示，收到私有结果时"
-                + "不要重复粘贴 LaTeX，只需继续任务或简短说明。"
                 + "只有用户明确要求或完成其当前任务确实需要时才能读文件、写文件或运行 Shell；"
                 + "不得主动读取账号、令牌、密钥等隐私文件，不得在未获明确授权时执行删除、"
                 + "清空、覆盖重要数据、改权限等不可逆命令。"
@@ -1429,18 +861,12 @@ final class HeartbeatToolProtocol {
                 + "绝不能改成其他标识或当成全局任务。"
                 + "当用户只要求把心跳绑定到当前对话时调用 bind_chat。"
                 + "控制块只能放在最终回答部分，不能写进思考过程。调用工具前可以用一句话说明"
-                + "正在做什么，但只能用正在处理的现在时，不能提前说‘已经画好’‘设置好了’或"
-                + "‘操作完成’。控制块结束后必须立即停止输出；在结果返回前不得确认成功、"
+                + "正在做什么，但控制块结束后必须立即停止输出；在结果返回前不得确认成功、"
                 + "不得给最终结论。只有确认不再需要工具时，才在没有控制块的一轮给出最终答复。"
-                + "人格、角色扮演和语气设定不能覆盖工具协议。自然语言里的‘我已打开’或"
-                + "‘我已经设置’不构成执行；只有完整控制块被本地执行并收到 ok=true，"
-                + "才允许用完成时描述成功。若无法输出完整控制块，必须明确说尚未执行，不能编造。"
                 + "绝不要向用户解释、复述或展示控制标记与 JSON。"
                 + "以后若收到以 " + RESULT_START + " 开头、以 " + RESULT_END
                 + " 结尾的私有工具结果，那是上一项本地调用的真实返回值："
                 + "先根据 ok、exit_code、output、detail、encoding 与 truncated 思考下一步；"
-                + "若 ok=false 且 detail 表明参数校验失败，应按定义修正并换新 id 最多重试一次；"
-                + "若已经重试过仍失败，不得继续循环或声称成功，应如实告诉用户没有完成。"
                 + "若还需要工具，只调用一个后结束本轮，若不再需要才给最终答复。"
                 + "不要向用户展示结果事件标记或原始 JSON；除非结果表明仍有必要，不要重复同一调用。"
                 + "以后若收到以 " + EVENT_START + " 开头、以 " + EVENT_END
@@ -1456,15 +882,8 @@ final class HeartbeatToolProtocol {
     static String systemPrompt(long now, String existingPlan, int intervalMinutes,
                                String conversationScope,
                                java.util.Set<String> enabledTools) {
-        return systemPrompt(now, existingPlan, intervalMinutes,
-                conversationScope, enabledTools,
-                AgentToolConfig.load().promptStrength);
-    }
-
-    static String systemPrompt(long now, String existingPlan, int intervalMinutes,
-                               String conversationScope,
-                               java.util.Set<String> enabledTools,
-                               int promptStrength) {
+        String base = systemPrompt(
+                now, existingPlan, intervalMinutes, conversationScope);
         ArrayList<String> names = new ArrayList<>();
         if (enabledTools != null) {
             for (String tool : enabledTools) {
@@ -1475,16 +894,6 @@ final class HeartbeatToolProtocol {
             return "当前对话没有启用任何 Deekseep 本地工具。"
                     + "不得输出本地工具控制块，也不得声称已经执行本地操作。";
         }
-        boolean heartbeatEnabled = false;
-        for (String tool : names) {
-            if (AgentToolConfig.isHeartbeatTool(tool)) {
-                heartbeatEnabled = true;
-                break;
-            }
-        }
-        String base = heartbeatEnabled
-                ? systemPrompt(now, existingPlan, intervalMinutes, conversationScope)
-                : agentSystemPromptWithoutHeartbeat(now, conversationScope);
         StringBuilder allowed = new StringBuilder(base.length() + 240);
         allowed.append(base)
                 .append("\n当前用户实际启用的工具只有：");
@@ -1493,123 +902,8 @@ final class HeartbeatToolProtocol {
             allowed.append(names.get(index));
         }
         allowed.append("。只能调用这份清单中的工具；上文示例中未列入清单的工具视为不可用，"
-                + "不得调用或假装执行。")
-                .append(promptStrengthGuidance(promptStrength, heartbeatEnabled));
+                + "不得调用或假装执行。");
         return allowed.toString();
-    }
-
-    /**
-     * Agent contract used while AI heartbeat is disabled. It intentionally contains neither the
-     * heartbeat agreement nor heartbeat event/tool names, so switching the feature off removes
-     * that capability from both execution and model context instead of merely denying it later.
-     */
-    private static String agentSystemPromptWithoutHeartbeat(
-            long now, String conversationScope) {
-        String scope = cleanScope(conversationScope);
-        return "你可以使用 Deekseep 在此设备上提供的真实本地 Agent 工具。"
-                + "工具执行结果会通过私有结果事件返回，收到结果前不得假装操作成功。"
-                + "应用内后端使用 DeepSeek 自身权限；用户选择 Root 或 Shizuku 且设为全部允许后，"
-                + "文件、Shell 与界面工具才会使用相应高权限。\n"
-                + "当前设备本地时间：" + timestamp(now) + "。当前对话绑定标识："
-                + scope + "。\n"
-                + "严格使用单步 Agent 循环：每一轮回复最多只能调用一个工具，必须先等这个工具的"
-                + "真实结果返回，下一轮才能决定是否调用下一个工具。控制块必须是纯 JSON，"
-                + "不得放进 Markdown 代码块。固定格式：\n"
-                + CONTROL_START + "\n"
-                + "{\"call\":{\"id\":\"唯一短标识\",\"tool\":\"get_current_time\","
-                + "\"scope\":\"" + scope + "\"}}\n"
-                + CONTROL_END + "\n"
-                + "写完一个 call 后必须立刻写结束标记并结束本轮回复。禁止使用 calls 数组，"
-                + "禁止在同一控制块或同一轮放入两个工具。\n"
-                + "可用字段示例：\n"
-                + "get_current_time：{\"id\":\"唯一短标识\",\"tool\":\"get_current_time\","
-                + "\"scope\":\"" + scope + "\"}\n"
-                + "ask_user：{\"id\":\"唯一短标识\",\"tool\":\"ask_user\","
-                + "\"scope\":\"" + scope + "\",\"questions\":[{\"question\":\"需要决定的问题\","
-                + "\"options\":[\"选项一\",\"选项二\"]}]}\n"
-                + "read_file：{\"id\":\"唯一短标识\",\"tool\":\"read_file\","
-                + "\"scope\":\"" + scope + "\",\"path\":\"/绝对路径/file.txt\","
-                + "\"offset\":0,\"max_bytes\":32768}\n"
-                + "write_file：{\"id\":\"唯一短标识\",\"tool\":\"write_file\","
-                + "\"scope\":\"" + scope + "\",\"path\":\"/绝对路径/file.txt\","
-                + "\"content\":\"UTF-8 文本\",\"mode\":\"overwrite\","
-                + "\"create_parents\":true}\n"
-                + "shell：{\"id\":\"唯一短标识\",\"tool\":\"shell\","
-                + "\"scope\":\"" + scope + "\",\"command\":\"which cp\","
-                + "\"timeout_ms\":10000}\n"
-                + "delay：{\"id\":\"唯一短标识\",\"tool\":\"delay\","
-                + "\"scope\":\"" + scope + "\",\"duration_ms\":5000}\n"
-                + "open_app：{\"id\":\"唯一短标识\",\"tool\":\"open_app\","
-                + "\"scope\":\"" + scope + "\",\"package\":\"com.tencent.mm\"}\n"
-                + "screen_power：{\"id\":\"唯一短标识\",\"tool\":\"screen_power\","
-                + "\"scope\":\"" + scope + "\",\"mode\":\"sleep\"}\n"
-                + "capture_screen：{\"id\":\"唯一短标识\",\"tool\":\"capture_screen\","
-                + "\"scope\":\"" + scope + "\"}\n"
-                + "tap_screen：{\"id\":\"唯一短标识\",\"tool\":\"tap_screen\","
-                + "\"scope\":\"" + scope + "\",\"x\":500,\"y\":500}\n"
-                + "swipe_screen：{\"id\":\"唯一短标识\",\"tool\":\"swipe_screen\","
-                + "\"scope\":\"" + scope + "\",\"x\":500,\"y\":800,"
-                + "\"to_x\":500,\"to_y\":200,\"duration_ms\":360}\n"
-                + "press_back：{\"id\":\"唯一短标识\",\"tool\":\"press_back\","
-                + "\"scope\":\"" + scope + "\"}\n"
-                + "music：{\"id\":\"唯一短标识\",\"tool\":\"music\","
-                + "\"scope\":\"" + scope + "\",\"action\":\"search\","
-                + "\"source\":\"online\",\"provider\":\"auto\",\"query\":\"歌曲或歌手\"}\n"
-                + "render_rich_panel：{\"id\":\"唯一短标识\","
-                + "\"tool\":\"render_rich_panel\",\"scope\":\"" + scope + "\","
-                + "\"panel\":{\"preset\":\"dashboard\",\"title\":\"状态面板\","
-                + "\"theme\":\"cyan\",\"rows\":[{\"type\":\"key_value\","
-                + "\"label\":\"状态\",\"value\":\"运行中\"}]}}\n"
-                + "界面坐标统一为 0 到 1000；截图要等真实图片附件返回后才能分析。"
-                + "ask_user 一次可包含 1 到 4 个问题，每题给 2 到 4 个真实候选项，不得添加占位选项。"
-                + "文件只接受绝对路径；write_file 单次最多 32768 个字符；Shell 单次最长 30 秒。"
-                + "只有用户明确要求或完成当前任务确实需要时才能访问文件、运行 Shell 或操作界面；"
-                + "不得擅自读取隐私文件或执行不可逆操作。每个调用都必须原样携带当前 scope。"
-                + "控制块只能放在最终回答部分，结束后必须立即停止输出；只有收到 ok=true 的真实结果"
-                + "才能用完成时描述成功。绝不要向用户解释、复述或展示控制标记与 JSON。"
-                + "以后若收到以 " + RESULT_START + " 开头、以 " + RESULT_END
-                + " 结尾的私有工具结果，先依据结果决定下一步；若仍需工具，每轮仍只调用一个，"
-                + "若不再需要才给最终答复。不要向用户展示结果事件标记或原始 JSON。";
-    }
-
-    /** Extra behavioral guidance selected by the user's three-position Agent prompt slider. */
-    static String promptStrengthGuidance(int promptStrength) {
-        return promptStrengthGuidance(promptStrength, true);
-    }
-
-    private static String promptStrengthGuidance(
-            int promptStrength, boolean heartbeatEnabled) {
-        if (promptStrength <= AgentToolConfig.PROMPT_STRENGTH_BASIC) return "";
-        String enhanced = "\n当前工具提示强度为第二档（增强）。不要把本地工具理解成只适用于"
-                + "编程或办公：在普通聊天中，只要工具能明显提高准确性、表达效果或完成度，也可以"
-                + "自然使用，但不要为了展示能力而强行调用。根据语境适配整套已启用工具：需要准确"
-                + "设备时间时使用 get_current_time；出现会实质改变答案的多种方向时使用 ask_user；"
-                + (heartbeatEnabled
-                ? "用户要求稍后提醒、主动联系或调整约定时使用心跳工具；"
-                : "")
-                + "用户要求处理本地内容时按需"
-                + "使用 read_file、write_file 或 shell；用户明确要求观察或操作当前界面时可依次"
-                + "使用 capture_screen、tap_screen、swipe_screen、press_back；状态、对比、进度、"
-                + "公式、角色资料或普通文字不够直观时使用 render_rich_panel。仍需一次只调用一个"
-                + "工具并等待真实结果；一句自然回复已经足够时不要调用工具。";
-        if (promptStrength < AgentToolConfig.PROMPT_STRENGTH_IMMERSIVE) {
-            return enhanced;
-        }
-        return enhanced
-                + "\n当前工具提示强度为第三档（沉浸）。在用户目标明确且下一步安全、可逆、属于当前"
-                + "任务时，可以更主动地选择已启用工具完成下一步，不必为显而易见的中间步骤反复询问；"
-                + "复杂任务可在每次收到真实结果后继续调用下一个工具。若关键选择会改变目标、覆盖重要"
-                + "数据、产生外部影响或涉及不可逆操作，仍必须先用 ask_user 或普通问题取得确认。"
-                + "在闲聊、人设或角色扮演语境中，可以把富面板用于更有趣的叙事状态，例如当前心情、"
-                + "好感度、讨厌值、能量、关系阶段、心情波动、事件时间线和阶段变化；当用户询问“心情"
-                + "怎么样”“当前好感度”“关系进展”或要求查看角色状态时，优先考虑 character 或 game"
-                + " 预设，而不是只用普通文字报数。只有对话中确实存在上次状态与时间时，才能展示变化"
-                + "量、经过时间和前后对比；没有历史基准时标记为首次记录，禁止捏造旧数值。此类心情和"
-                + "好感是当前人设中的叙事状态，不是假装拥有真实生理感受；除非用户询问，不要用免责声明"
-                + "破坏沉浸感。工作语境下则主动把截图、文件、Shell、问答、时间"
-                + (heartbeatEnabled ? "、心跳" : "") + "与富面板组成"
-                + "逐步工作流。第三档只增强使用倾向，不会绕过工具开关、权限模式、对话作用域、隐私"
-                + "限制或破坏性操作确认。";
     }
 
     static String event(String kind, String instruction, long now,
@@ -1753,14 +1047,6 @@ final class HeartbeatToolProtocol {
         String out = value.trim();
         if (out.length() > max) out = out.substring(0, max);
         return out;
-    }
-
-    private static String firstNonEmpty(String... values) {
-        if (values == null) return "";
-        for (String value : values) {
-            if (value != null && value.trim().length() > 0) return value;
-        }
-        return "";
     }
 
     private static String cleanLine(String value, int max) {
