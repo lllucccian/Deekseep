@@ -16,11 +16,317 @@ final class UiLanguageCatalog {
         // The complete catalog is grouped below by screen. Longer fragments are applied first so
         // formatted module status strings can safely reuse the same translations.
         add("Deekseep", "Deekseep");
+        add("聊天", "Chat");
+        add("账号与隐私", "Accounts & privacy");
+        add("外观", "Appearance");
+        add("界面美化", "Interface customization");
+        add("外观设置", "Appearance settings");
+        add("自定义 DeepSeek 头像", "Custom DeepSeek avatar");
+        add("当前使用 DeepSeek 默认头像", "Currently using the default DeepSeek avatar");
+        add("已使用自定义头像", "Custom avatar in use");
+        add("需要在灰度功能管理里面开启“显示助手头像”，否则聊天页不会显示自定义头像。",
+                "Enable “Show assistant avatar” in Grey feature management first, or the custom avatar will not appear in chats.");
+        add("选择后返回聊天或重新进入会话即可生效。",
+                "Return to the chat or reopen the conversation after selecting an image to apply it.");
+        add("选择图片", "Choose image");
+        add("DeepSeek 头像已更新", "DeepSeek avatar updated");
+        add("已恢复 DeepSeek 默认头像", "Restored the default DeepSeek avatar");
+        add("恢复默认头像失败", "Could not restore the default avatar");
+        add("头像保存失败", "Could not save the avatar");
+        add("头像设置保存失败", "Could not save the avatar setting");
+        add("头像处理失败", "Could not process the avatar");
+        add("无法解码所选图片", "Could not decode the selected image");
+        add("助手头像 灰度 显示助手头像", "assistant avatar grey feature show assistant avatar");
+        add("鲸鱼图标动效", "Whale icon motion");
+        add("让首页鲸鱼图标缓慢旋转", "Slowly rotate the whale icon on the chat home screen");
+        add("首页鲸鱼持续旋转", "Continuously rotate the whale icon on the home screen");
+        add("鲸鱼旋转速度", "Whale rotation speed");
+        add("0.1× 慢速                                      1.0× 快速",
+                "0.1× Slow                                      1.0× Fast");
+        add("深海文字波纹", "Deep-sea text wave");
+        add("右上向左下斜落 · 宽波峰约占字宽 1/3",
+                "Falls diagonally from upper right to lower left · broad crest spans about one third of a glyph");
+        add("文字波纹速度", "Text-wave speed");
+        add("0.2× 舒缓                                      1.5× 灵动",
+                "0.2× Calm                                      1.5× Lively");
+        add("文字波纹设置保存失败", "Could not save the text-wave setting");
+        add("文字波纹速度保存失败", "Could not save the text-wave speed");
+        add("主页欢迎语", "Home greeting");
+        add("当前：跟随 DeepSeek 默认文案", "Current: follow DeepSeek's default copy");
+        add("当前：", "Current: ");
+        add("自定义主页欢迎语", "Custom home greeting");
+        add("例如：今天想我了没？", "For example: Did you miss me today?");
+        add("保存后返回主页即可看到新文案；留空会恢复 DeepSeek 默认文案。",
+                "Return to the home screen after saving to see the new copy. Leave it blank to restore DeepSeek's default.");
+        add("恢复默认", "Restore default");
+        add("主页欢迎语保存失败", "Could not save the home greeting");
+        add("主页欢迎语已保存，返回主页后生效",
+                "Home greeting saved; return home to apply");
+        add("原生设置入口 · 实验性", "Native settings entry · Experimental");
+        add("原生设置入口", "Native settings entry");
+        add("开启：置于 DeepSeek 设置顶部的独立“插件”分组；关闭：回退为悬浮入口。",
+                "On: place it in a dedicated Plugins section at the top of DeepSeek settings. Off: fall back to the floating entry.");
+        add("宿主版本变化时可能导致应用闪退，切换后重新进入设置生效。",
+                "Host updates may cause crashes; reopen settings after switching.");
+        add("开启：置于 DeepSeek 设置顶部的独立“插件”分组；关闭：回退为悬浮入口。宿主版本变化时可能导致应用闪退，切换后重新进入设置生效。",
+                "On: place it in a dedicated Plugins section at the top of DeepSeek settings. Off: fall back to the floating entry. Host updates may cause crashes; reopen settings after switching.");
+        add("入口模式已保存，重新进入 DeepSeek 设置后生效",
+                "Entry mode saved; reopen DeepSeek settings to apply");
+        add("入口模式保存失败", "Could not save the entry mode");
+        add("插件", "Plugins");
+        add("通过爱发电赞助", "Sponsor via Afdian");
+        add("通过微信赞助", "Sponsor via WeChat");
+        add("微信赞赏码", "WeChat donation code");
+        add("调试", "Diagnostics");
+        add("工程", "Engineering");
+        add("Hook 日志", "Hook logs");
+        add("透明显示 Hook 日志", "Show Hook logs transparently");
+        add("Hook 日志显示在屏幕", "Show Hook logs on screen");
+        add("在 DeepSeek 上方透明显示最近的模块 Hook 日志。",
+                "Show recent module Hook logs in a transparent overlay over DeepSeek.");
+        add("首页", "Home");
+        add("设置", "Settings");
+        add("运行信息", "Runtime");
+        add("模块运行状态", "Module status");
+        add("构建渠道", "Build channel");
+        add("闭源保护版", "Protected build");
+        add("开源版", "Open-source build");
+        add("打开 DeepSeek", "Open DeepSeek");
+        add("模块设置位于 DeepSeek 设置页", "Module settings are in DeepSeek settings");
+        add("配置", "Configuration");
+        add("导出配置", "Export configuration");
+        add("导入配置", "Import configuration");
+        add("保存当前功能开关，不包含提示词、密钥和聊天",
+                "Save feature switches without prompts, keys, or chats");
+        add("从配置文件恢复功能开关", "Restore feature switches from a configuration file");
+        add("正在读取 DeepSeek 配置", "Reading DeepSeek configuration");
+        add("配置已导出", "Configuration exported");
+        add("配置已导入，重新打开 DeepSeek 后生效",
+                "Configuration imported; reopen DeepSeek to apply");
+        add("请先启动一次 DeepSeek，再重试", "Launch DeepSeek once, then try again");
+        add("项目", "Project");
+        add("赞助开发", "Sponsor development");
+        add("支持更快地维护和适配", "Help speed up maintenance and compatibility work");
+        add("感谢支持持续维护与适配。", "Thank you for supporting ongoing maintenance.");
+        add("GitHub 仓库", "GitHub repository");
+        add("开源许可", "Open-source license");
+        add("开源声明", "Open-source notice");
+        add("GNU GPL-3.0-only · 查看源码与许可",
+                "GNU GPL-3.0-only · View source and license");
+        add("赞助开发者", "Sponsor the developer");
+        add("支持持续开发和新版本适配",
+                "Support continued development and new-version compatibility");
+        add("感谢支持持续开发与 DeepSeek 版本适配。",
+                "Thank you for supporting continued development and DeepSeek compatibility.");
+        add("兼容性诊断报告", "Compatibility diagnostic report");
+        add("汇总宿主渠道、版本映射和功能适配结果，可一键复制。",
+                "Summarize the host channel, version mapping, and feature compatibility results, with one-tap copy.");
+        add("Hook 性能统计", "Hook performance statistics");
+        add("性能统计", "Performance statistics");
+        add("查看本次运行的事件量、平均耗时、最慢耗时和慢事件数。",
+                "View event count, average duration, slowest duration, and slow-event count for this run.");
+        add("脱敏事件追踪与导出", "Sanitized event trace and export");
+        add("事件追踪", "Event trace");
+        add("导出有限长度的关键 Hook 事件；自动隐藏令牌和私有路径。",
+                "Export a bounded trace of key Hook events with tokens and private paths automatically redacted.");
+        add("本地禁言", "Local mute");
+        add("本地禁言 · 实验性", "Local mute · Experimental");
+        // Legacy labels are kept only for category matching across older saved layouts.
+        add("伪禁言", "Simulated mute");
+        add("本地禁言截止时间", "Local-mute end time");
+        add("仅在本地显示禁言状态", "Show mute status locally only");
+        add("显示至 ", "Shown until ");
+        add("仅替换本地禁言状态，让 DeepSeek 绘制原生禁言界面；不发送网络数据。",
+                "Replace only the local mute state so DeepSeek draws its native mute UI; no network data is sent.");
+        add("选择宿主原生禁言栏显示的本地截止日期与时间。",
+                "Choose the local date and time shown by the host's native mute bar.");
+        add("本地禁言已关闭", "Local mute is off");
+        add("尚未设置有效截止时间", "No valid deadline set");
+        add("已开启至 ", "Enabled until ");
+        add("已保存，开关未开启 · ", "Saved; switch is off · ");
+        add("请先设置一个未来的截止时间", "Set a future deadline first");
+        add("截止时间已更新，本地禁言保持开启",
+                "Deadline updated; local mute remains enabled");
+        add("截止时间已保存，打开开关后启用",
+                "Deadline saved; turn on the switch to enable it");
+        add("禁用数据用于优化体验",
+                "Disable data used for service improvement");
+        add("开启后立即关闭 DeepSeek 的“数据用于优化体验”，并阻止再次开启。",
+                "Turn off DeepSeek's data use for service improvement immediately and prevent it from being enabled again.");
+        add("禁用设置保存失败", "Could not save the disable-data setting");
+        add("已关闭数据用于优化体验",
+                "Data use for service improvement is now off");
+        add("禁用已启用，但服务器同步失败：",
+                "Data-use blocking is enabled, but server sync failed: ");
+        add("无法关闭数据用于优化体验",
+                "Could not disable data use for service improvement");
+        add("数据用于优化体验", "Data use for service improvement");
+        add("选择截止日期", "Choose end date");
+        add("选择截止时间", "Choose end time");
+        add("下一步", "Next");
+        add("上一步", "Back");
+        add("年", "Year");
+        add("月", "Month");
+        add("日", "Day");
+        add("时", "Hour");
+        add("分", "Minute");
+        add("已启用本地原生禁言显示，返回聊天界面后生效",
+                "Native local mute display is enabled; return to the chat to apply it");
+        add("截止时间必须晚于当前时间", "The end time must be in the future");
+        add("本地原生禁言界面显示至 ", "Native local mute UI shown until ");
+        add("提示词、会话工具、AI 心跳和模型能力",
+                "Prompts, chat tools, AI heartbeat, and model features");
+        add("账号管理、登录入口和内容保护",
+                "Account management, sign-in options, and content protection");
+        add("背景、贴纸、气泡与聊天界面定制",
+                "Backgrounds, stickers, bubbles, and chat customization");
+        add("诊断日志和兼容性排查", "Diagnostic logs and compatibility checks");
+        add("Agent、本地 API、语言、备份与帮助",
+                "Agent, local API, language, backups, and help");
+        add("自定义背景、贴纸、气泡、透明度、取景和空间动效。",
+                "Customize backgrounds, stickers, bubbles, opacity, framing, and spatial motion.");
+        add("解锁专家模式与图片上传 · 实验性",
+                "Unlock expert mode and image upload · Experimental");
+        add("启用专家模型能力，并通过视觉描述中继图片。",
+                "Enable expert-model features and relay images through visual descriptions.");
+        add("AI 心跳 · 实验性", "AI heartbeat · Experimental");
+        add("AI 心跳间隔 · 实验性", "AI heartbeat interval · Experimental");
+        add("设置 AI 心跳的默认触发间隔。",
+                "Set the default interval for AI heartbeats.");
+        add("Agent · 实验性", "Agent · Experimental");
+        add("管理本地工具、权限模式以及 Root / Shizuku 后端。",
+                "Manage local tools, permission mode, and Root / Shizuku backends.");
+        add("本地 API · 实验性", "Local API · Experimental");
+        add("配置兼容接口、后台保活、密钥、监听地址和请求统计。",
+                "Configure compatible endpoints, background keepalive, keys, listeners, and request statistics.");
+        add("禁用热更新 · 实验性", "Disable hot updates · Experimental");
+        add("阻止 DeepSeek 展示普通或强制更新弹窗；不影响商店手动更新。",
+                "Prevent DeepSeek from showing normal or forced update dialogs; manual store updates are unaffected.");
+        add("热更新设置保存失败", "Could not save the update setting");
+        add("Google 登录", "Google sign-in");
+        add("专家模式", "Expert mode");
+        add("AI 心跳", "AI heartbeat");
+        add("每 %d 分钟", "Every %d minutes");
+        add("未绑定", "Not bound");
+        add("已绑定当前对话", "Bound to current chat");
+        add("已绑定其他对话", "Bound to another chat");
+        add("主动消息", "Proactive messages");
+        add("系统提示词", "System prompt");
+        add("安全审查", "Safety filtering");
+        add("微信与手机号", "WeChat and phone number");
+        add("导出会话", "Export chats");
+        add("导入聊天记录", "Import chat history");
+        add("导出 Markdown，并在下载目录生成可恢复的聊天备份包。",
+                "Export Markdown and create a restorable chat backup in Downloads.");
+        add("导出期间请保持 DeepSeek 运行；备份包卸载后仍保留在 Download/Deekseep。",
+                "Keep DeepSeek running during export. The backup remains in Download/Deekseep after uninstalling.");
+        add("选择导出的聊天备份包，只覆盖服务器已重新下发的同 ID 会话。",
+                "Select an exported chat backup and overwrite only same-ID chats already restored by the server.");
+        add("只覆盖服务器已重新下发、且会话 ID 与备份命中的记录。导入后请完整重启 DeepSeek。",
+                "Overwrite only records whose chat IDs match server-restored chats. Fully restart DeepSeek after importing.");
+        add("聊天备份包：", "Chat backup: ");
+        add("备份包跳过会话：", "Backup archive skipped chat: ");
+        add("覆盖失败：", "Overwrite failed: ");
+        add("已覆盖 ", "Overwrote ");
+        add(" 个命中会话；未命中 ", " matching chats; ");
+        add(" 个；失败 ", " unmatched; ");
+        add(" 个。请完整重启 DeepSeek。", " failed. Fully restart DeepSeek.");
+        add("全局搜索", "Global search");
+        add("记录服务器返回", "Log server responses");
+        add("诊断", "Diagnostics");
         add("导入提示词", "Import prompt");
         add("还原设置", "Reset settings");
+        add("搜索功能", "Search features");
+        add("位于：", "In: ");
+        add(" · 点击进入", " · Tap to open");
+        add("没有找到相关功能", "No matching features");
+        add("去除安全审查", "Remove safety filtering");
+        add("提示词 prompt 导入", "prompt import");
+        add("内容替换 一键破甲", "content replacement one-tap armor break");
+        add("批量 删除", "bulk delete");
+        add("修改 新建对话", "edit create chat");
+        add("导出 备份包", "export backup");
+        add("恢复 覆盖 备份包", "restore overwrite backup");
+        add("消息 搜索", "message search");
+        add("消息 字数", "message character count");
+        add("数据库 backup", "database backup");
+        add("每日", "daily");
+        add("主动消息 间隔", "proactive message interval");
+        add("账号 切换 导入", "account switch import");
+        add("谷歌 国内版", "Google mainland build");
+        add("海外版 短信", "international build SMS");
+        add("时间 截止日期", "time deadline");
+        add("隐私 training", "privacy training");
+        add("首页 文案", "home copy");
+        add("插件 悬浮", "plugin floating entry");
+        add("背景 气泡 液态玻璃 空间动效",
+                "background bubble liquid glass spatial motion");
+        add("字体 渐变", "font gradient");
+        add("日志 overlay", "log overlay");
+        add("版本 映射", "version mapping");
+        add("耗时", "duration");
+        add("网络 API", "network API");
+        add("中文 English", "Chinese English");
+        add("更新 强制更新", "update forced update");
+        add("工具 Root Shizuku", "tools Root Shizuku");
+        add("OpenAI Claude 保活", "OpenAI Claude keepalive");
+        add("本地 API", "Local API");
+        add("禁用热更新", "Disable hot updates");
+        add("灰度功能管理器", "Feature Flag Manager");
+        add("灰度功能管理器 · 实验性", "Feature Flag Manager · Experimental");
+        add("DeepSeek 原生功能管理", "DeepSeek native features");
+        add("进程管理", "Process manager");
+        add("进程管理 · Root", "Process manager · Root");
+        add("查看 DeepSeek 与模块进程，并精确冻结、解冻或杀死。",
+                "Inspect DeepSeek and module processes, then precisely freeze, resume, or kill them.");
+        add("无法打开进程管理，请确认模块 APK 已更新",
+                "Could not open process manager; update the module APK");
+        add("进程 冻结 解冻 杀死 Root", "process freeze resume kill Root");
+        add("查看、冻结或终止 DeepSeek 与模块进程",
+                "Inspect, freeze, or stop DeepSeek and module processes");
+        add("远程配置 feature flags", "remote configuration feature flags");
+        add("使用 DeepSeek 原生设置覆盖层；保留宿主自带的全部灰度项目。",
+                "Uses DeepSeek's native settings override layer and retains every host flag.");
+        add("原生覆盖已管理 ", "Native overrides manage ");
+        add(" 项。", " items.");
+        add("自动清理缓存", "Automatic cache cleanup");
+        add("每天检查一次，仅清理 DeepSeek 已确认的图片、Markdown 图表缓存中超过 ",
+                "Check once a day and delete only files older than ");
+        add(" 天的文件。", " days from verified DeepSeek image and Markdown-chart caches.");
+        add("缓存保留时间", "Cache retention");
+        add("保留 3 天", "Keep 3 days");
+        add("保留 7 天", "Keep 7 days");
+        add("保留 30 天", "Keep 30 days");
+        add("保存失败", "Save failed");
+        add("消息时间与详情", "Message time and details");
+        add("时间戳 message details", "timestamp message details");
+        add("在聊天编辑器中显示每条本地消息的时间，点击时间可查看消息 ID 与详情。",
+                "Show each local message's time in the chat editor; tap it for the message ID and details.");
+        add("自动继续生成", "Automatically continue generating");
+        add("继续生成 长思考 后台 续写", "continue generation long reasoning background resume");
+        add("长思考被服务器暂停时自动继续，切到后台也会生效。",
+                "Automatically resume when the server pauses a long response, even in the background.");
+        add("回复完成通知", "Reply-ready notification");
+        add("切到后台后，模型完成回答时发送系统通知。",
+                "Send a system notification when a response finishes in the background.");
+        add("消息详情", "Message details");
+        add("消息 ID：", "Message ID: ");
+        add("角色：", "Role: ");
+        add("时间：", "Time: ");
+        add("时间未知", "Unknown time");
+        add("图片：", "Images: ");
+        add("含思考内容：", "Has reasoning: ");
+        add("详情", "Details");
+        add("用户", "User");
+        add("助手", "Assistant");
+        add("是", "Yes");
+        add("否", "No");
         add("系统提示词注入", "System prompt injection");
         add("去他妈的安全审查", "Prevent response replacement");
         add("聊天记录多选", "Multi-select chats");
+        add("长按会话进入多选", "Long-press a chat to select multiple");
+        add("每日自动备份", "Back up daily");
+        add("保留被替换前的完整回答", "Keep the complete answer before replacement");
         add("解锁 Google 登录", "Unlock Google sign-in");
         add("解锁微信与手机号登录", "Unlock WeChat and phone sign-in");
         add("记录服务器返回（诊断）", "Log server responses (diagnostics)");
@@ -28,6 +334,8 @@ final class UiLanguageCatalog {
         add("聊天外观", "Chat appearance");
         add("全局液态玻璃", "Global liquid glass");
         add("启用全局液态玻璃", "Enable global liquid glass");
+        add("共享一张背板纹理，在气泡、输入区和侧栏边缘产生柔和折射。",
+                "Share one backdrop texture for soft refraction around bubbles, the input area, and sidebar edges.");
         add("已开启其他功能，请先关闭后再使用", "Another feature is enabled; turn it off before importing");
         add("此功能尚未完善", "This feature is not finished yet");
         add("聊天气泡、输入区、侧栏和交互控件共用一张背板纹理；不会给每个按键重复截图和模糊。",
@@ -305,10 +613,86 @@ final class UiLanguageCatalog {
         add("会话数据统计", "Chat statistics");
         add("立即备份聊天数据库", "Back up chat database now");
         add("自动备份聊天数据库", "Automatic chat database backup");
+        add("将全部本地会话导出为 Markdown 文件。",
+                "Export every local chat as a Markdown file.");
+        add("导出期间请保持 DeepSeek 运行；无法读取的账号会在日志中单独标记。",
+                "Keep DeepSeek running during export; unreadable accounts are identified in the log.");
+        add("仅统计设备上的聊天数据库，不会上传聊天内容。",
+                "Only on-device chat databases are counted; chat content is never uploaded.");
+        add("复制全部聊天数据库到应用外部目录。",
+                "Copy every chat database to the app's external directory.");
+        add("备份不会修改原数据库；完成后日志会显示保存目录。",
+                "The backup does not modify the source databases; the destination is shown when complete.");
+        add("执行", "Run");
+        add("发送自定义请求", "Send custom request");
+        add("向 DeepSeek 官方 API 发送 GET 或 POST 调试请求。",
+                "Send a GET or POST diagnostic request to the official DeepSeek API.");
+        add("解锁国内用户的 Google 登录入口。",
+                "Unlock Google sign-in for mainland users.");
+        add("解锁海外用户的微信与手机号登录入口。",
+                "Unlock WeChat and phone sign-in for overseas users.");
+        add("每 %d 分钟向绑定对话发送主动消息。",
+                "Send a proactive message to the bound chat every %d minutes.");
+        add("正在扫描聊天数据库", "Scanning chat databases");
+        add("找到 ", "Found ");
+        add(" 个账号数据库", " account databases");
+        add("读取：", "Reading: ");
+        add("跳过：", "Skipped: ");
+        add(" 个会话，", " chats, ");
+        add(" 个会话", " chats");
+        add(" 个数据库未能读取", " databases could not be read");
+        add(" 个数据库", " databases");
+        add("有 ", "There are ");
+        add("输出目录：", "Output: ");
+        add("备份目录：", "Backup directory: ");
+        add("正在读取 ", "Reading ");
+        add("汇总：", "Summary: ");
+        add(" 条消息，", " messages, ");
+        add(" 消息", " messages");
+        add(" 字", " characters");
         add("实验性功能", "Experimental Features");
         add("功能可能随时失败、产生不完整结果或导致数据丢失。继续表示你已理解上述风险并自行承担后果。",
                 "Features may fail, produce incomplete results, or cause data loss. Continuing means you understand and accept these risks.");
         add("帮助与问题", "Help & Questions");
+        add("Agent、本地 API、语言与备份", "Agent, Local API, language, and backups");
+        add("记录崩溃", "Crash records");
+        add("查看 Java、Native 与 ANR 记录，并保存为日志文件。",
+                "View Java, native, and ANR records and save them as a log file.");
+        add("崩溃测试", "Crash tests");
+        add("选择应用进程内的 Java 崩溃方式。",
+                "Choose a Java crash method within the app process.");
+        add("记录 Java 未捕获异常，并读取系统保留的 Native 崩溃与 ANR 记录。",
+                "Records uncaught Java exceptions and reads system-retained native crash and ANR reports.");
+        add("暂无崩溃", "No crash records");
+        add("保存成文件", "Save to file");
+        add("无法打开保存位置", "Could not open a save location");
+        add("仅终止 DeepSeek 应用进程。已移除可能牵连系统冻结器的 Native 信号测试。",
+                "Only the DeepSeek app process is terminated. Native signal tests that could affect the system freezer have been removed.");
+        add("主线程异常", "Main-thread exceptions");
+        add("8 种 Java 异常与错误", "8 Java exceptions and errors");
+        add("异步与回调异常", "Async and callback exceptions");
+        add("后台线程、消息队列与绘制帧回调", "Worker threads, message queue, and frame callbacks");
+        add("发送链异常", "Send-path exception");
+        add("下一次真实消息发送时触发 Java 崩溃", "Trigger a Java crash on the next real message send");
+        add("点击后立即终止当前 DeepSeek 进程。", "Tap to immediately terminate the current DeepSeek process.");
+        add("主线程 RuntimeException", "Main-thread RuntimeException");
+        add("后台线程 RuntimeException", "Worker-thread RuntimeException");
+        add("主线程 NullPointerException", "Main-thread NullPointerException");
+        add("主线程 IllegalStateException", "Main-thread IllegalStateException");
+        add("主线程 ClassCastException", "Main-thread ClassCastException");
+        add("主线程 IndexOutOfBoundsException", "Main-thread IndexOutOfBoundsException");
+        add("主线程 ArithmeticException", "Main-thread ArithmeticException");
+        add("主线程 AssertionError", "Main-thread AssertionError");
+        add("主线程 StackOverflowError", "Main-thread StackOverflowError");
+        add("覆盖不同的应用线程和主线程调度入口。", "Covers app threads and main-thread scheduling entry points.");
+        add("线程池任务 RuntimeException", "Executor task RuntimeException");
+        add("Handler 延迟回调异常", "Delayed Handler callback exception");
+        add("下一绘制帧回调异常", "Next-frame callback exception");
+        add("设置后返回聊天页，在下一次真实发送时触发。", "Return to the chat after arming; it triggers on the next real send.");
+        add("下一次发送消息时 RuntimeException", "RuntimeException on the next message");
+        add("等待下一次真实消息请求", "Wait for the next real message request");
+        add("立即终止当前 DeepSeek 进程", "Immediately terminate the current DeepSeek process");
+        add("崩溃日志已保存", "Crash log saved");
         add("语言", "Language");
         add("选择 Deekseep 语言", "Choose Deekseep language");
         add("跟随 DeepSeek（自动）", "Follow DeepSeek (Auto)");
@@ -443,13 +827,25 @@ final class UiLanguageCatalog {
         add("解锁专家模式与图片上传", "Unlock expert mode and image upload");
         add("点亮专家模式的思考、搜索和文件能力；图片会先由视觉模型识别，再把描述中继给专家模型。切换后需重进应用或重选模型。",
                 "Enable expert reasoning, search, and file capabilities. Images are recognized by the vision model first, then their descriptions are relayed to the expert model. Reopen the app or reselect the model after changing this.");
-        add("AI 主动消息", "AI proactive messages");
+        add("解锁专家模式与文件中转", "Unlock expert mode and file relay");
+        add("点亮思考、搜索和文件能力；普通文件保留原文由 DeepSeek 读取，只有图片经视觉模型中继。切换后需重选模型。",
+                "Enable reasoning, search, and files. Documents stay as native, byte-preserving attachments for DeepSeek to read; only images use the vision relay. Reselect the model after changing this.");
+        add("AI 心跳", "AI heartbeat");
         add("问答、当前时间、截图与基础界面操作；可逐项关闭工具，并选择应用内、Root 或 Shizuku 后端。",
                 "Questions, local time, screenshots, and basic UI actions. Each tool can be disabled, with in-app, Root, or Shizuku execution.");
         add("陀螺仪背景", "Gyroscope wallpaper");
         add("晃动手机时背景轻微漂移并回弹；需先设置背景图",
                 "The wallpaper drifts slightly and springs back as the phone moves; set a wallpaper first");
         add("陀螺仪背景设置保存失败", "Could not save gyroscope-wallpaper settings");
+        add("已就绪", "Ready");
+        add("未设置", "Not configured");
+        add("可用", "Available");
+        add("不可用", "Unavailable");
+        add("暂停动态", "Motion paused");
+        add("无限制", "Unrestricted");
+        add("  ·  传感器：", "  ·  Sensor: ");
+        add("请先在聊天外观中设置背景图",
+                "Set a wallpaper in Chat appearance first");
         add("空间动效（实验）", "Spatial motion (experimental)");
         add("空间动效", "Spatial motion");
         add("已开启 · 点按进入专属设置",
@@ -503,7 +899,7 @@ final class UiLanguageCatalog {
         add("将当前持机姿态设为视觉中心",
                 "Use the current device pose as the visual center");
         add("已请求重新校准", "Recentering requested");
-        add("修改主动消息间隔", "Change proactive-message interval");
+        add("修改 AI 心跳间隔", "Change AI heartbeat interval");
         add("当前间隔：%d 分钟。点按此处修改；模型主动消息会写入绑定对话，并在前后台都发送系统通知。",
                 "Current interval: %d minutes. Tap here to change it. Proactive model messages are added to the bound chat and always produce a system notification.");
         add("聊天中可直接约定每次心跳要做什么，也可让 AI 安排或取消指定时间的一次性心跳。",
@@ -520,15 +916,15 @@ final class UiLanguageCatalog {
         add("已绑定一个对话；在目标对话中重新约定即可切换。",
                 "Bound to a chat; make a new heartbeat agreement in the target chat to switch.");
         add("例如 30、180、1440", "For example 30, 180, or 1440");
-        add("设置主动消息间隔", "Set proactive-message interval");
+        add("设置 AI 心跳间隔", "Set AI heartbeat interval");
         add("请输入 15 到 10080 分钟（最长 7 天）。从保存时重新计时；",
                 "Enter 15 to 10080 minutes (up to 7 days). Timing restarts when you save;");
         add("系统省电策略可能让实际触发略有延迟。",
                 "Android battery policies may delay delivery slightly.");
-        add("主动消息间隔已保存", "Proactive-message interval saved");
+        add("AI 心跳间隔已保存", "AI heartbeat interval saved");
         add("请输入 15 到 10080 之间的整数分钟",
                 "Enter a whole number from 15 to 10080 minutes");
-        add("主动消息设置保存失败", "Could not save proactive-message settings");
+        add("AI 心跳设置保存失败", "Could not save AI heartbeat settings");
         add("心跳已绑定当前对话", "Heartbeat bound to this chat");
         add("心跳绑定失败", "Could not bind heartbeat to this chat");
         add("本地 API 服务", "Local API service");
@@ -540,29 +936,12 @@ final class UiLanguageCatalog {
                 "Usage notes and troubleshooting for expert image relay and the local API.");
 
         // Local API control page.
-        add("本地 API 运行在 DeepSeek 进程内。若系统限制后台活动，Termux、",
-                "The local API runs inside the DeepSeek process. If the system restricts background activity, DeepSeek SSE and upstream networking may pause or disconnect while Termux, ");
-        add("Codex 或 Claude Code 在前台时，DeepSeek 的 SSE 和上游网络会被暂停或中断。\n\n",
-                "Codex, or Claude Code is in the foreground.\n\n");
-        add("\n\n请在系统页面把 DeepSeek 的电池使用设为“不限制/允许高耗电”，并允许后台活动。",
-                "\n\nIn system settings, set DeepSeek battery usage to Unrestricted/Allow high power usage and permit background activity. ");
-        add("返回后模块会自动复检；只有两项都通过才会启动监听。启用 API 后还会启动一个",
-                "The module rechecks automatically when you return and starts listening only after both checks pass. Enabling the API also starts a ");
-        add("前台保活任务，专门防止 Android Cached Apps Freezer 冻结监听和 SSE。",
-                "foreground keepalive task to prevent Android Cached Apps Freezer from freezing the listener and SSE.");
-        add("先允许 DeepSeek 后台运行", "Allow DeepSeek background activity first");
         add("打开电池设置", "Open battery settings");
-        add("校验并进入", "Verify and continue");
-        add("无法打开设置", "Could not open settings");
         add("系统没有可用的电池设置入口。请手动进入：设置 → 应用 → DeepSeek → 电池 → 不限制，然后重新点本功能。",
                 "No battery settings page is available. Open Settings → Apps → DeepSeek → Battery → Unrestricted manually, then select this feature again.");
-        add("后台权限仍未通过", "Background permission still not approved");
-        add("\n\n请确认电池使用为“不限制”，且没有关闭后台活动。",
-                "\n\nConfirm that battery use is Unrestricted and background activity is not disabled.");
-        add("再次打开设置", "Open settings again");
         add("DeepSeek 本地 API", "DeepSeek Local API");
-        add("后台运行校验", "Background operation check");
-        add("重新校验", "Check again");
+        add("后台运行建议", "Background operation recommendation");
+        add("刷新状态", "Refresh status");
         add("启用本地 API 服务", "Enable local API service");
         add("监听本机和局域网；局域网调用同样必须携带 API Key。启用时前台保活会防止后台冻结；彻底退出 DeepSeek 后监听会停止，关闭时会清理复用的服务端会话。",
                 "Listen on this device and the LAN; LAN calls also require the API key. A foreground keepalive prevents background freezing while enabled. Listening stops when DeepSeek fully exits, and disabling the service cleans reusable server sessions.");
@@ -588,13 +967,14 @@ final class UiLanguageCatalog {
         add("高级设置", "Advanced settings");
         add("Cloudflare 自有域名、公网 IP、固定端口与连接诊断",
                 "Cloudflare custom domains, public IP, fixed port, and diagnostics");
-        add("后台运行校验未通过，监听未启动", "Background check failed; listener not started");
+        add("服务启动失败，请查看运行状态", "Service could not start; check runtime status");
         add("正在启动监听…", "Starting listener…");
         add("服务已关闭，正在清理复用会话…", "Service disabled; cleaning reusable sessions…");
         add("无法打开系统电池设置，请从系统应用设置手动进入",
                 "Could not open system battery settings; open them manually from app settings");
-        add("后台运行校验通过", "Background operation check passed");
-        add("校验未通过，请设为不限制后台活动", "Check failed; allow unrestricted background activity");
+        add("后台设置已完成", "Background setting is enabled");
+        add("未设为不限制；前台保活仍会继续运行",
+                "Not unrestricted; foreground keepalive will continue running");
         add("已切换为 ", "Switched to ");
         add(" 格式", " format");
         add("URL 已复制", "URL copied");
@@ -689,7 +1069,7 @@ final class UiLanguageCatalog {
         add("【功能】本地 API 服务", "[Feature] Local API service");
         add("首次进入会校验 DeepSeek 已设为不限制电池优化且允许后台活动，未通过时不会启动监听。OpenAI 格式提供 /v1/models、/v1/chat/completions 和 /v1/responses；Anthropic 格式提供 /v1/messages 与 /v1/messages/count_tokens。两种格式均支持普通 JSON、SSE、深度思考和 Agent 工具结果回传。",
                 "On first entry the module verifies that DeepSeek is exempt from battery optimization and allowed to run in the background; listening does not start until both pass. OpenAI format provides /v1/models, /v1/chat/completions, and /v1/responses. Anthropic format provides /v1/messages and /v1/messages/count_tokens. Both support JSON, SSE, deep reasoning, and Agent tool-result continuation.");
-        add("【功能】AI 主动消息", "[Feature] AI proactive messages");
+        add("【功能】AI 心跳", "[Feature] AI heartbeat");
         add("开启后，模块会按你设置的分钟间隔唤醒 DeepSeek，并使用绑定对话的近期上下文生成自然的主动消息。点按功能说明即可修改间隔，范围为 15 分钟到 7 天。请在想绑定的对话中直接说“以后心跳时来找我闲聊”；在另一个对话重新约定会切换周期心跳的绑定，不会建立全局约定。也可以说“5 天后晚上 6:37 来找我”安排只属于当前对话的一次性心跳，或让 AI 取消单次、周期或全部心跳。AI 会调用真实的本地调度能力，内部执行指令不会显示；模型回复会写入任务所属对话，无论 DeepSeek 是否在前台，模块应用都会同时发送系统通知，点按通知会回到该对话。关闭周期心跳不会删除已经确认的一次性任务，除非明确要求 AI 一并取消。该功能默认关闭，通知需要在模块应用中授权，系统省电策略可能让时间略有延迟。",
                 "When enabled, the module wakes DeepSeek at the minute interval you choose and uses recent context from the bound chat to generate a natural proactive message. Tap the feature description to set an interval from 15 minutes to 7 days. In the chat you want to bind, say “come chat with me whenever the heartbeat runs.” Making a new agreement in another chat switches the recurring heartbeat binding instead of creating a global agreement. You can also say “come talk to me at 6:37 PM five days from now” to schedule a one-time heartbeat belonging only to the current chat, or ask the AI to cancel one-time, recurring, or all heartbeats. The AI uses real local scheduling and hides internal execution instructions. The model reply is added to the task's chat, and the module app also sends a system notification whether or not DeepSeek is in the foreground; tapping it returns to that chat. Turning off recurring heartbeats does not delete confirmed one-time tasks unless you explicitly ask the AI to cancel them too. The feature is off by default, notification permission is required in the module app, and battery policies may delay delivery slightly.");
         add("【问题】为什么专家模式第一轮能发图，后续轮却提示不支持？",
@@ -907,12 +1287,12 @@ final class UiLanguageCatalog {
                 "WeChat also requires a working WeChat client on the device, and SMS requires official support for the number and region. The module does not bypass a server rejection.");
         add("【问题】为什么模块启动页显示“待验证”，LSPosed 明明已经启用？",
                 "[Question] Why does the module launch page say ‘Pending verification’ when LSPosed is enabled?");
-        add("解决办法：现代 libxposed 不再把模块注入模块应用自身，因此无需在作用域勾选 Deekseep。最新版通过官方 XposedService",
-                "Solution: modern libxposed no longer injects a module into its own app, so Deekseep itself does not need to be selected in scope. The current build uses the official XposedService ");
-        add("连接判断模块启用，并由 DeepSeek 目标进程回报实际注入。请只确认模块总开关已开、作用域勾选 DeepSeek，然后启动一次",
-                "connection to detect enablement and the DeepSeek target process to report actual injection. Confirm the module master switch is on and DeepSeek is selected in scope, then start ");
-        add("DeepSeek 再返回模块页；不要用旧版的“自我 Hook”状态作为判据。",
-                "DeepSeek once and return to the module page. Do not rely on the old self-hook state.");
+        add("解决办法：通用版不需要把模块自身加入作用域，只需勾选 DeepSeek。",
+                "Solution: the universal build does not need the module app in scope; select DeepSeek only.");
+        add("请确认模块总开关已开、作用域勾选 DeepSeek，然后启动一次 DeepSeek 再返回模块页；",
+                "Confirm the module master switch is on and DeepSeek is selected in scope, then start DeepSeek once and return to the module page; ");
+        add("不要用旧版的“自我 Hook”状态作为判据。",
+                "do not rely on the old self-hook state.");
         add("【问题】为什么搜索、统计或编辑器显示的账号不对？",
                 "[Question] Why do search, statistics, or the editor show the wrong account?");
         add("解决办法：先在多账号页确认“当前”标记，完成切号重启后再打开工具。编辑器默认只显示当前账号；若启用“显示所有账号”，",
@@ -1198,12 +1578,16 @@ final class UiLanguageCatalog {
 
         // Search, export, statistics, activation, and keepalive surfaces.
         add("输入关键词", "Enter keywords");
+        add("搜索全部账号（默认只搜当前登录账号）",
+                "Search all accounts (default: current account only)");
         add("搜索聊天记录", "Search chats");
         add("搜索", "Search");
         add("搜索中…", "Searching…");
         add("用户输入", "User input");
         add("模型回答", "Model answer");
         add("深度思考", "Deep reasoning");
+        add("该对话不在当前账号的原生侧栏列表中（已删除、未同步或属于其他账号）",
+                "This chat is not in the current account's native sidebar (it may be deleted, unsynced, or belong to another account)");
         add("未找到「", "No results for ‘");
         add("」命中 ", "’: ");
         add(" 条", " matches");
@@ -1324,15 +1708,62 @@ final class UiLanguageCatalog {
         add("隐藏彩蛋", "Hidden easter egg");
         add("一键破甲", "One-tap armor break");
         add("启用全局液态玻璃", "Enable global liquid glass");
-        add("仅测试版本可启用；功能尚未完成，可能异常或闪退",
-                "Only test builds can enable this; it is unfinished and may cause problems or crashes.");
+        add("按 Android 版本、性能和节电状态自动降级",
+                "Automatically fall back based on Android version, performance, and power-saving state.");
         add("懂你意思喵～", "Got it, meow~");
         add("内置提示词启用失败", "Could not enable the bundled prompt");
-        add("此页面功能仅供本地测试。液态玻璃尚未完成，可能导致显示异常甚至应用闪退。",
-                "The features on this page are for local testing only. Liquid glass is unfinished and may cause display problems or crashes.");
+        add("此页面保留快捷开关。液态玻璃会按设备能力选择实时折射、共享模糊或静态磨砂。",
+                "This page keeps quick toggles. Liquid glass selects real-time refraction, shared blur, or static frosting based on device capability.");
         add("液态玻璃设置保存失败", "Could not save liquid-glass settings");
         add("非 Google Play 版本提供；Google Play 版不含此开关。",
                 "Available in non-Google-Play builds; the Google Play build does not include this switch.");
+
+        // Compact help page entries.
+        add("功能说明与常见问题", "Feature notes and common questions");
+        add("【功能】系统提示词注入", "[Feature] System prompt injection");
+        add("把选定的提示词附加到请求中。", "Attach the selected prompt to requests.");
+        add("【功能】心跳与定时提醒", "[Feature] Heartbeat and scheduled reminders");
+        add("按当前对话发送主动消息，并可设置或取消提醒。", "Send proactive messages in the current chat and set or cancel reminders.");
+        add("【功能】Agent 工具", "[Feature] Agent tools");
+        add("在实验性功能中管理工具和权限，支持基础操作。", "Manage tools and permissions in Experimental Features for basic actions.");
+        add("【功能】工具调用日志", "[Feature] Tool-call log");
+        add("显示工具名称、调用时间和执行结果。", "Show the tool name, call time, and result.");
+        add("【功能】问答工具", "[Feature] Question tool");
+        add("模型提出选项或问题，你选择或输入后继续对话。", "Choose or type an answer when the model asks a question.");
+        add("【功能】面板与图形输出", "[Feature] Panels and graphics");
+        add("模型可生成信息面板、进度条和简单图形。", "The model can generate panels, progress bars, and simple graphics.");
+        add("【功能】聊天外观", "[Feature] Chat appearance");
+        add("自定义气泡、背景图、贴纸和透明度。", "Customize bubbles, wallpapers, stickers, and opacity.");
+        add("【功能】本地 API", "[Feature] Local API");
+        add("提供兼容接口和本地 Agent 工具调用。", "Provides compatible endpoints and local Agent tool calls.");
+        add("【问题】工具只显示文字，没有真正执行？", "[Question] A tool is shown as text but did not run?");
+        add("确认实验性功能中的 Agent 开关已开启，并检查工具权限。", "Enable Agent in Experimental Features and check tool permissions.");
+        add("【问题】心跳提醒没有出现在对话？", "[Question] A heartbeat reminder is missing from the chat?");
+        add("确认已绑定目标对话，并允许通知和后台运行。", "Bind the target chat and allow notifications and background activity.");
+        add("【问题】背景图或聊天外观没有生效？", "[Question] Wallpaper or chat appearance did not apply?");
+        add("重新打开对应页面；部分设置需要重启 DeepSeek。", "Reopen the relevant page; some settings require restarting DeepSeek.");
+        add("【问题】编辑或历史记录显示异常？", "[Question] Editing or history looks wrong?");
+        add("先在 DeepSeek 原生页面打开目标对话并等待加载，再重试。", "Open the target chat in DeepSeek and wait for it to load, then try again.");
+        add("【问题】账号导入失败？", "[Question] Account import failed?");
+        add("使用完整 UTF-8 JSON，并确认凭证仍有效。", "Use complete UTF-8 JSON and make sure the credential is still valid.");
+        add("【功能】空间动效", "[Feature] Spatial motion");
+        add("控制背景视差、层次和动态强度。", "Control background parallax, depth, and motion strength.");
+        add("把会话图片交给视觉模型，再继续专家对话。", "Send chat images to the vision model, then continue the expert chat.");
+        add("按当前对话设置周期或一次性心跳提醒。", "Set recurring or one-time heartbeat reminders for the current chat.");
+        add("提供本地兼容接口、SSE 和 Agent 工具结果。", "Provide local compatible endpoints, SSE, and Agent tool results.");
+        add("模型提出选项，你选择或输入后继续。", "The model offers options; choose or type one to continue.");
+        add("【功能】Agent 工具与权限", "[Feature] Agent tools and permissions");
+        add("管理工具开关、执行权限和 Shizuku/Root 模式。", "Manage tool switches, execution permissions, and Shizuku/Root mode.");
+        add("【问题】背景图或贴纸没有显示？", "[Question] Wallpaper or stickers are missing?");
+        add("检查聊天外观开关和当前界面绑定，必要时重启 DeepSeek。", "Check the chat-appearance switch and screen binding; restart DeepSeek if needed.");
+        add("【问题】本地 API 连接失败？", "[Question] Local API connection failed?");
+        add("检查服务开关、密钥、端口和后台运行权限。", "Check the service switch, key, port, and background permission.");
+        add("【问题】心跳没有写入对话？", "[Question] Heartbeat was not written to the chat?");
+        add("确认目标对话已绑定，并允许通知和后台活动。", "Confirm the target chat is bound and notifications/background activity are allowed.");
+        add("【问题】Agent 只输出调用文字？", "[Question] Agent only printed a tool call?");
+        add("开启 Agent 和对应工具权限，再重新发送请求。", "Enable Agent and the relevant tool permission, then send the request again.");
+        add("导入图片并调整取景、缩放、透明度和界面。", "Import an image and adjust framing, zoom, opacity, and screen.");
+        add("功能说明与必要排查。点一下条目展开。", "Feature notes and essential troubleshooting. Tap an item to expand.");
 
         Collections.sort(FRAGMENTS, new Comparator<Entry>() {
             @Override public int compare(Entry left, Entry right) {
@@ -1368,7 +1799,11 @@ final class UiLanguageCatalog {
     private static void add(String zh, String en) {
         if (zh == null || zh.length() == 0 || en == null) return;
         EXACT.put(zh, en);
-        FRAGMENTS.add(new Entry(zh, en));
+        // Single-character words are exact labels, not safe global replacement fragments.
+        // The ideographic comma is the sole punctuation fragment intentionally retained.
+        if (zh.length() > 1 || "、".equals(zh)) {
+            FRAGMENTS.add(new Entry(zh, en));
+        }
     }
 
     private static final class Entry {

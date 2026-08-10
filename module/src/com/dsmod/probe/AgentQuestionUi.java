@@ -32,9 +32,11 @@ import java.util.List;
 final class AgentQuestionUi {
     interface AnswerListener {
         void onAnswer(String scope, String visibleAnswer);
+        void onCancel(String scope);
     }
 
     private static final Object LOCK = new Object();
+    private static final int MAX_PENDING_QUESTIONS = 8;
     private static final ArrayDeque<Pending> QUEUE = new ArrayDeque<>();
     private static WeakReference<Dialog> activeDialog = new WeakReference<>(null);
 
@@ -49,6 +51,7 @@ final class AgentQuestionUi {
             return false;
         }
         synchronized (LOCK) {
+            if (QUEUE.size() >= MAX_PENDING_QUESTIONS) return false;
             QUEUE.addLast(new Pending(activity, call, listener));
         }
         showNext();
@@ -67,12 +70,16 @@ final class AgentQuestionUi {
         final Activity activity = pending.activity.get();
         if (activity == null || activity.isFinishing()
                 || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed())) {
+            pending.cancel();
             showNext();
             return;
         }
         activity.runOnUiThread(new Runnable() {
             @Override public void run() {
-                if (!show(activity, pending)) showNext();
+                if (!show(activity, pending)) {
+                    pending.cancel();
+                    showNext();
+                }
             }
         });
     }
@@ -83,7 +90,6 @@ final class AgentQuestionUi {
             final int sheetColor = dark ? 0xFF262628 : 0xFFFFFFFF;
             final int textColor = dark ? 0xFFF2F2F2 : 0xFF1D1D1F;
             final int subColor = dark ? 0xFFAAAAB0 : 0xFF77777E;
-            final int dividerColor = dark ? 0xFF3A3A3E : 0xFFE6E6E8;
             final int selectedColor = dark ? 0xFF35406B : 0xFFE9EDFF;
             final int optionColor = dark ? 0xFF303033 : 0xFFF7F7F5;
             final List<HeartbeatToolProtocol.Question> questions =
@@ -139,8 +145,14 @@ final class AgentQuestionUi {
             scroll.addView(questionList, new ScrollView.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
-            LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+            // Children are added below; measure after that so a long multi-question sheet is
+            // capped correctly while a short question remains content-height.
+            final int scrollCap = Math.round(
+                    activity.getResources().getDisplayMetrics().heightPixels * 0.48f);
+            final LinearLayout.LayoutParams scrollParams =
+                    new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
             scrollParams.topMargin = dp(activity, 8);
             sheet.addView(scroll, scrollParams);
 
@@ -221,12 +233,19 @@ final class AgentQuestionUi {
                 }
             }
 
-            View divider = new View(activity);
-            divider.setBackgroundColor(dividerColor);
-            LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 1));
-            dividerParams.topMargin = dp(activity, 14);
-            sheet.addView(divider, dividerParams);
+            try {
+                int widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(
+                        Math.max(1, activity.getResources().getDisplayMetrics()
+                                .widthPixels - dp(activity, 40)),
+                        android.view.View.MeasureSpec.EXACTLY);
+                questionList.measure(widthSpec,
+                        android.view.View.MeasureSpec.UNSPECIFIED);
+                int measuredContent = questionList.getMeasuredHeight();
+                if (measuredContent > 0) {
+                    scrollParams.height = Math.min(measuredContent, scrollCap);
+                    scroll.setLayoutParams(scrollParams);
+                }
+            } catch (Throwable ignored) {}
 
             final EditText custom = new EditText(activity);
             custom.setTextColor(textColor);
@@ -247,7 +266,7 @@ final class AgentQuestionUi {
             custom.setImeOptions(EditorInfo.IME_ACTION_SEND);
 
             FrameLayout answerBar = new FrameLayout(activity);
-            answerBar.setPadding(0, dp(activity, 6), 0, 0);
+            answerBar.setPadding(0, dp(activity, 10), 0, 0);
             answerBar.addView(custom, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -293,10 +312,33 @@ final class AgentQuestionUi {
                         }
                     });
 
-            dialog.setContentView(sheet);
+            // 全屏透明根容器：点击面板之外的任何区域（如面板上方的遮罩）必然命中根容器
+            // 并关闭，不依赖窗口 outside-touch 传递，避免内容自适应的小面板关不掉。
+            final FrameLayout root = new FrameLayout(activity);
+            root.setBackgroundColor(0x00000000);
+            root.setOnTouchListener(new View.OnTouchListener() {
+                private int[] location = new int[2];
+
+                @Override public boolean onTouch(View view,
+                                                  android.view.MotionEvent event) {
+                    if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                        sheet.getLocationOnScreen(location);
+                        if (event.getRawY() < location[1]) {
+                            dialog.dismiss();
+                        }
+                    }
+                    return false;
+                }
+            });
+            root.addView(sheet, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.BOTTOM));
+            dialog.setContentView(root);
             dialog.setCanceledOnTouchOutside(true);
             dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
                 @Override public void onDismiss(DialogInterface ignored) {
+                    pending.cancel();
                     synchronized (LOCK) {
                         Dialog active = activeDialog.get();
                         if (active == dialog) activeDialog = new WeakReference<>(null);
@@ -314,15 +356,42 @@ final class AgentQuestionUi {
             window.setAttributes(attributes);
             window.setSoftInputMode(
                     WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            // 输入法弹出时把整个面板上移到键盘上方：resize 生效时 inset 为 0（不重复平移），
+            // 不生效时按 IME 高度平移，两种情况下输入框都不会被键盘盖住。
+            if (Build.VERSION.SDK_INT >= 30) {
+                sheet.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                    @Override public android.view.WindowInsets onApplyWindowInsets(
+                            View view, android.view.WindowInsets insets) {
+                        int ime = insets.getInsets(
+                                android.view.WindowInsets.Type.ime()).bottom;
+                        view.setTranslationY(-ime);
+                        return insets;
+                    }
+                });
+                sheet.requestApplyInsets();
+            } else {
+                final View decor = sheet.getRootView();
+                decor.getViewTreeObserver().addOnGlobalLayoutListener(
+                        new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                            @Override public void onGlobalLayout() {
+                                int windowHeight = decor.getHeight();
+                                int displayHeight = decor.getResources()
+                                        .getDisplayMetrics().heightPixels;
+                                sheet.setTranslationY(-Math.max(0,
+                                        displayHeight - windowHeight));
+                            }
+                        });
+            }
             synchronized (LOCK) {
                 activeDialog = new WeakReference<>(dialog);
             }
             dialog.show();
-            int maxHeight = Math.round(
-                    activity.getResources().getDisplayMetrics().heightPixels * 0.82f);
-            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, maxHeight);
-            sheet.setTranslationY(maxHeight);
-            sheet.animate().translationY(0f).setDuration(240L).start();
+            // 全屏窗口：根容器透明，面板高度按内容自适应（有几个选项就多高），
+            // 不再固定 82% 屏幕。
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT);
+            sheet.setTranslationY(dp(activity, 32));
+            sheet.animate().translationY(0f).setDuration(220L).start();
             return true;
         } catch (Throwable ignored) {
             return false;
@@ -337,6 +406,7 @@ final class AgentQuestionUi {
         if (visible.length() == 0) return;
         try {
             pending.listener.onAnswer(pending.call.scope, visible);
+            pending.complete();
         } catch (Throwable ignored) {
             Toast.makeText(context, UiLanguage.text(context,
                     "答案发送失败", "Could not send the answer"),
@@ -416,12 +486,27 @@ final class AgentQuestionUi {
         final WeakReference<Activity> activity;
         final HeartbeatToolProtocol.ToolCall call;
         final AnswerListener listener;
+        private boolean completed;
 
         Pending(Activity activity, HeartbeatToolProtocol.ToolCall call,
                 AnswerListener listener) {
             this.activity = new WeakReference<>(activity);
             this.call = call;
             this.listener = listener;
+        }
+
+        synchronized void complete() {
+            completed = true;
+        }
+
+        void cancel() {
+            synchronized (this) {
+                if (completed) return;
+                completed = true;
+            }
+            try {
+                listener.onCancel(call.scope);
+            } catch (Throwable ignored) {}
         }
     }
 }

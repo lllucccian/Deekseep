@@ -1,20 +1,15 @@
 # Build Variants
 
-Deekseep 1.7.2 publishes three channel-labelled APKs. The two mainland builds
-compile the same canonical feature core and differ only in the Xposed entry
-interface and packaging. The Google Play build is compiled from the separate
-`google-play` branch because its R8 symbol map differs.
+Deekseep 1.7.4 publishes one merged universal APK. It compiles the complete
+feature core and selects the domestic or Google Play host symbol map at runtime.
 
 ## Selection Guide
 
-| Source | 1.7.2 release asset | DeepSeek target | Framework target |
+| Source | 1.7.4 release asset | DeepSeek target | Framework target |
 |---|---|---|---|
-| `main:module/` | `deekseep-stable-api102-v1.7.2.apk` | Mainland 2.2.2 (`233`) | Current LSPosed with libxposed API 102 |
-| `main:module-legacy/` | `deekseep-stable-legacy-v1.7.2.apk` | Mainland 2.2.2 (`233`) | Traditional Xposed API 82+, compatible FPA/older LSPosed |
-| `google-play:module/` | `deekseep-google-play-2.2.2-v1.7.2.apk` | Google Play 2.2.2 (`236`) | Current LSPosed with libxposed API 102 |
+| `main:module-universal/` | `Deekseep.apk` | 2.2.0/2.3.0 and 2.3.4 domestic/Google Play | Traditional Xposed-compatible universal entry |
 
-Use the API 102 build on a current LSPosed installation. Use the legacy build
-only when the framework cannot load modern libxposed metadata.
+Use `Deekseep.apk` for either supported channel. DeepSeek 2.3.1–2.3.3 are not supported.
 
 ## 1.7.2 Feature Parity
 
@@ -52,28 +47,24 @@ stable APKs.
 
 ## Interface Packaging
 
-The modern APK:
+The universal APK:
 
-- extends `io.github.libxposed.api.XposedModule`;
-- receives packages through `onPackageLoaded`;
-- declares its entry in `META-INF/xposed/`;
-- compiles against libxposed API 102 without packaging the API classes.
-
-The legacy APK:
-
-- implements `IXposedHookLoadPackage` through a generated compatibility entry;
+- implement `IXposedHookLoadPackage` through the in-tree adapter;
 - receives packages through `handleLoadPackage`;
 - declares `assets/xposed_init` and traditional manifest metadata;
-- compiles the canonical stable core through the traditional Xposed callback
-  adapter under `module-legacy/compat`;
-- does not package the compile-only `de.robv.android.xposed` stubs.
+- compile the shared core through `module-legacy/compat`;
+- do not package framework-provided Xposed stubs.
+
+The package contains the complete canonical feature core. Its traditional entry
+has `xposedminversion=82` and no maximum; API 82 through 102 are exercised by
+the adapter matrix during the release test. Host compatibility covers DeepSeek
+2.2.0, 2.3.0, and mapped domestic/Google Play 2.3.4 builds.
 
 ## Signature and Switching Rules
 
-Both stable APKs use `com.dsmod.probe`, but the local modern and legacy build
-scripts use different development keys. Android can reject an in-place switch
-because the signatures differ. Disable and uninstall the current module APK
-before installing the other interface; this does not uninstall DeepSeek.
+The stable APK uses `com.dsmod.probe`. A locally rebuilt APK may use a different
+development key; Android can then require uninstalling the installed module
+before reinstalling the rebuild. This does not uninstall DeepSeek.
 
 Enable only one Deekseep implementation for `com.deepseek.chat`. Duplicate
 hooks can rewrite the same request or database row twice and are unsupported.

@@ -4,22 +4,19 @@
 
 1. Confirm that the installed APK matches the framework interface.
 2. Confirm the module is enabled.
-3. For modern libxposed, scope it to `com.deepseek.chat`; do not add the module
-   app merely to make activation detection pass.
+3. Scope it to `com.deepseek.chat`; do not add the module app merely to make
+   activation detection pass.
 4. Force-stop DeepSeek instead of only leaving the activity.
 5. Open the root DeepSeek settings screen; the entry is intentionally removed
    on other routes.
 6. Check the module launcher activation status.
 
-For a current LSPosed installation, use the stable API 102 build. If loading is
-uncertain, install and enable the API 102 load probe by itself.
+Use the single `Deekseep.apk` merged package. Retired API-specific and
+load-probe packages are not supported; DeepSeek 2.3.1–2.3.3 are unsupported.
 
 ## The Launcher Says “Pending Verification” Although LSPosed Is Enabled
 
-Modern libxposed no longer injects a module into its own application, so the old
-“hook `isModuleActive()` in the launcher” test is not valid. Current stable
-builds receive LSPosed's service Binder through the official Xposed service
-provider and accept a second heartbeat only from the `com.deepseek.chat` UID.
+The launcher reports framework and target heartbeats from the universal entry.
 
 Enable the module, scope only DeepSeek, start DeepSeek once, and reopen the
 launcher. “Enabled” means the framework service connected; “Active” additionally
@@ -36,9 +33,9 @@ risk decisions.
 
 ## Android Reports an Incompatible Update
 
-The modern and legacy forms of a channel use the same package ID but separate
-development signing keys. Disable and uninstall the old module APK before
-installing the other interface variant.
+The merged domestic/Google Play APK uses package ID `com.dsmod.probe`. A
+locally rebuilt APK may require uninstalling the previous development-signed
+module before reinstalling it.
 
 Uninstalling the module package does not uninstall DeepSeek or automatically
 remove prior database edits.
@@ -352,7 +349,7 @@ code sent `User-Agent: okhttp/4.12.0`, while DeepSeek 2.2.2 identifies its app
 requests as `DeepSeek/<version> Android/<sdk>`. The old fingerprint can be
 rejected at the edge with HTTP 429 before the token is evaluated.
 
-Stable API 102 r21 corrected that fingerprint but still sent the token through
+The former modern build corrected that fingerprint but still sent the token through
 the unrelated telemetry header `x-auth-token`. DeepSeek's authenticated Ktor
 client actually sends `Authorization: Bearer <token>`, so a valid export could
 then reach the business layer but be rejected with HTTP 200 and `code=40002`.

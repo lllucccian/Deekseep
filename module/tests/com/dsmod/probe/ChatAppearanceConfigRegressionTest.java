@@ -53,6 +53,7 @@ public final class ChatAppearanceConfigRegressionTest {
     private static void testRoundTrip() {
         ChatAppearance.Config config = new ChatAppearance.Config();
         config.enabled = true;
+        config.assistantAvatarFile = "assistant_avatar_1.png";
         config.backgroundFile = "background_1.png";
         config.backgroundOpacity = 0.37f;
         config.backgroundMode = "fit";
@@ -107,6 +108,8 @@ public final class ChatAppearanceConfigRegressionTest {
         ChatAppearance.Config decoded =
                 ChatAppearance.Config.fromJson(config.toJson().toString());
         check(decoded.enabled, "enabled flag should survive");
+        check("assistant_avatar_1.png".equals(decoded.assistantAvatarFile),
+                "assistant avatar filename should survive independently");
         check("background_1.png".equals(decoded.backgroundFile),
                 "background filename should survive");
         check("fit".equals(decoded.backgroundMode), "background mode should survive");
@@ -176,6 +179,7 @@ public final class ChatAppearanceConfigRegressionTest {
     private static void testSanitization() throws Exception {
         JSONObject root = new JSONObject();
         root.put("enabled", true);
+        root.put("assistant_avatar_file", "../outside-avatar.png");
         root.put("background_file", "../outside.png");
         root.put("background_opacity", 4.5d);
         root.put("background_mode", "unknown");
@@ -222,6 +226,8 @@ public final class ChatAppearanceConfigRegressionTest {
 
         ChatAppearance.Config decoded =
                 ChatAppearance.Config.fromJson(root.toString());
+        check(decoded.assistantAvatarFile.length() == 0,
+                "path traversal assistant avatar should be rejected");
         check(decoded.backgroundFile.length() == 0,
                 "path traversal background should be rejected");
         check(decoded.backgroundOpacity == 1f, "background opacity should clamp");
@@ -289,6 +295,28 @@ public final class ChatAppearanceConfigRegressionTest {
             check(sticker.rotation >= -180f && sticker.rotation <= 180f,
                     "rotation should normalize");
         }
+    }
+
+    private static void testMasterSwitchOwnsInjectedSurfaces() {
+        ChatAppearance.Config config = new ChatAppearance.Config();
+        config.enabled = false;
+        config.bubbleEnabled = true;
+        config.liquidGlassEnabled = true;
+        config.spatialDepthEnabled = true;
+        check(!config.bubbleRenderingEnabled(),
+                "disabled appearance must suppress customized bubbles");
+        check(!config.glassRenderingEnabled(),
+                "disabled appearance must suppress global glass surfaces");
+        check(!config.spatialRenderingEnabled(),
+                "disabled appearance must suppress spatial motion");
+
+        config.enabled = true;
+        check(config.bubbleRenderingEnabled(),
+                "enabled appearance should restore configured bubbles");
+        check(config.glassRenderingEnabled(),
+                "enabled appearance should restore configured glass");
+        check(config.spatialRenderingEnabled(),
+                "enabled appearance should restore configured spatial motion");
     }
 
     private static void testRouteRecognition() {
@@ -660,6 +688,7 @@ public final class ChatAppearanceConfigRegressionTest {
     public static void main(String[] args) throws Exception {
         testRoundTrip();
         testSanitization();
+        testMasterSwitchOwnsInjectedSurfaces();
         testRouteRecognition();
         testRotatedCanvasCoverage();
         testWallpaperViewportLayout();
