@@ -48,7 +48,7 @@ for apk in "${APKS[@]}"; do
     fi
     rm -f "$dex_strings"
 
-    manifest="$(aapt2 dump xmltree "$apk" --file AndroidManifest.xml)"
+    manifest="$($AAPT2 dump xmltree "$apk" --file AndroidManifest.xml)"
     printf '%s\n' "$manifest" | grep -Eq '"xposedminversion"' || {
         echo "FAIL: $(basename "$apk") has no xposedminversion" >&2
         exit 1
