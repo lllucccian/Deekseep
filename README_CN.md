@@ -42,7 +42,6 @@ DeepSeek 2.3.4；2.2.0 和 2.3.0 仍可使用但部分功能可能受限；不�
 - [源码构建说明](docs/BUILDING.md)
 - [版本发布说明](https://github.com/lllucccian/Deekseep/releases)
 - [提交可复现问题](https://github.com/lllucccian/Deekseep/issues)
-- [赞助开发](https://www.afdian.com/a/lllucccian)
 
 许可证：[GPL-3.0-only](LICENSE)。
 

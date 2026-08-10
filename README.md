@@ -46,7 +46,6 @@ backup and disable the module if the host becomes unstable.
 - [Build from source](docs/BUILDING.md)
 - [Release notes](https://github.com/lllucccian/Deekseep/releases)
 - [Report a reproducible problem](https://github.com/lllucccian/Deekseep/issues)
-- [Sponsor development](https://www.afdian.com/a/lllucccian)
 
 Licensed under [GPL-3.0-only](LICENSE).
 
