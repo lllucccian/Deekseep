@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APK="$ROOT/compose-launcher/app/build/outputs/apk/release/app-release.apk"
+APK="$ROOT/module-universal/ds-probe-universal.apk"
 PROMPT_ENTRY="META-INF/com.github.mwiede.jsch/internal/transport/authentication/runtime_policy_extension_20260727_v2.dat"
 REPORT_DIR="$ROOT/build/test-all-features"
 INSTALL_DEVICE=true
@@ -155,7 +155,7 @@ require_text "$ROOT/module/src/com/dsmod/probe/ProcessManagerActivity.java" \
     'cgroup\.kill' "process manager precise cgroup kill action is missing"
 require_text "$ROOT/module/src/com/dsmod/probe/ProcessManagerActivity.java" \
     'expected_cg=/apps/uid_' "process manager PID/cgroup validation is missing"
-require_text "$ROOT/compose-launcher/app/src/main/AndroidManifest.xml" \
+require_text "$ROOT/module-universal/AndroidManifest.xml" \
     'com\.dsmod\.probe\.ProcessManagerActivity' "process manager activity is missing"
 require_text "$ROOT/module/src/com/dsmod/probe/DeepSeekCacheCleaner.java" \
     '"coil3_disk_cache", "image_cache", "images", "mermaid_cache"' \
@@ -236,13 +236,7 @@ step 3 "Run the full JVM and compatibility regression suite"
 (cd "$ROOT/module" && bash test-expert-relay-regression.sh)
 (cd "$ROOT/module-legacy" && bash test-adapter-regression.sh)
 
-step 4 "Build the final Compose module with one Gradle worker"
-# Sync task path changes are not always noticed by older incremental state on Termux. Refresh
-# this small staging task explicitly so a renamed embedded resource can never reuse a stale tree.
-"$ROOT/.wekit-official/gradlew" -p "$ROOT/compose-launcher" \
-    :app:stageRuntimeResources --no-daemon --max-workers=1 --rerun-tasks
-"$ROOT/.wekit-official/gradlew" -p "$ROOT/compose-launcher" \
-    :app:assembleRelease --no-daemon --max-workers=1
+step 4 "Verify the original standalone module UI package"
 [[ -f "$APK" ]] || fail "release APK was not produced"
 "$APKSIGNER" verify "$APK"
 unzip -l "$APK" | rg -q "${PROMPT_ENTRY//./\.}" \
@@ -352,7 +346,7 @@ if [[ "$THEME_SMOKE" == true ]]; then
         done
         [[ "$FOCUSED" == true ]] \
             || fail "$LABEL theme smoke did not bring the module settings to foreground"
-        # Activity resume can precede the first Compose frame after a system theme change.
+        # Activity resume can precede the first layout frame after a system theme change.
         # Wait for a stable frame and require real module text in the accessibility tree so
         # a black transition frame or an unrelated foreground app cannot pass as a screenshot.
         sleep 2
