@@ -107,6 +107,8 @@ final class LocalApiGateway {
         final boolean reasoning;
         final boolean search;
         final int maxOutputTokens;
+        /** Native DeepSeek file ids created by the oversized-prompt relay. */
+        final List<String> nativeFileIds;
         final OpenAiToolBridge.Plan toolPlan;
         final String previousResponseId;
         final boolean responsesApi;
@@ -138,7 +140,8 @@ final class LocalApiGateway {
                     System.currentTimeMillis() + COMPLETION_REQUEST_BUDGET_MS,
                     Collections.<String, String>emptyMap(),
                     Collections.<String>emptySet(),
-                    Collections.<String>emptySet(), null, null, null, null);
+                    Collections.<String>emptySet(), null, null, null, null,
+                    Collections.<String>emptyList());
         }
 
         private CompletionRequest(String requestId, String requestedModel, String nativeModel,
@@ -149,7 +152,8 @@ final class LocalApiGateway {
                           Set<String> completedToolCalls,
                           Set<String> repeatableCompletedToolCalls,
                           String clientSessionScope, JSONObject outputTextFormat,
-                          String nativeConversationId, Integer nativeParentMessageId) {
+                          String nativeConversationId, Integer nativeParentMessageId,
+                          List<String> nativeFileIds) {
             this.requestId = requestId;
             this.requestedModel = requestedModel;
             this.nativeModel = nativeModel;
@@ -165,6 +169,9 @@ final class LocalApiGateway {
             this.outputTextFormat = outputTextFormat;
             this.nativeConversationId = nativeConversationId;
             this.nativeParentMessageId = nativeParentMessageId;
+            this.nativeFileIds = nativeFileIds == null || nativeFileIds.isEmpty()
+                    ? Collections.<String>emptyList()
+                    : Collections.unmodifiableList(new ArrayList<String>(nativeFileIds));
             this.deadlineAtMs = deadlineAtMs;
             this.knownToolCalls = knownToolCalls == null || knownToolCalls.isEmpty()
                     ? Collections.<String, String>emptyMap()
@@ -185,7 +192,7 @@ final class LocalApiGateway {
                     previousResponseId, responsesApi, deadlineAtMs,
                     knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
                     clientSessionScope, outputTextFormat,
-                    nativeConversationId, nativeParentMessageId);
+                    nativeConversationId, nativeParentMessageId, nativeFileIds);
         }
 
         CompletionRequest withToolHistory(ToolHistory history) {
@@ -195,7 +202,7 @@ final class LocalApiGateway {
                     previousResponseId, responsesApi, deadlineAtMs,
                     history.knownCalls, history.completedCalls, history.repeatableCalls,
                     clientSessionScope, outputTextFormat,
-                    nativeConversationId, nativeParentMessageId);
+                    nativeConversationId, nativeParentMessageId, nativeFileIds);
         }
 
         CompletionRequest withClientSessionScope(String scope) {
@@ -207,7 +214,7 @@ final class LocalApiGateway {
                     previousResponseId, responsesApi, deadlineAtMs,
                     knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
                     normalized, outputTextFormat,
-                    nativeConversationId, nativeParentMessageId);
+                    nativeConversationId, nativeParentMessageId, nativeFileIds);
         }
 
         CompletionRequest withOutputTextFormat(JSONObject format) {
@@ -216,7 +223,7 @@ final class LocalApiGateway {
                     previousResponseId, responsesApi, deadlineAtMs,
                     knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
                     clientSessionScope, format,
-                    nativeConversationId, nativeParentMessageId);
+                    nativeConversationId, nativeParentMessageId, nativeFileIds);
         }
 
         CompletionRequest withNativeConversation(String sid, Integer parentMessageId) {
@@ -227,7 +234,16 @@ final class LocalApiGateway {
                     prompt, reasoning, search, maxOutputTokens, toolPlan,
                     previousResponseId, responsesApi, deadlineAtMs,
                     knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
-                    clientSessionScope, outputTextFormat, normalized, parent);
+                    clientSessionScope, outputTextFormat, normalized, parent, nativeFileIds);
+        }
+
+        CompletionRequest withPromptFiles(String replacement, List<String> fileIds) {
+            return new CompletionRequest(requestId, requestedModel, nativeModel, basePrompt,
+                    replacement, reasoning, search, maxOutputTokens, toolPlan,
+                    previousResponseId, responsesApi, deadlineAtMs,
+                    knownToolCalls, completedToolCalls, repeatableCompletedToolCalls,
+                    clientSessionScope, outputTextFormat,
+                    nativeConversationId, nativeParentMessageId, fileIds);
         }
 
         boolean toolsActive() {
@@ -356,6 +372,10 @@ final class LocalApiGateway {
 
     static void start(Context context, Backend newBackend) {
         if (context == null || newBackend == null) return;
+        if (!RuntimeProtection.allowSensitiveFeature(context)) {
+            apiLog("START_BLOCKED " + RuntimeProtection.status());
+            return;
+        }
         synchronized (LOCK) {
             backend = newBackend;
             appContext = context.getApplicationContext();
@@ -671,6 +691,10 @@ final class LocalApiGateway {
             HttpRequest http = readRequest(in);
             recordReceived();
             requestTag = http.method + " " + http.path;
+            if (!RuntimeProtection.allowSensitiveFeature(appContext)) {
+                throw new GatewayException(503, "runtime_protection",
+                        "server_error", "Local API disabled by runtime protection");
+            }
             anthropicRequest = http.path.startsWith("/v1/messages");
             lastRoute = requestTag;
             apiLog("REQUEST_BEGIN route=" + requestTag + " bytes=" + http.body.length);

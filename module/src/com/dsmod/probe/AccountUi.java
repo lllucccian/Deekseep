@@ -207,6 +207,7 @@ final class AccountUi {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         hlp.topMargin = dp(act, 12);
         content.addView(hint, hlp);
+        DeekseepUi.addBuildFooter(act, content, sub);
         UiLanguage.localizeTree(act, content);
     }
 

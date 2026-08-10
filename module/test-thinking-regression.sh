@@ -12,6 +12,14 @@ JSON_SHA256="3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed"
 rm -rf "$OUT"
 mkdir -p "$OUT/classes" "$OUT/lib" "$DEPS_DIR"
 
+# Tests use the already-built universal Main/adapter classes; this keeps
+# the regression suite aligned with the APK that is actually distributed.
+UNIVERSAL_CLASSES="../module-universal/build/classes"
+if [[ ! -f "$UNIVERSAL_CLASSES/com/dsmod/probe/Main.class" ]]; then
+    echo "Universal classes are missing; build module-universal before running tests" >&2
+    exit 1
+fi
+
 if [[ ! -f "$JSON_CACHE" ]] || ! printf '%s  %s\n' "$JSON_SHA256" "$JSON_CACHE" \
         | sha256sum -c - >/dev/null 2>&1; then
     tmp="$JSON_CACHE.tmp"
@@ -38,7 +46,7 @@ if [[ ! -f "$JSON_CACHE" ]] || ! printf '%s  %s\n' "$JSON_SHA256" "$JSON_CACHE" 
 fi
 cp "$JSON_CACHE" "$JSON_JAR"
 
-javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes" \
+javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:$UNIVERSAL_CLASSES:build/classes" \
     -d "$OUT/classes" \
     tests/com/dsmod/probe/ChatEditorThinkingRegressionTest.java \
     tests/com/dsmod/probe/ChatEditorHistoryImageRegressionTest.java \
@@ -58,6 +66,14 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     tests/com/dsmod/probe/ChatAppearanceConfigRegressionTest.java \
     tests/com/dsmod/probe/ImageCutoutRegressionTest.java \
     tests/com/dsmod/probe/HeartbeatToolProtocolRegressionTest.java \
+    tests/com/dsmod/probe/RichPanelRendererRegressionTest.java \
+    tests/com/dsmod/probe/AgentRunStoreRegressionTest.java \
+    tests/com/dsmod/probe/ChatBackupFormatRegressionTest.java \
+    tests/com/dsmod/probe/DeepSeekCacheCleanerRegressionTest.java \
+    tests/com/dsmod/probe/RemoteFeatureFlagsRegressionTest.java \
+    tests/com/dsmod/probe/ProcessManagerRegressionTest.java \
+    tests/com/dsmod/probe/ReplyReadyPolicyRegressionTest.java \
+    tests/com/dsmod/probe/AutoContinuePolicyRegressionTest.java \
     src/com/dsmod/probe/LocalApiGateway.java \
     src/com/dsmod/probe/OpenAiToolBridge.java \
     src/com/dsmod/probe/OmniRouteToolBridge.java \
@@ -67,16 +83,30 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     src/com/dsmod/probe/ChatAppearance.java \
     src/com/dsmod/probe/ImageCutoutUi.java \
     src/com/dsmod/probe/HeartbeatToolProtocol.java \
+    src/com/dsmod/probe/RichPanelRenderer.java \
+    src/com/dsmod/probe/AgentRunStore.java \
+    src/com/dsmod/probe/ChatBackupStore.java \
+    src/com/dsmod/probe/DeekseepTools.java \
+    src/com/dsmod/probe/AgentToolConfig.java \
+    src/com/dsmod/probe/AgentQuestionUi.java \
+    src/com/dsmod/probe/AgentDeviceBridge.java \
     src/com/dsmod/probe/ProactiveHeartbeatReceiver.java \
+    src/com/dsmod/probe/QqMusicPlaybackService.java \
+    src/com/dsmod/probe/LocalAudioPlaybackService.java \
+    src/com/dsmod/probe/LocalAudioControlActivity.java \
+    src/com/dsmod/probe/QqMusicSessionAccessService.java \
     src/com/dsmod/probe/HistoryBridge.java \
     src/com/dsmod/probe/XposedActivationProvider.java \
     src/com/dsmod/probe/XposedActivationReceiver.java \
     src/com/dsmod/probe/AccountCredentialCodec.java \
     src/com/dsmod/probe/AccountManager.java \
+    src/com/dsmod/probe/RemoteFeatureFlags.java \
+    src/com/dsmod/probe/ProcessManagerActivity.java \
+    src/com/dsmod/probe/ReplyReadyPolicy.java \
+    src/com/dsmod/probe/AutoContinuePolicy.java \
     src/com/dsmod/probe/GoogleLoginUnlock.java \
     src/com/dsmod/probe/ResponsePreserver.java \
     src/com/dsmod/probe/HostCompat.java \
-    src/com/dsmod/probe/Main.java \
     tests/tp.java \
     tests/h61.java \
     tests/sl8.java \
@@ -87,10 +117,10 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:libs/api.jar:build/classes
     tests/p64.java \
     tests/c74.java
 
-# The output directory comes first because LocalApiGateway, OpenAiToolBridge, and
-# ResponsePreserver (and Main) are compiled from current source as part of this regression run;
-# build/classes may still contain the previous APK build.
-TEST_CP="$JSON_JAR:$ANDROID_JAR:libs/api.jar:$OUT/classes:build/classes"
+# Current sources compiled by this run must precede the previous universal APK classes.
+# Otherwise Java loads a stale HostCompat/Main from module-universal/build/classes and the
+# compatibility regression tests validate yesterday's APK instead of the pending build.
+TEST_CP="$JSON_JAR:$ANDROID_JAR:$OUT/classes:$UNIVERSAL_CLASSES:build/classes"
 
 java -cp "$TEST_CP" \
     com.dsmod.probe.ChatEditorThinkingRegressionTest
@@ -145,5 +175,29 @@ java -cp "$TEST_CP" \
 
 java -cp "$TEST_CP" \
     com.dsmod.probe.HeartbeatToolProtocolRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.RichPanelRendererRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.AgentRunStoreRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.ChatBackupFormatRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.DeepSeekCacheCleanerRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.RemoteFeatureFlagsRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.ProcessManagerRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.ReplyReadyPolicyRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.AutoContinuePolicyRegressionTest
 
 ./test-language-catalog.sh

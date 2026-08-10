@@ -4,6 +4,55 @@ All notable public releases are documented here.
 
 ## [Unreleased]
 
+### Features
+
+- Unified the complete canonical feature core across the mainland and Google
+  Play universal APKs, and added a release parity check that rejects either
+  channel when any maintained feature class is missing.
+- Added an explicit traditional-Xposed API 82-through-102 regression matrix.
+  The release entry keeps API 82 as its minimum, has no artificial maximum, and
+  runs the hook chain, argument replacement, exception, and fail-open contracts
+  for all 21 API values.
+
+- Added an opt-in automatic continue-generation switch that dispatches DeepSeek's
+  own resume event when a long assistant response is server-paused, including
+  while the app is in the background, across 2.2.x, 2.3.0, and both 2.3.4 channels.
+- Added a single reply-ready notification when an assistant response moves from
+  a real generating state to finished while DeepSeek is in the background. The
+  notification returns to DeepSeek and ignores foreground, history-load, user,
+  failed, and duplicate status updates.
+- Replaced generic Android notification glyphs across reply-ready, proactive
+  heartbeat, local API, and music playback notifications with the official
+  DeepSeek whale silhouette; reply notifications also use DeepSeek's brand color.
+
+### Fixes
+
+- Replaced the ineffective remote-cache feature hooks with DeepSeek's native
+  `kv_settings_*` override layer, migrated version-1 overrides without losing
+  the remembered server values, and restart the host after each change so
+  constructor-cached feature state is reloaded.
+- Preserved all Boolean flags from DeepSeek's native settings catalogue in
+  2.2.2, 2.3.0, and mainland/Google Play 2.3.4. Indirect or inlined consumers
+  are not discarded merely because they do not repeat the MMKV key literal.
+- Restored the positive `Show assistant avatar` label and invert its value when
+  writing DeepSeek's negative `hide_assistant_avatar` key. Existing `+1`
+  overrides retain the user's original show-avatar intent instead of hiding it.
+- Made native-feature configuration reads consume the complete file before JSON
+  parsing, and clean the stale avatar rollout value left by the former remote-key
+  writer so the displayed server default is no longer polluted by a local force.
+- Added a standalone Root process manager for every DeepSeek and Deekseep module
+  process, with role labels, live frozen state, PID-reuse validation, explicit
+  confirmation, and precise freeze/resume/kill signals.
+- Fixed process actions being rejected because Android `ps -o NAME=` emits a
+  leading blank line. Freeze/resume now uses and verifies the target process's
+  cgroup-v2 freezer, while kill uses the exact per-process cgroup with a signal
+  fallback; the UI now reports the real cgroup frozen state.
+- Added a feature-name-only WeKit applicability inventory without copying its
+  implementation.
+- Stopped injecting the AI-heartbeat agreement, event protocol, and heartbeat
+  tool schemas when AI heartbeat is disabled. Ordinary Agent tools keep their
+  own heartbeat-free contract and execution policy.
+
 ### Documentation
 
 - Reworked the GitHub project documentation around a faster compatibility,
@@ -15,31 +64,49 @@ All notable public releases are documented here.
 - Added real in-app project screenshots, a 1280 × 640 social preview SVG, and
   a manual GitHub repository setup guide.
 
-## 1.7.3 - 2026-07-30
+## 1.7.4 - 2026-08-10
 
-### Unified multi-API release
+### Release highlights
 
-- Replaced separate API 102 and Legacy downloads with one API 82 / 100 / 101 /
-  102 universal APK per DeepSeek channel. The release now has exactly two APKs:
-  Mainland and Google Play.
-- Added Mainland DeepSeek 2.3.0 (`versionCode 237`) runtime mapping while
-  retaining Mainland 2.2.2 (`233`) compatibility.
-- Kept the Google Play package limited to its verified DeepSeek 2.2.2
-  (`versionCode 236`) mapping; newer Google Play builds remain unsupported.
-- Added chat wallpaper and sticker customization with scaling,
-  horizontal/vertical framing, rotation, opacity, display-range controls, and
-  offline one-tap sticker cutout with manual cleanup.
-- Added temporary Pinggy public URLs and custom Cloudflare Tunnel
-  hostname/connector controls to the DeepSeek Local API.
-- Improved target-process activation verification to prevent an injected module
-  from remaining indefinitely at **Pending verification**.
-- Hardened response preservation across final-state replacement, history
-  refresh, and cold restart paths.
-- Added conversation-bound scheduled reminders and proactive heartbeat
-  delivery with in-chat persistence and background notifications.
-- Removed unused Cloudflared CPU payloads from the release package and retained
-  the arm64 component used by the supported target devices.
-- Updated several Easter eggs.
+- Refactored the module and settings UI with search and five categories:
+  **Chat**, **Account & Privacy**, **Appearance**, **Debugging**, and
+  **Engineering**. Switches are smaller and consistent, execution buttons are
+  aligned, and feature settings use the small gear button to the right of the
+  feature name.
+- Added the basic Agent tools. Download the module and inspect the in-app
+  Agent page for the exact tool set. The music tool requires QQ Music 20.7 or
+  newer; with Root permission it can play music automatically in the
+  background.
+- Added automatic continue-generation: when DeepSeek pauses a long-thinking
+  answer and shows its native Continue generating action, the module dispatches
+  the same native resume event, including while the app is in the background.
+- Added a visible **Reply-ready notification** switch beside automatic
+  continue-generation. When enabled (the upgrade-safe default), a background
+  completion sends a system notification that opens the conversation.
+- Added local mute/ban, custom home greeting, custom assistant avatar (after
+  enabling **Show assistant avatar** in the renamed **Feature Flag Manager**),
+  whale rotation, deep-sea text-wave effects, on-screen Hook logs, crash
+  recording/tests, custom DeepSeek requests, hot-update blocking, cache
+  cleanup, and a Root process manager.
+- Local API now stays alive through a foreground heartbeat without requiring a
+  background-running exemption, can upload long context as a file, and still
+  benefits from a battery-optimization exemption for DeepSeek.
+- “Disable data used for service improvement” actively disables the host
+  setting and prevents it from being turned on again. Native settings
+  injection is experimental and may crash the host app.
+- Merged the domestic and Google Play runtime paths into one universal APK and
+  added 2.3.4 channel maps (245/246). DeepSeek 2.2.0 and 2.3.0 remain usable
+  with possible feature gaps; 2.3.1–2.3.3 are unsupported. Upgrade to 2.3.4
+  when possible. Some older-host functions may still be abnormal or
+  unavailable; reproducible issue reports are welcome.
+
+### Release assets
+
+- `Deekseep.apk` — the single merged module APK.
+- `SOURCE-SHA256.txt` — source commit and APK SHA-256 record.
+
+The GitHub release intentionally does not attach duplicate channel APKs or
+reverse-engineering artifacts.
 
 ## 1.7.2 - 2026-07-22
 
@@ -72,7 +139,7 @@ All notable public releases are documented here.
   The legacy APK now compiles the canonical stable feature core through a
   traditional-Xposed compatibility adapter, including the local OpenAI/
   Anthropic gateway and current account/editor/login fixes.
-- Discontinued the API 102 and traditional-Xposed test editions. No test or
+- Discontinued the retired modern and traditional-Xposed test editions. No test or
   load-probe APK is attached to 1.7.1; only the two stable interface packages
   and their checksums are published.
 - Established **Experimental Features** as a dedicated in-app and documentation
@@ -86,7 +153,7 @@ All notable public releases are documented here.
   add/switch/remove actions, selectable JSON import/export, and validation before
   candidate credentials are stored. Importing adds accounts to the list without
   silently changing the currently active account.
-- Upgraded the stable API 102 development head to **1.7-r20-api102** and hardened
+- Upgraded the retired modern development head to **1.7-r20** and hardened
   OpenAI Responses for Codex CLI 0.144.5. The gateway now scopes native sessions
   from Codex thread/session metadata, emits `phase`, `end_turn`, and custom-tool
   status fields, preserves only public reasoning summaries, and never forwards
@@ -114,7 +181,7 @@ All notable public releases are documented here.
   subpage with a versioned first-entry disclaimer, five-second confirmation,
   explicit exit, and separate help. Replaced the two-button protocol selector
   with a Format/current-value row and a selection popup.
-- Upgraded the stable API 102 development head to **1.7-r19-api102**. Every
+- Upgraded the retired modern development head to **1.7-r19**. Every
   DeepSeek generation now passes through one fair account-wide native permit,
   with tool-bearing main/Task turns prioritized and non-tool Claude metadata
   paced before it can occupy the permit. This removes the competing native
@@ -135,7 +202,7 @@ All notable public releases are documented here.
   A real backgrounded `/init` completed Glob, Task, Read, Bash, and Write; live
   acceptance also covered `/compact`, `/clear`, `/new`, `@` file input, input-line
   Bash mode, and fifteen Claude Code internal commands.
-- Upgraded the stable API 102 gateway to **1.7-r16-api102**. Anthropic Messages now
+- Upgraded the retired modern gateway to **1.7-r16**. Anthropic Messages now
   forwards native reasoning and text incrementally, emits the complete official
   thinking/text/tool content-block lifecycle, and streams tool arguments through
   `input_json_delta`. DeepSeek special-token, XML, narrated, embedded, and damaged-key
@@ -149,7 +216,7 @@ All notable public releases are documented here.
   read-only Read/Glob/Grep-style verification calls to run again. A real Claude Code
   Write → Read → Edit → Read chain and a separate Bash tool-result round trip now both
   execute through the client, with no raw tool tags and exact files verified on disk.
-- Renamed the stable API 102 gateway UI to
+- Renamed the retired modern gateway UI to
   **DeepSeek Local API**. A first-use custom preflight now requires verified
   unrestricted battery/background activity before listening. The control page
   provides a real OpenAI/Anthropic protocol selector; Anthropic mode implements
@@ -172,7 +239,7 @@ All notable public releases are documented here.
   signatures now key Bash by the actual command; failed results and genuinely
   different commands remain retryable. JVM and live two-turn Claude tests cover
   the behavior.
-- Added a loopback-only OpenAI-compatible gateway to the stable API 102 build.
+- Added a loopback-only OpenAI-compatible gateway to the retired modern build.
   Its manually drawn subpage controls listening, URL/Key copy, custom or random
   keys, deep-thinking parameters, and live request/queue/failure diagnostics.
   Chat Completions and Responses support non-streaming and SSE, chunked request
@@ -198,7 +265,7 @@ All notable public releases are documented here.
 - Added a bottom-of-page build footer showing module version, libxposed API,
   compile time, and the installed DeepSeek version. The earlier local API design
   document is now an implementation-status and hardening roadmap.
-- Added an opt-in stable API 102 switch that restores DeepSeek's own Google
+- Added an opt-in switch in the retired modern build that restores DeepSeek's own Google
   login option on the mainland login page while preserving phone, one-tap, and
   WeChat methods. The injected item continues through the host Credential
   Manager and official OAuth exchange; the module neither builds a replacement
@@ -281,7 +348,7 @@ All notable public releases are documented here.
 - Fixed expert image relay after the first message in a conversation. DeepSeek
   omits `model_type` from continuation requests, so the module now carries the
   effective session model from the image send point to the exact request in
-  both the stable API 102 and test legacy relay implementations.
+  both the retired modern and test legacy relay implementations.
 - Added a JVM regression test for explicit first-turn and captured later-turn
   expert model resolution.
 
@@ -301,7 +368,7 @@ All notable public releases are documented here.
 - Increased Android version codes for in-channel upgrades while retaining the
   existing v1.7 release asset names.
 
-### Stable API 102
+### Retired modern build
 
 - Added an advanced local conversation editor with title, user-message,
   assistant-response, and reasoning-fragment editing.
@@ -310,7 +377,7 @@ All notable public releases are documented here.
   rotating automatic database backup.
 - Added optional sidebar multi-select and batch deletion.
 - Ported expert image relay, parallel multi-image vision description, and
-  persisted image-fragment restoration to the modern API 102 track.
+  persisted image-fragment restoration to the former modern track.
 - Fixed creation of reasoning content on a message that originally had no
   reasoning fragment.
 - Added automatic, idempotent migration for records damaged by the old

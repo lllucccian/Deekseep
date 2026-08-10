@@ -2,8 +2,10 @@ package com.dsmod.probe;
 
 import android.app.Activity;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
@@ -346,8 +348,9 @@ final class ChatAppearance {
     }
 
     static final class Config {
-        int version = 10;
+        int version = 11;
         boolean enabled;
+        String assistantAvatarFile = "";
         String backgroundFile = "";
         float backgroundOpacity = 0.24f;
         String backgroundMode = "crop";
@@ -385,6 +388,7 @@ final class ChatAppearance {
             Config out = new Config();
             out.version = version;
             out.enabled = enabled;
+            out.assistantAvatarFile = assistantAvatarFile;
             out.backgroundFile = backgroundFile;
             out.backgroundOpacity = backgroundOpacity;
             out.backgroundMode = backgroundMode;
@@ -460,8 +464,22 @@ final class ChatAppearance {
             return user ? userBubble : assistantBubble;
         }
 
+        /** The page master switch owns every injected visual, including Compose-only surfaces. */
+        boolean bubbleRenderingEnabled() {
+            return enabled && (bubbleEnabled || liquidGlassEnabled);
+        }
+
+        boolean glassRenderingEnabled() {
+            return enabled && liquidGlassEnabled;
+        }
+
+        boolean spatialRenderingEnabled() {
+            return enabled && spatialDepthEnabled;
+        }
+
         void sanitize() {
-            version = 10;
+            version = 11;
+            assistantAvatarFile = safeAssetName(assistantAvatarFile);
             backgroundFile = safeAssetName(backgroundFile);
             backgroundOpacity = clamp(backgroundOpacity, 0f, 1f);
             if (Float.isNaN(backgroundScale) || Float.isInfinite(backgroundScale)
@@ -537,6 +555,7 @@ final class ChatAppearance {
             try {
                 json.put("version", version);
                 json.put("enabled", enabled);
+                json.put("assistant_avatar_file", assistantAvatarFile);
                 json.put("background_file", backgroundFile);
                 json.put("background_opacity", backgroundOpacity);
                 json.put("background_mode", backgroundMode);
@@ -582,6 +601,8 @@ final class ChatAppearance {
                 JSONObject json = new JSONObject(value);
                 out.version = json.optInt("version", 1);
                 out.enabled = json.optBoolean("enabled", false);
+                out.assistantAvatarFile =
+                        json.optString("assistant_avatar_file", "");
                 out.backgroundFile = json.optString("background_file", "");
                 out.backgroundOpacity =
                         (float) json.optDouble("background_opacity", 0.24d);
@@ -679,6 +700,7 @@ final class ChatAppearance {
     static BubbleStyle bubbleStyleForRender(boolean user) {
         synchronized (CONFIG_LOCK) {
             if (cached == null) cached = readConfig();
+            if (!cached.enabled) return null;
             BubbleStyle configured = cached.bubble(user);
             if (cached.liquidGlassEnabled) {
                 BubbleStyle style = configured == null
@@ -706,15 +728,45 @@ final class ChatAppearance {
     static boolean glassEnabledForRender() {
         synchronized (CONFIG_LOCK) {
             if (cached == null) cached = readConfig();
-            return cached.liquidGlassEnabled;
+            return cached.glassRenderingEnabled();
         }
     }
 
     static boolean spatialDepthEnabledForRender() {
         synchronized (CONFIG_LOCK) {
             if (cached == null) cached = readConfig();
-            return cached.spatialDepthEnabled;
+            return cached.spatialRenderingEnabled();
         }
+    }
+
+    /** Returns the configured avatar independently of the chat-appearance master switch. */
+    static File assistantAvatarFileForRender() {
+        synchronized (CONFIG_LOCK) {
+            if (cached == null) cached = readConfig();
+            File file = assetFile(cached.assistantAvatarFile);
+            return file.isFile() && file.length() > 0L ? file : null;
+        }
+    }
+
+    static boolean motionBackgroundReady(Config config) {
+        return config != null
+                && config.backgroundFile != null
+                && config.backgroundFile.length() > 0
+                && assetFile(config.backgroundFile).isFile();
+    }
+
+    static boolean motionSensorAvailable(Context context) {
+        if (context == null) return false;
+        android.hardware.SensorManager manager =
+                (android.hardware.SensorManager) context.getSystemService(
+                        Context.SENSOR_SERVICE);
+        if (manager == null) return false;
+        return manager.getDefaultSensor(
+                        android.hardware.Sensor.TYPE_ROTATION_VECTOR) != null
+                || manager.getDefaultSensor(
+                        android.hardware.Sensor.TYPE_GAME_ROTATION_VECTOR) != null
+                || manager.getDefaultSensor(
+                        android.hardware.Sensor.TYPE_ACCELEROMETER) != null;
     }
 
     static float spatialStrengthMultiplier(String value) {
@@ -789,6 +841,63 @@ final class ChatAppearance {
     static ImportResult importBubbleDecoration(
             Activity activity, Uri uri, boolean user) {
         return importImage(activity, uri, user ? 2 : 3);
+    }
+
+    /** Imports a bounded, circular copy used by the host's native assistant-avatar painter. */
+    static ImportResult importAssistantAvatar(Activity activity, Uri uri) {
+        if (activity == null || uri == null) {
+            return new ImportResult(false, "没有选择图片", null);
+        }
+        synchronized (CONFIG_LOCK) {
+            File assets = new File(ASSET_DIR);
+            if (!assets.exists() && !assets.mkdirs()) {
+                return new ImportResult(false, "无法创建外观图片目录", null);
+            }
+            File temporary = new File(assets, "avatar_import_"
+                    + UUID.randomUUID().toString().replace("-", "") + ".tmp");
+            String error = copyAndValidateImage(
+                    activity.getContentResolver(), uri, temporary);
+            if (error != null) {
+                temporary.delete();
+                return new ImportResult(false, error, null);
+            }
+            Bitmap decoded = loadBitmap(temporary, 1024, 1024);
+            temporary.delete();
+            if (decoded == null || decoded.getWidth() <= 0 || decoded.getHeight() <= 0) {
+                if (decoded != null) decoded.recycle();
+                return new ImportResult(false, "无法解码所选图片", null);
+            }
+            Bitmap normalized = null;
+            try {
+                normalized = circularAvatarBitmap(decoded, 512);
+                if (normalized == null) {
+                    return new ImportResult(false, "头像处理失败", null);
+                }
+                String name = writeCutoutBitmapLocked(normalized, "assistant_avatar_");
+                if (name == null) {
+                    return new ImportResult(false, "头像保存失败", null);
+                }
+                Config config = cached == null ? readConfig() : cached.copy();
+                String old = config.assistantAvatarFile;
+                config.assistantAvatarFile = name;
+                if (!writeConfigLocked(config)) {
+                    new File(ASSET_DIR, name).delete();
+                    return new ImportResult(false, "头像设置保存失败", null);
+                }
+                if (old.length() > 0 && !isAssetUsed(config, old)) {
+                    new File(ASSET_DIR, safeAssetName(old)).delete();
+                }
+                refresh();
+                return new ImportResult(true, "DeepSeek 头像已更新", null);
+            } catch (Throwable t) {
+                Main.log("assistant avatar crop failed: " + t);
+                return new ImportResult(false, "头像处理失败", null);
+            } finally {
+                if (normalized != null && normalized != decoded
+                        && !normalized.isRecycled()) normalized.recycle();
+                if (!decoded.isRecycled()) decoded.recycle();
+            }
+        }
     }
 
     static ImportResult saveStickerCutout(String stickerId, Bitmap bitmap) {
@@ -991,6 +1100,21 @@ final class ChatAppearance {
         return true;
     }
 
+    static boolean removeAssistantAvatar() {
+        synchronized (CONFIG_LOCK) {
+            Config config = cached == null ? readConfig() : cached.copy();
+            String old = config.assistantAvatarFile;
+            if (old.length() == 0) return true;
+            config.assistantAvatarFile = "";
+            if (!writeConfigLocked(config)) return false;
+            if (!isAssetUsed(config, old)) {
+                new File(ASSET_DIR, safeAssetName(old)).delete();
+            }
+        }
+        refresh();
+        return true;
+    }
+
     static boolean removeSticker(String id) {
         if (id == null) return false;
         synchronized (CONFIG_LOCK) {
@@ -1035,6 +1159,9 @@ final class ChatAppearance {
             Config empty = new Config();
             if (!writeConfigLocked(empty)) return false;
             ArrayList<String> files = new ArrayList<>();
+            if (old.assistantAvatarFile.length() > 0) {
+                files.add(old.assistantAvatarFile);
+            }
             if (old.backgroundFile.length() > 0) files.add(old.backgroundFile);
             for (Sticker sticker : old.stickers) files.add(sticker.file);
             if (old.userBubble.decorationFile.length() > 0) {
@@ -1055,6 +1182,7 @@ final class ChatAppearance {
     private static boolean isAssetUsed(Config config, String name) {
         String safe = safeAssetName(name);
         if (safe.length() == 0) return false;
+        if (safe.equals(config.assistantAvatarFile)) return true;
         if (safe.equals(config.backgroundFile)) return true;
         if (safe.equals(config.userBubble.decorationFile)
                 || safe.equals(config.assistantBubble.decorationFile)) {
@@ -1233,6 +1361,48 @@ final class ChatAppearance {
             return BitmapFactory.decodeFile(file.getAbsolutePath(), decode);
         } catch (Throwable t) {
             Main.log("appearance bitmap decode failed: " + t);
+            return null;
+        }
+    }
+
+    /**
+     * Normalises both newly imported and legacy avatar files to a full-bleed ARGB circle.
+     * DeepSeek renders this resource through Material Icon, which does not clip bitmap painters.
+     */
+    static Bitmap loadAssistantAvatarBitmap(File file, int requestedSize) {
+        int size = Math.max(32, requestedSize);
+        Bitmap decoded = loadBitmap(file, size, size);
+        if (decoded == null) return null;
+        Bitmap circular = circularAvatarBitmap(decoded, size);
+        if (circular != decoded && !decoded.isRecycled()) decoded.recycle();
+        return circular;
+    }
+
+    static Bitmap circularAvatarBitmap(Bitmap source, int requestedSize) {
+        if (source == null || source.getWidth() <= 0 || source.getHeight() <= 0) return null;
+        int size = Math.max(32, requestedSize);
+        try {
+            Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            BitmapShader shader = new BitmapShader(
+                    source, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            float scale = Math.max(
+                    size / (float) source.getWidth(),
+                    size / (float) source.getHeight());
+            Matrix matrix = new Matrix();
+            matrix.setScale(scale, scale);
+            matrix.postTranslate(
+                    (size - source.getWidth() * scale) * 0.5f,
+                    (size - source.getHeight() * scale) * 0.5f);
+            shader.setLocalMatrix(matrix);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            paint.setShader(shader);
+            Canvas canvas = new Canvas(output);
+            // Half a pixel of optical bleed prevents a pale seam against the host's circular
+            // avatar slot while the transparent corners still remove every square edge.
+            canvas.drawCircle(size * 0.5f, size * 0.5f, size * 0.5f + 0.5f, paint);
+            return output;
+        } catch (Throwable t) {
+            Main.log("assistant avatar mask failed: " + t);
             return null;
         }
     }
@@ -1778,8 +1948,8 @@ final class ChatAppearance {
                         || (config.backgroundFile.length() > 0
                         && config.backgroundOnSettings))));
         boolean show = appearance
-                || (config.liquidGlassEnabled && (chat || settings))
-                || (config.spatialDepthEnabled && chat);
+                || (config.enabled && config.liquidGlassEnabled && (chat || settings))
+                || (config.enabled && config.spatialDepthEnabled && chat);
         if (show) {
             boolean alreadyRendered = overlay.getChildCount() > 0;
             if (!alreadyRendered) overlay.render(config);
@@ -2399,6 +2569,7 @@ final class ChatAppearance {
             boolean want = config != null && config.enabled
                     && config.shakeParallaxEnabled
                     && !config.spatialDepthEnabled
+                    && !SpatialMotionController.isPowerSaveMode(getContext())
                     && wallpaperView != null && shakeMaxOffsetPx > 0;
             if (want) {
                 if (shakeSensor == null) {
@@ -2874,7 +3045,10 @@ final class ChatAppearance {
         void start() {
             if (registered || manager == null) return;
             android.hardware.Sensor sensor = linearAccel != null ? linearAccel : accelerometer;
-            if (sensor == null) return;
+            if (sensor == null) {
+                Main.log("shake parallax unavailable: no motion sensor");
+                return;
+            }
             registered = manager.registerListener(
                     this, sensor, android.hardware.SensorManager.SENSOR_DELAY_GAME);
             if (registered) {
@@ -2888,6 +3062,7 @@ final class ChatAppearance {
             manager.unregisterListener(this);
             registered = false;
             haveGravity = false;
+            Main.log("shake parallax sensor stopped");
         }
 
         @Override public void onSensorChanged(android.hardware.SensorEvent event) {

@@ -169,6 +169,7 @@ public final class ChatEditorUi {
             c.targetDbPath = dbPath; c.targetSid = sid; c.targetMsgId = msgId;
             c.open();
         } catch (Throwable t) {
+            Main.log("open editor at sid=" + sid + " failed: " + t);
             UiLanguage.toast(act, "无法打开聊天编辑器: " + t, Toast.LENGTH_LONG).show();
         }
     }
@@ -211,6 +212,7 @@ public final class ChatEditorUi {
 
     static final class Msg {
         long id;
+        double insertedAt;
         String role;
         String think = "";
         String body = "";
@@ -266,12 +268,20 @@ public final class ChatEditorUi {
     }
 
     // ── 数据层 ───────────────────────────────────────────────
+    // 官方曾写出 deepseek_chat_*.db 这样的坏文件（uuid 段含 *），按 uuid 段合法性过滤
+    static boolean validDbUuid(String uuid) {
+        return uuid != null && uuid.length() >= 4 && uuid.matches("[A-Za-z0-9_\\-]+");
+    }
+
     static List<File> allDbs() {
         List<File> out = new ArrayList<>();
         File[] fs = new File(DB_DIR).listFiles();
         if (fs != null) for (File f : fs) {
             String n = f.getName();
-            if (n.startsWith("deepseek_chat_") && n.endsWith(".db")) out.add(f);
+            if (n.startsWith("deepseek_chat_") && n.endsWith(".db")) {
+                String uuid = n.substring("deepseek_chat_".length(), n.length() - ".db".length());
+                if (validDbUuid(uuid)) out.add(f);
+            }
         }
         return out;
     }
@@ -402,8 +412,17 @@ public final class ChatEditorUi {
         Map<Long, Long> parent = new HashMap<>();
         long maxId = -1;
         Cursor c = null;
+        boolean hasInsertedAt = true;
         try {
-            c = db.rawQuery("SELECT message_id,parent_id,role,fragments FROM '" + t + "'", null);
+            try {
+                c = db.rawQuery("SELECT message_id,parent_id,role,fragments,inserted_at FROM '"
+                        + t + "'", null);
+            } catch (Throwable oldSchema) {
+                hasInsertedAt = false;
+                if (c != null) { try { c.close(); } catch (Throwable ignored) {} c = null; }
+                c = db.rawQuery("SELECT message_id,parent_id,role,fragments FROM '"
+                        + t + "'", null);
+            }
             while (c.moveToNext()) {
                 long id = c.getLong(0);
                 Long p = c.isNull(1) ? null : c.getLong(1);
@@ -411,6 +430,7 @@ public final class ChatEditorUi {
                 m.id = id;
                 m.role = c.getString(2) == null ? "" : c.getString(2);
                 parseFragments(m, c.getString(3));
+                m.insertedAt = !hasInsertedAt || c.isNull(4) ? 0d : c.getDouble(4);
                 map.put(id, m);
                 parent.put(id, p);
                 if (id > maxId) maxId = id;
@@ -444,6 +464,7 @@ public final class ChatEditorUi {
             Msg m = new Msg();
             m.id = row.messageId;
             m.role = row.role == null ? "" : row.role;
+            m.insertedAt = row.insertedAt;
             parseFragments(m, row.fragments);
             map.put(m.id, m);
             parent.put(m.id, row.parentId == null ? null : row.parentId.longValue());
@@ -1112,6 +1133,20 @@ public final class ChatEditorUi {
                 if (messages != null) try { messages.close(); } catch (Throwable ignored) {}
             }
         }
+    }
+
+    /** Full-fidelity portable record used by the chat backup archive. */
+    static JSONObject snapshotSession(SQLiteDatabase db, String sid) throws Throwable {
+        return db == null ? null : ChatBackupStore.snapshot(
+                db, sid, uuidOf(new File(db.getPath())));
+    }
+
+    /** Overwrites only a session already re-issued by the server, then freezes that local copy. */
+    static boolean overwriteMatchingSession(SQLiteDatabase db, JSONObject root) throws Throwable {
+        boolean committed = ChatBackupStore.overwriteMatching(db, root, FREEZE_VERSION);
+        String sid = root == null ? "" : root.optString("sid", "");
+        if (committed) backupLocalSession(db, sid);
+        return committed;
     }
 
     private static String readText(File file) throws Throwable {
@@ -3043,6 +3078,51 @@ public final class ChatEditorUi {
             }
             msgContainer.addView(wrap, wlp);
             msgAnchors.put(m.id, wrap);
+            if (Main.isMessageDetailsEnabled()) addMessageDetailsRow(m, user);
+        }
+
+        void addMessageDetailsRow(final Msg message, boolean user) {
+            TextView details = new TextView(act);
+            details.setText(message.insertedAt > 0d
+                    ? formatMessageTime(message.insertedAt)
+                    : UiLanguage.text(act, "详情", "Details"));
+            details.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            details.setTextColor(sub);
+            details.setGravity(user ? Gravity.END : Gravity.START);
+            details.setPadding(dp(6), dp(3), dp(6), dp(2));
+            details.setClickable(true);
+            details.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View view) { showMessageDetails(message); }
+            });
+            msgContainer.addView(details, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+
+        String formatMessageTime(double seconds) {
+            if (seconds <= 0d) return UiLanguage.text(act, "时间未知", "Unknown time");
+            long millis = seconds > 100000000000d ? Math.round(seconds)
+                    : Math.round(seconds * 1000d);
+            return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
+                    java.util.Locale.getDefault()).format(new java.util.Date(millis));
+        }
+
+        void showMessageDetails(Msg message) {
+            String role = "USER".equals(message.role)
+                    ? UiLanguage.text(act, "用户", "User")
+                    : UiLanguage.text(act, "助手", "Assistant");
+            String value = UiLanguage.text(act, "消息 ID：", "Message ID: ") + message.id
+                    + "\n" + UiLanguage.text(act, "角色：", "Role: ") + role
+                    + "\n" + UiLanguage.text(act, "时间：", "Time: ")
+                    + formatMessageTime(message.insertedAt)
+                    + "\n" + UiLanguage.text(act, "图片：", "Images: ")
+                    + message.images.size()
+                    + "\n" + UiLanguage.text(act, "含思考内容：", "Has reasoning: ")
+                    + UiLanguage.text(act,
+                            message.think != null && message.think.trim().length() > 0
+                                    ? "是" : "否",
+                            message.think != null && message.think.trim().length() > 0
+                                    ? "Yes" : "No");
+            showMessagePopup("消息详情", value);
         }
 
         void updateImageSummary(ImageEdit edit) {

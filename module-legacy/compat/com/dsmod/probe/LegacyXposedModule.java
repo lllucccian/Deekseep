@@ -15,8 +15,8 @@ import de.robv.android.xposed.XposedBridge;
 /**
  * Compatibility adapter that runs the stable core's around-hook contract on traditional Xposed.
  *
- * <p>The stable API 102 and stable legacy APKs compile the same Main.java.  Modern libxposed
- * supplies an explicit Chain; traditional Xposed supplies before/after callbacks instead.  This
+ * <p>The domestic and Google Play universal APKs compile the same Main.java. Traditional Xposed
+ * supplies before/after callbacks through this adapter. This
  * bridge invokes the original member from a before callback and publishes the interceptor result,
  * preserving the core's fail-open and argument-replacement behavior without maintaining a second
  * several-thousand-line fork.</p>

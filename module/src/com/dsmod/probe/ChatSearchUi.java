@@ -36,11 +36,14 @@ final class ChatSearchUi {
     private ChatSearchUi() {}
 
     static final class Hit {
+        String dbPath;
         String sid;
         String title;
         String role;
         String source;
         String snippet;
+        long msgId = -1;
+        String account;
         int highlightStart;
         int highlightLength;
     }
@@ -49,11 +52,20 @@ final class ChatSearchUi {
         final EditText input = new EditText(act);
         input.setHint(UiLanguage.text(act, "输入关键词", "Enter a keyword"));
         input.setSingleLine(true);
+        final android.widget.CheckBox allAccounts = new android.widget.CheckBox(act);
+        allAccounts.setText(UiLanguage.text(act, "搜索全部账号（默认只搜当前登录账号）",
+                "Search all accounts (default: current account only)"));
+        allAccounts.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         LinearLayout wrap = new LinearLayout(act);
+        wrap.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(act, 16);
         wrap.setPadding(pad, pad / 2, pad, 0);
         wrap.addView(input, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        checkParams.topMargin = dp(act, 6);
+        wrap.addView(allAccounts, checkParams);
         new AlertDialog.Builder(act)
                 .setTitle(UiLanguage.text(act, "搜索聊天记录", "Search chat history"))
                 .setView(wrap)
@@ -62,20 +74,32 @@ final class ChatSearchUi {
                         new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         String keyword = input.getText().toString().trim();
-                        if (keyword.length() > 0) search(act, keyword);
+                        if (keyword.length() > 0) search(act, keyword, allAccounts.isChecked());
                     }
                 })
                 .show();
     }
 
-    private static void search(final Activity act, final String keyword) {
+    private static void search(final Activity act, final String keyword, final boolean allAccounts) {
         UiLanguage.toast(act, "搜索中…", Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             public void run() {
                 final List<Hit> hits = new ArrayList<Hit>();
                 final String needle = keyword.toLowerCase(Locale.getDefault());
-                for (File file : ChatEditorUi.allDbs()) {
+                List<File> dbs;
+                if (allAccounts) {
+                    dbs = ChatEditorUi.allDbs();
+                } else {
+                    // 默认只搜当前登录账号的库；账号识别失败时兜底全搜
+                    dbs = new ArrayList<File>();
+                    File current = ChatEditorUi.currentDb();
+                    if (current != null) dbs.add(current);
+                    else dbs = ChatEditorUi.allDbs();
+                }
+                java.util.Map<String, String> labels = ChatEditorUi.loadAccountLabels();
+                for (File file : dbs) {
                     if (hits.size() >= MAX_HITS) break;
+                    String accountLabel = labels.get(ChatEditorUi.uuidOf(file));
                     SQLiteDatabase db = null;
                     Cursor cursor = null;
                     try {
@@ -93,12 +117,12 @@ final class ChatSearchUi {
                                     int prefixEnd = ChatEditorUi.sysPrefixEnd(body);
                                     if (prefixEnd > 0) body = body.substring(prefixEnd);
                                 }
-                                addMatch(hits, sid, title, message, body,
+                                addMatch(hits, file.getPath(), accountLabel, sid, title, message, body,
                                         "USER".equals(message.role) ? "用户输入" : "模型回答",
                                         keyword, needle);
                                 if (hits.size() >= MAX_HITS) break;
-                                addMatch(hits, sid, title, message, message.think,
-                                        "深度思考", keyword, needle);
+                                addMatch(hits, file.getPath(), accountLabel, sid, title, message,
+                                        message.think, "深度思考", keyword, needle);
                                 if (hits.size() >= MAX_HITS) break;
                             }
                         }
@@ -115,9 +139,9 @@ final class ChatSearchUi {
         }).start();
     }
 
-    private static void addMatch(List<Hit> hits, String sid, String title,
-                                 ChatEditorUi.Msg message, String value, String source,
-                                 String keyword, String needle) {
+    private static void addMatch(List<Hit> hits, String dbPath, String accountLabel,
+                                 String sid, String title, ChatEditorUi.Msg message,
+                                 String value, String source, String keyword, String needle) {
         if (value == null || value.length() == 0 || hits.size() >= MAX_HITS) return;
         int index = value.toLowerCase(Locale.getDefault()).indexOf(needle);
         if (index < 0) return;
@@ -129,12 +153,15 @@ final class ChatSearchUi {
         String after = value.substring(Math.min(value.length(), index + keyword.length()), end)
                 .replaceAll("\\s+", " ");
         Hit hit = new Hit();
+        hit.dbPath = dbPath;
         hit.sid = sid;
         hit.title = title == null || title.length() == 0
                 ? UiLanguage.text("未命名对话", "Untitled chat") : title;
         hit.role = message.role;
         hit.source = source;
         hit.snippet = before + match + after;
+        hit.msgId = message.id;
+        hit.account = accountLabel;
         hit.highlightStart = before.length();
         hit.highlightLength = match.length();
         hits.add(hit);
@@ -190,7 +217,11 @@ final class ChatSearchUi {
             row.setClickable(true);
 
             TextView meta = new TextView(act);
-            meta.setText(UiLanguage.dynamic(act, hit.source) + " · " + hit.title);
+            String metaText = UiLanguage.dynamic(act, hit.source) + " · " + hit.title;
+            if (hit.account != null && hit.account.length() > 0) {
+                metaText = hit.account + " · " + metaText;
+            }
+            meta.setText(metaText);
             meta.setTextColor(subColor);
             meta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
             meta.setSingleLine(true);
@@ -220,12 +251,13 @@ final class ChatSearchUi {
 
             row.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View ignored) {
+                    // 必须定位到宿主原生侧栏导航（与手动点击侧栏项同路径）
                     if (Main.openNativeSession(hit.sid)) {
                         dialog.dismiss();
                         DeekseepUi.dismissForNativeNavigation();
                     } else {
                         UiLanguage.toast(act,
-                                "当前登录账号的原生会话列表中没有该对话",
+                                "该对话不在当前账号的原生侧栏列表中（已删除、未同步或属于其他账号）",
                                 Toast.LENGTH_LONG).show();
                     }
                 }

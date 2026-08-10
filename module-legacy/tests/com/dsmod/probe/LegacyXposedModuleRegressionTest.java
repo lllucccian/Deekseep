@@ -15,6 +15,14 @@ public final class LegacyXposedModuleRegressionTest {
     }
 
     public static void main(String[] args) throws Throwable {
+        for (int api = 82; api <= 102; api++) {
+            runApiContract(api);
+        }
+        System.out.println("Legacy Xposed API 82-102 matrix OK (21 versions)");
+    }
+
+    private static void runApiContract(int api) throws Throwable {
+        XposedBridge.XPOSED_BRIDGE_VERSION = api;
         XposedBridge.resetTestState();
         final Method method = Target.class.getDeclaredMethod(
                 "join", String.class, String.class);
@@ -108,10 +116,10 @@ public final class LegacyXposedModuleRegressionTest {
         failOpenParam.args = new Object[] {"safe", "original"};
         XposedBridge.callbackForTest.dispatchBeforeForTest(failOpenParam);
         check(!failOpenParam.hasThrowable(),
-                "incompatible replacement should fail open to the original arguments");
+                "API " + api
+                        + " incompatible replacement should fail open to the original arguments");
         check("safe:original".equals(failOpenParam.getResult()),
-                "fail-open invocation did not preserve the original arguments");
-        System.out.println("LegacyXposedModuleRegressionTest OK");
+                "API " + api + " fail-open invocation did not preserve the original arguments");
     }
 
     private static void check(boolean condition, String message) {

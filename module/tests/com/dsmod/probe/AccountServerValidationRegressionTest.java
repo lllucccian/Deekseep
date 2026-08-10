@@ -7,6 +7,7 @@ import java.util.TimeZone;
 public final class AccountServerValidationRegressionTest {
 
     public static void main(String[] args) throws Exception {
+        buildsTheNativePrivacyOptOutPayload();
         usesTheInstalledAppUserAgentShape();
         usesTheHostBearerAuthenticationChain();
         acceptsOnlyBothSuccessfulBusinessLayers();
@@ -16,6 +17,15 @@ public final class AccountServerValidationRegressionTest {
         readsTheResponseBodyExactlyOnceAndBoundsIt();
         boundsRetryAfterWithoutCreatingARequestStorm();
         System.out.println("AccountServerValidationRegressionTest OK");
+    }
+
+    private static void buildsTheNativePrivacyOptOutPayload() {
+        check("{\"training_allowed\":false}".equals(
+                        AccountManager.trainingSettingsPayload(false)),
+                "privacy opt-out request payload");
+        check("{\"training_allowed\":true}".equals(
+                        AccountManager.trainingSettingsPayload(true)),
+                "privacy opt-in request payload");
     }
 
     private static void usesTheInstalledAppUserAgentShape() {

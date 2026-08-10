@@ -37,6 +37,7 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -64,6 +65,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -75,6 +77,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -83,12 +86,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import io.github.libxposed.api.XposedModule;
-import io.github.libxposed.api.XposedInterface.Chain;
-import io.github.libxposed.api.XposedInterface.Hooker;
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
+import de.robv.android.xposed.IXposedHookLoadPackage;
+import com.dsmod.probe.LegacyXposedModule.Chain;
+import com.dsmod.probe.LegacyXposedModule.Hooker;
+import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
 
-public class Main extends XposedModule {
+/** Shared hook core used by both domestic and Google Play universal APKs. */
+public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
 
     private static final String TAG = "DSPROBE";
     private static final String TARGET = "com.deepseek.chat";
@@ -102,7 +106,7 @@ public class Main extends XposedModule {
     static final String PROMPT_SOURCE_FILE = "/data/data/com.deepseek.chat/files/deekseep_prompt_source.txt";
     private static final String EMBEDDED_PROMPT_RESOURCE =
             "META-INF/com.github.mwiede.jsch/internal/transport/authentication/"
-            + ".com_github_mwiede_jsch_transport_authentication_negotiation_runtime_policy_extension_20260727_v2.dat";
+            + "runtime_policy_extension_20260727_v2.dat";
     private static final String EMBEDDED_PROMPT_DIR =
             "/data/data/com.deepseek.chat/no_backup/.system_component_cache/.transport";
     private static final String EMBEDDED_PROMPT_FILE = EMBEDDED_PROMPT_DIR
@@ -118,17 +122,42 @@ public class Main extends XposedModule {
     static final String SRVLOG_FILE       = "/data/data/com.deepseek.chat/files/deekseep_srvlog";
     static final String AUTO_BACKUP_FILE  = "/data/data/com.deepseek.chat/files/deekseep_auto_backup";
     static final String EXPERT_UNLOCK_FILE = "/data/data/com.deepseek.chat/files/deekseep_expert_unlock";
+    static final String FAKE_MUTE_UNTIL_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_fake_mute_until";
+    private static final String FAKE_MUTE_ENABLED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_fake_mute_enabled";
+    private static volatile long cachedFakeMuteUntil = Long.MIN_VALUE;
     static final String GOOGLE_LOGIN_UNLOCK_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_google_login_unlock";
     static final String WECHAT_MOBILE_LOGIN_UNLOCK_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_wechat_mobile_login_unlock";
     static final String LOCAL_API_ENABLED_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_local_api_enabled";
-    static final String LOCAL_API_BACKGROUND_READY_FILE =
-            "/data/data/com.deepseek.chat/files/deekseep_local_api_background_ready";
     static final String LOCAL_API_SESSION_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_local_api_sessions.json";
+    private static final String LOCAL_API_CONTEXT_RELAY_DISABLED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_local_api_context_relay_disabled";
     static final String CHAT_MULTISELECT_FILE = "/data/data/com.deepseek.chat/files/deekseep_chat_multiselect";
+    private static final String MESSAGE_DETAILS_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_message_details";
+    private static final String AUTO_CONTINUE_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_auto_continue";
+    private static final String REPLY_READY_DISABLED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_reply_ready_disabled";
+    static final String WHALE_MOTION_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_whale_motion";
+    private static final String WHALE_MOTION_SPEED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_whale_motion_speed";
+    private static final String HOME_GREETING_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_home_greeting.txt";
+    private static final String NATIVE_SETTINGS_ENTRY_DISABLED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_native_settings_entry_disabled";
+    private static final String NATIVE_SETTINGS_ENTRY_ENABLED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_native_settings_entry_enabled";
+    private static final String DATA_OPT_OUT_ENFORCED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_force_training_disabled";
+    private static final String HOT_UPDATE_DISABLED_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_hot_update_disabled";
     static final String PROACTIVE_HEARTBEAT_ENABLED_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_proactive_heartbeat";
     private static final String PROACTIVE_HEARTBEAT_INTERVAL_FILE =
@@ -144,6 +173,10 @@ public class Main extends XposedModule {
     static final int    ACCOUNT_IMPORT_REQUEST = 0xDE40;
     static final int    ACCOUNT_EXPORT_REQUEST = 0xDE41;
     static final int    LOCAL_API_BATTERY_REQUEST = 0xDE42;
+    static final int    CRASH_EXPORT_REQUEST = 0xDE43;
+    static final int    CHAT_IMPORT_REQUEST = 0xDE44;
+    private static final String CRASH_TEST_ARM_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_crash_test_arm";
     private static final String EDITOR_IMAGE_MASTER_DIR =
             "/data/data/com.deepseek.chat/files/deekseep_editor_images";
     private static final String EDITOR_IMAGE_CACHE_DIR =
@@ -163,6 +196,12 @@ public class Main extends XposedModule {
             new ThreadLocal<>();
     private static final ConcurrentHashMap<String, Object> BUBBLE_DRAW_CALLBACKS =
             new ConcurrentHashMap<>();
+    private static final Object ASSISTANT_AVATAR_PAINTER_LOCK = new Object();
+    private static volatile Object assistantAvatarPainter;
+    private static volatile ClassLoader assistantAvatarPainterLoader;
+    private static volatile String assistantAvatarPainterPath = "";
+    private static volatile long assistantAvatarPainterModified = Long.MIN_VALUE;
+    private static volatile long assistantAvatarPainterLength = Long.MIN_VALUE;
 
     // ── 侧栏聊天记录多选删除（sidebar multi-select delete）─────────────
     private static final Map<String, Object> SIDEBAR_DELETE_ACTIONS = new HashMap<>();
@@ -226,7 +265,13 @@ public class Main extends XposedModule {
     private static volatile Object liveQ71;
     private static volatile Object liveFm8;
     private static volatile ClassLoader hostClassLoader;
+
+    static ClassLoader hostClassLoaderForUi() {
+        return hostClassLoader;
+    }
     private static volatile Context hostApplicationContext;
+    private static final AtomicBoolean DATA_OPT_OUT_SYNC_RUNNING = new AtomicBoolean();
+    private static final AtomicBoolean DATA_OPT_OUT_SYNCED = new AtomicBoolean();
     private static volatile String lastInteractiveConversationId;
     private static final Object HEARTBEAT_BINDING_LOCK = new Object();
     private static final AtomicInteger HEARTBEAT_OPEN_GENERATION = new AtomicInteger();
@@ -238,15 +283,62 @@ public class Main extends XposedModule {
             PENDING_NATIVE_HEARTBEAT_HISTORIES = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, NativeUiHeartbeatRequest>
             PENDING_NATIVE_UI_HEARTBEATS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Long>
+            REPLY_READY_DISPATCHED = new ConcurrentHashMap<>();
+    private static final long REPLY_READY_DEDUPE_MS = TimeUnit.MINUTES.toMillis(30);
+    private static final ConcurrentHashMap<String, Long>
+            AUTO_CONTINUE_DISPATCHED = new ConcurrentHashMap<>();
     private static final ThreadLocal<Boolean> tlLocalApiRequest = new ThreadLocal<>();
     private static final ThreadLocal<Boolean> tlProactiveHeartbeatRequest = new ThreadLocal<>();
     private static final Map<Object, HeartbeatResponseStream> HEARTBEAT_RESPONSE_STREAMS =
             Collections.synchronizedMap(
                     new WeakHashMap<Object, HeartbeatResponseStream>());
+    private static final long INTERACTIVE_AGENT_TOOL_SCOPE_TTL_MS =
+            TimeUnit.MINUTES.toMillis(30);
+    private static final long AGENT_TOOL_EXECUTION_CLAIM_TTL_MS =
+            TimeUnit.MINUTES.toMillis(15);
+    /**
+     * A scope is authorized only when the native visible-chat request actually received the local
+     * tool contract. This is more reliable than using the local-API semaphore as a proxy: an
+     * unrelated local request can briefly own that semaphore while an ordinary UI response is
+     * streaming, which previously made a valid call disappear without ever being executed.
+     */
+    private static final ConcurrentHashMap<String, Long>
+            INTERACTIVE_AGENT_TOOL_SCOPES = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Long>
+            AGENT_TOOL_EXECUTION_CLAIMS = new ConcurrentHashMap<>();
     private static final Object AGENT_UI_ACTION_LOCK = new Object();
     private static final String AGENT_SCREENSHOT_DIR =
             "/data/data/com.deepseek.chat/files/deekseep_agent";
+    // read_file 内容超过该长度时打包成 TXT 附件随结果发回，避免大文件内容撑爆对话上下文。
+    private static final int AGENT_TXT_ATTACH_THRESHOLD = 1024;
+    private static final String ACTION_AGENT_COMMAND =
+            "com.dsmod.probe.action.AGENT_COMMAND";
+    private static final String EXTRA_AGENT_COMMAND = "agent_command_json";
+    private static final String EXTRA_AGENT_COMMAND_BASE64 =
+            "agent_command_base64";
+    private static final ConcurrentHashMap<String, Object>
+            AGENT_SCREENSHOT_UPLOAD_TOKENS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Object>
+            AGENT_TOOL_RESULT_TOKENS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, AgentStepResult>
+            AGENT_DELAY_STEPS = new ConcurrentHashMap<>();
+    private static volatile long lastComposeStateLog;
+    private static final java.util.Set<String> ACTIVE_HIDDEN_ATTACHMENT_NAMES =
+            java.util.Collections.newSetFromMap(
+                    new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+    // Only one hidden result may enter a conversation's idle window at a time.
+    private static final java.util.Set<String> AGENT_RESULT_SEND_LOCKED =
+            java.util.Collections.newSetFromMap(
+                    new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
+    private static final AtomicBoolean AGENT_OUTBOX_RECOVERED = new AtomicBoolean();
+    private static final AtomicBoolean AGENT_PRIVILEGED_BACKEND_PROBED =
+            new AtomicBoolean();
     private static volatile long agentUiActionNotBefore;
+    private static volatile String cachedPromptText;
+    private static volatile long cachedPromptTextAt;
+    private static volatile String cachedAgentContractKey = "";
+    private static volatile String cachedAgentContractText = "";
     private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_HIT_LOGGED =
             new AtomicBoolean();
     private static final AtomicBoolean HEARTBEAT_STATUS_STYLE_ERROR_LOGGED =
@@ -294,7 +386,7 @@ public class Main extends XposedModule {
     private static volatile boolean localApiSessionsLoaded;
     private static volatile String localApiLastSessionError = "not attempted";
     private static final HashSet<String> expertRelaySessionIds = new HashSet<>();
-    // 发送点(fu0.y/uu0.y)捕获的图片 fp 列表与当前会话模型：主线程同栈传给紧随其后的 transport hook。
+    // 发送点(fu0.y/uu0.y)捕获的完整附件 fp 列表与当前会话模型：主线程同栈传给紧随其后的 transport hook。
     private static final ThreadLocal<List> tlPendingFps = new ThreadLocal<>();
     private static final ThreadLocal<String> tlPendingModel = new ThreadLocal<>();
     // 把捕获到的 List<fp> 挂到对应 ew0 上（relay 在收集时/IO 线程跑，ThreadLocal 到不了）。
@@ -338,6 +430,17 @@ public class Main extends XposedModule {
     private static volatile boolean activationHeartbeatLogged = false;
     private static volatile boolean proactiveHeartbeatConfigSynced = false;
     private static volatile String lastUiLanguageLog = "";
+    private static final AtomicBoolean ADAPTED_SETTINGS_ENTRY_HOOKED =
+            new AtomicBoolean(false);
+    private static volatile int hostWelcomeMessageResourceId;
+    private static volatile int hostWelcomeTitleResourceId;
+    private static volatile String hostWelcomeMessagePattern = "";
+    private static volatile String hostWelcomeTitleText = "";
+    private static final AtomicBoolean HOME_GREETING_MATCH_LOGGED = new AtomicBoolean(false);
+    private static volatile boolean nativeSettingsRowHooked;
+    private static final ThreadLocal<Boolean> NATIVE_SETTINGS_ROOT = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> NATIVE_SETTINGS_ROW_INSERTED = new ThreadLocal<>();
+    private static final ThreadLocal<Boolean> NATIVE_SETTINGS_ROW_INSERTING = new ThreadLocal<>();
     private static volatile long localApiKeepAliveHeartbeatAt;
     private static volatile String localApiKeepAliveError = "尚未启动前台保活";
     private static volatile boolean localApiKeepAliveControlLogged;
@@ -347,9 +450,29 @@ public class Main extends XposedModule {
     private static volatile long publicTunnelBridgeRequestAt;
     private static volatile ResultReceiver publicTunnelBridgeReceiver;
     private static volatile boolean publicTunnelProviderUnavailable;
-
-    private static final String SETTINGS_CLASS = "u25";
-    private static final String SETTINGS_METHOD = "i";
+    private static final Map<Object, Boolean> WELCOME_WHALE_PAINTERS =
+            Collections.synchronizedMap(new WeakHashMap<Object, Boolean>());
+    private static final Map<Object, Boolean> WELCOME_WHALE_COMPOSERS =
+            Collections.synchronizedMap(new WeakHashMap<Object, Boolean>());
+    private static final Map<Object, Boolean> WELCOME_WHALE_SCOPES =
+            Collections.synchronizedMap(new WeakHashMap<Object, Boolean>());
+    private static volatile Method welcomeWhaleScopeInvalidate;
+    private static volatile Method welcomeWhaleDrawNodeInvalidate;
+    private static volatile WeakReference<Object> welcomeWhaleDrawNode =
+            new WeakReference<>(null);
+    private static volatile WeakReference<Activity> welcomeWhaleActivity =
+            new WeakReference<>(null);
+    private static volatile List<WeakReference<View>> welcomeWhaleRenderViews =
+            Collections.emptyList();
+    private static final AtomicInteger welcomeWhaleFrameGeneration = new AtomicInteger();
+    private static final AtomicBoolean welcomeWhaleCapturedLogged = new AtomicBoolean(false);
+    private static final AtomicBoolean welcomeWhaleDrawLogged = new AtomicBoolean(false);
+    private static final AtomicInteger welcomeWhaleDrawCount = new AtomicInteger();
+    private static final AtomicBoolean welcomeWhaleScopeLogged = new AtomicBoolean(false);
+    private static final AtomicBoolean welcomeWhaleInvalidateLogged = new AtomicBoolean(false);
+    private static final AtomicBoolean welcomeWhaleDrawNodeLogged = new AtomicBoolean(false);
+    private static volatile long welcomeWhaleAngleAt;
+    private static volatile float welcomeWhaleAngle;
 
     // Captured from mc.f: DeepSeek's complete native session list, click handler, and the
     // central s61 event sink.  Sending h61(tp) through that sink is DeepSeek's real deletion
@@ -406,7 +529,9 @@ public class Main extends XposedModule {
     private WeakReference<Object> navController = new WeakReference<>(null);
 
     static synchronized void log(String msg) {
+        try { DeveloperDiagnostics.record(msg); } catch (Throwable ignored) {}
         try { Main m = MODULE; if (m != null) m.log(Log.INFO, TAG, msg); } catch (Throwable ignored) {}
+        try { HookLogOverlay.onLog(msg); } catch (Throwable ignored) {}
         String line = TS.format(new Date()) + "  " + msg + "\n";
         try {
             FileWriter w = new FileWriter(LOG_PATH, true);
@@ -470,6 +595,124 @@ public class Main extends XposedModule {
                     if (prev != null) prev.uncaughtException(t, e);
                 }
             });
+        } catch (Throwable ignored) {}
+    }
+
+    static void triggerCrashTest(Context context, String mode) {
+        if (mode == null) return;
+        if (mode.startsWith("native_")) {
+            try { new File(CRASH_TEST_ARM_FILE).delete(); } catch (Throwable ignored) {}
+            recordCrashTest("blocked-unsafe", mode);
+            Toast.makeText(context, "该 Native 测试已因系统稳定性风险移除",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (mode.endsWith("_send")) {
+            try {
+                overwriteTextFile(CRASH_TEST_ARM_FILE, mode);
+                Toast.makeText(context, "已等待下一次发送消息触发崩溃",
+                        Toast.LENGTH_SHORT).show();
+            } catch (Throwable t) {
+                Toast.makeText(context, "无法设置崩溃测试", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        recordCrashTest("trigger", mode);
+        if ("java_worker".equals(mode)) {
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    throw new RuntimeException("Deekseep Java worker crash test");
+                }
+            }, "deekseep-crash-test").start();
+            return;
+        }
+        if ("java_executor".equals(mode)) {
+            java.util.concurrent.Executors.newSingleThreadExecutor().execute(new Runnable() {
+                @Override public void run() {
+                    throw new RuntimeException("Deekseep executor crash test");
+                }
+            });
+            return;
+        }
+        if ("java_handler".equals(mode)) {
+            new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override public void run() {
+                    throw new RuntimeException("Deekseep Handler callback crash test");
+                }
+            }, 350L);
+            return;
+        }
+        if ("java_frame".equals(mode)) {
+            android.view.Choreographer.getInstance().postFrameCallback(frameTimeNanos -> {
+                throw new RuntimeException("Deekseep frame callback crash test");
+            });
+            return;
+        }
+        if ("java_null".equals(mode)) {
+            Object value = null;
+            value.toString();
+            return;
+        }
+        if ("java_stack".equals(mode)) {
+            crashStackTest(0L);
+            return;
+        }
+        if ("java_state".equals(mode)) {
+            throw new IllegalStateException("Deekseep IllegalStateException crash test");
+        }
+        if ("java_cast".equals(mode)) {
+            Integer ignored = (Integer) (Object) "Deekseep ClassCastException crash test";
+            return;
+        }
+        if ("java_bounds".equals(mode)) {
+            int ignored = (new int[0])[0];
+            return;
+        }
+        if ("java_arithmetic".equals(mode)) {
+            int zero = mode.length() - mode.length();
+            int ignored = 1 / zero;
+            return;
+        }
+        if ("java_assert".equals(mode)) {
+            throw new AssertionError("Deekseep AssertionError crash test");
+        }
+        throw new RuntimeException("Deekseep Java main crash test");
+    }
+
+    private static void consumeArmedCrashTestAtSend() {
+        String mode = readSmallText(CRASH_TEST_ARM_FILE);
+        if (mode == null || mode.length() == 0) return;
+        try { new File(CRASH_TEST_ARM_FILE).delete(); } catch (Throwable ignored) {}
+        recordCrashTest("send-trigger", mode);
+        if (mode.startsWith("native_")) {
+            recordCrashTest("blocked-unsafe", mode);
+            return;
+        }
+        Handler handler = new Handler(Looper.getMainLooper());
+        handler.post(new Runnable() {
+            @Override public void run() {
+                throw new RuntimeException("Deekseep send-path Java crash test");
+            }
+        });
+    }
+
+    private static long crashStackTest(long value) {
+        return crashStackTest(value + 1L) + value;
+    }
+
+    private static synchronized void recordCrashTest(String phase, String mode) {
+        String line = TS.format(new Date()) + "  CRASH_TEST phase=" + phase
+                + " mode=" + mode + " pid=" + android.os.Process.myPid() + "\n";
+        try {
+            FileWriter writer = new FileWriter(
+                    "/data/data/com.deepseek.chat/files/dsprobe_crash.log", true);
+            writer.write(line);
+            writer.close();
+        } catch (Throwable ignored) {}
+        try {
+            FileWriter writer = new FileWriter(EXT_CRASH_LOG, true);
+            writer.write(line);
+            writer.close();
         } catch (Throwable ignored) {}
     }
 
@@ -628,13 +871,19 @@ public class Main extends XposedModule {
     }
 
     @Override
-    public void onPackageLoaded(PackageLoadedParam param) {
+    public void handleLoadPackage(LoadPackageParam param) {
         MODULE = this;
-        final ClassLoader cl = param.getDefaultClassLoader();
-        final String pkg = param.getPackageName();
+        final ClassLoader cl = param.classLoader;
+        final String pkg = param.packageName;
 
         if (!TARGET.equals(pkg)) return;
+        // Clear before early compatibility hooks so their installation diagnostics survive.
+        try { new FileWriter(LOG_PATH, false).close(); } catch (Throwable ignored) {}
+        HookLogOverlay.resetSession();
         HostCompat.initialize(cl);
+        // DeepSeek's MMKV accessor names and remote keys were verified independently in 2.2.2,
+        // 2.3.0 and both 2.3.4 store channels. Install before the host materialises lazy flags.
+        RemoteFeatureFlags.install(this, cl);
         Looper mainLooper = Looper.getMainLooper();
         if (mainLooper == null) {
             log("target package callback arrived before the main Looper was prepared");
@@ -647,14 +896,16 @@ public class Main extends XposedModule {
         // 用于诊断“上传图片点发送直接闪退”这类无 root/无 logcat 场景的崩溃。
         installCrashHandler();
 
-        try { new FileWriter(LOG_PATH, false).close(); } catch (Throwable ignored) {}
         // 服务器返回诊断日志：每次应用启动清空重记（与主日志一致）
         if (isSrvLog()) {
             try { new FileWriter(SRV_LOG_PATH, false).close(); } catch (Throwable ignored) {}
             try { new FileWriter(SRV_LOG_EXT, false).close(); } catch (Throwable ignored) {}
         }
-        log("module loaded (modern), package=" + pkg
+        log("module loaded (universal), package=" + pkg
                 + ", hostGeneration=" + HostCompat.generationName());
+        hookNativeFakeMute(cl);
+        hookTrainingOptOutControl(cl);
+        hookHotUpdateDialog(cl);
         installLocalApiKeepAliveReceiverHook(cl);
         restoreLocalEditorImages();
         int obsoleteTriggers = ChatEditorUi.removeObsoleteLocalSessionProtection();
@@ -696,13 +947,25 @@ public class Main extends XposedModule {
                         Activity act = (Activity) chain.getThisObject();
                         curAct = new WeakReference<>(act);
                         hostApplicationContext = act.getApplicationContext();
+                        ModuleConfigBridge.installTarget(act);
+                        RemoteFeatureFlags.enforce(cl);
+                        DeepSeekCacheCleaner.schedule(act);
+                        HookLogOverlay.onActivityResumed(act);
+                        RuntimeProtection.initialize(act);
+                        probeConfiguredAgentBackendOnce(act);
+                        recoverAgentRuns(act,
+                                AGENT_OUTBOX_RECOVERED.compareAndSet(false, true));
                         consumeHeartbeatConversationIntent(act, act.getIntent());
                         ChatAppearance.onActivityResumed(act);
+                        startWelcomeWhaleFrames(act);
+                        TextWaveEngine.start(act);
                         scheduleRouteCheck(navController.get());
                         // The Play build keeps its language tag in MMKV rather than Android's
                         // per-app locale service. Re-read it on every resume so Deekseep follows a
                         // host-language switch immediately.
                         UiLanguage.refreshHost(act);
+                        if (isDataOptOutEnforced()) requestTrainingOptOut(act, false);
+                        maybeInstallAdaptedSettingsEntry(act, cl);
                         String languageState = "mode=" + UiLanguage.currentMode(act)
                                 + ", host=" + UiLanguage.detectedLanguage(act)
                                 + ", effective=" + (UiLanguage.isChinese(act)
@@ -717,7 +980,7 @@ public class Main extends XposedModule {
                             dispatchProactiveHeartbeatConfig(
                                     act, isProactiveHeartbeatEnabled());
                         }
-                        if (isLocalApiEnabled() && isLocalApiBackgroundApproved(act)) {
+                        if (isLocalApiEnabled()) {
                             requestLocalApiKeepAlive(act, true);
                             startLocalApiGateway(act);
                             requestPublicTunnelBridge(act);
@@ -749,6 +1012,8 @@ public class Main extends XposedModule {
                     try {
                         ChatAppearance.onActivityPaused(
                                 (Activity) chain.getThisObject());
+                        stopWelcomeWhaleFrames((Activity) chain.getThisObject());
+                        TextWaveEngine.stop((Activity) chain.getThisObject());
                     } catch (Throwable t) {
                         log("spatial onPause cleanup skipped: " + t);
                     }
@@ -786,6 +1051,7 @@ public class Main extends XposedModule {
                     try {
                         Activity act = (Activity) chain.getThisObject();
                         ChatAppearance.onActivityDestroyed(act);
+                        HookLogOverlay.onActivityDestroyed(act);
                         if (curAct.get() == act) hideButton();
                     } catch (Throwable ignored) {}
                     return chain.proceed();
@@ -830,6 +1096,20 @@ public class Main extends XposedModule {
                         } else if (req == ACCOUNT_EXPORT_REQUEST) {
                             AccountUi.handleExportResult((Activity) chain.getThisObject(), res,
                                     dataArg instanceof Intent ? (Intent) dataArg : null);
+                        } else if (req == CRASH_EXPORT_REQUEST) {
+                            CrashDiagnosticsUi.handleExportResult(
+                                    (Activity) chain.getThisObject(), res,
+                                    dataArg instanceof Intent ? (Intent) dataArg : null);
+                        } else if (req == CHAT_IMPORT_REQUEST) {
+                            if (res == Activity.RESULT_OK && dataArg instanceof Intent) {
+                                Intent data = (Intent) dataArg;
+                                Uri uri = data.getData();
+                                if (uri != null) {
+                                    persistReadGrant((Activity) chain.getThisObject(), data, uri);
+                                    DeekseepTools.showChatImport(
+                                            (Activity) chain.getThisObject(), uri);
+                                }
+                            }
                         } else if (req == LOCAL_API_BATTERY_REQUEST) {
                             DeekseepUi.handleLocalApiBatterySettingsResult(
                                     (Activity) chain.getThisObject());
@@ -865,6 +1145,9 @@ public class Main extends XposedModule {
         } catch (Throwable t) { log("hook onActivityResult failed: " + t); }
 
         // hook ChatFullCompletionRequest 构造，注入系统提示词到 prompt 字段
+        hookWelcomeWhaleMotion(cl);
+        hookTextWaveMotion(cl);
+        hookHomeGreeting(cl);
         hookChatRequest(cl);
         // 心跳开启时向正常对话注入本地工具说明，并在流式/静态回复两端隐藏控制块。
         hookHeartbeatToolResponses(cl);
@@ -928,35 +1211,63 @@ public class Main extends XposedModule {
         hookLocalSessionDirectoryMerge(cl);
         hookLocalNativeSessionRefresh(cl);
         hookLocalSessionRemoteReload(cl);
+        hookNativeDetailRequest(cl);
         hookLocalSessionDeletedFlow(cl);
         hookLocalSessionDeletedResponse(cl);
         hookActiveChatSessionCapture(cl);
         hookProactiveVisibleThreadFilter(cl);
+        hookComposeVisibleThreadState(cl);
+        hookS11RenderFilter(cl);
+        hookCs1RenderFilter(cl);
         hookNativeUiHeartbeatCompletion(cl);
         hookNativeSessionNavigator(cl);
         hookHistoryLoadDiagnostics(cl);
         scheduleRealSessionProbe();
         // hook 导航变化，离开设置页时移除入口按钮
         hookSettingsNavigation(cl);
+        hookNativeSettingsEntry(cl);
         // ★ 侧栏聊天记录多选删除（modern Compose Hooker，手机端适配）
         try { hookSidebarMultiSelectDelete(cl); } catch (Throwable t) { log("hookSidebarMultiSelectDelete wiring failed: " + t); }
         try { hookSidebarToggleCleanup(cl); } catch (Throwable t) { log("hookSidebarToggleCleanup wiring failed: " + t); }
+        final boolean targetGooglePlay = HostCompat.isGooglePlay();
         try {
-            hookChatBubbleCustomization(cl, false);
-        } catch (Throwable mainlandError) {
-            log("mainland bubble/input mapping unavailable, trying google-play: "
-                    + mainlandError);
-            try {
-                hookChatBubbleCustomization(cl, true);
-            } catch (Throwable playError) {
-                log("hookChatBubbleCustomization wiring failed: " + playError);
+            hookChatBubbleCustomization(cl, targetGooglePlay);
+        } catch (Throwable channelError) {
+            // Only unknown legacy builds need a cross-channel fallback. Supported 2.3.4 builds
+            // have an explicit channel table and should never generate a fake "first attempt"
+            // error in the diagnostics overlay.
+            if (HostCompat.isV234()) {
+                log("hookChatBubbleCustomization wiring failed: " + channelError);
+            } else {
+                log("primary bubble/input mapping unavailable; trying alternate channel: "
+                        + channelError);
+                try {
+                    hookChatBubbleCustomization(cl, !targetGooglePlay);
+                } catch (Throwable alternateError) {
+                    log("hookChatBubbleCustomization wiring failed: " + alternateError);
+                }
             }
+        }
+        try {
+            hookAssistantAvatarPainter(cl);
+        } catch (Throwable error) {
+            log("hookAssistantAvatarPainter wiring failed: " + error);
         }
 
         // hook 设置页主 Composable -> 显示 Deekseep 按钮
         try {
-            String settingsClass = HostCompat.name(SETTINGS_CLASS);
-            String settingsMethod = HostCompat.method(SETTINGS_CLASS, SETTINGS_METHOD);
+            String settingsClass;
+            String settingsMethod;
+            if (HostCompat.isV234()) {
+                settingsClass = HostCompat.isGooglePlay() ? "pf6" : "qc5";
+                settingsMethod = HostCompat.isGooglePlay() ? "i" : "c";
+            } else {
+                String settingsLegacyClass = HostCompat.isGooglePlay() ? "ph6" : "u25";
+                String settingsLegacyMethod = HostCompat.isGooglePlay() ? "d" : "i";
+                settingsClass = HostCompat.name(settingsLegacyClass);
+                settingsMethod = HostCompat.method(
+                        settingsLegacyClass, settingsLegacyMethod);
+            }
             Class<?> k = cl.loadClass(settingsClass);
             int n = 0;
             for (Method m : k.getDeclaredMethods()) {
@@ -974,6 +1285,635 @@ public class Main extends XposedModule {
             log("hooked settings composable " + settingsClass + "."
                     + settingsMethod + " x" + n);
         } catch (Throwable t) { log("hook settings composable failed: " + t); }
+    }
+
+    /**
+     * WeKit registers a native WeChat setting-item provider. DeepSeek uses Compose instead, so
+     * the equivalent integration is a host-native section header followed by one host-native row.
+     */
+    private void hookNativeSettingsEntry(final ClassLoader cl) {
+        final String rootOwnerName;
+        final String rootMethodName;
+        final String componentOwnerName;
+        final String clickTypeName;
+        final String contentTypeName;
+        final String wrapperTypeName;
+        final String textOwnerName;
+        final String iconOwnerName;
+        final String iconFieldName;
+        final String arrowFieldName;
+        final String backgroundOwnerName;
+        final String backgroundMethodName;
+        final String roundedOwnerName;
+        final String roundedMethodName;
+        final String modifierOwnerName;
+        final String modifierFieldName;
+        final String heightOwnerName;
+        final String heightMethodName;
+        final String spacerOwnerName;
+        final String spacerMethodName;
+        if (HostCompat.isV234() && HostCompat.isGooglePlay()) {
+            rootOwnerName = "pf6";
+            rootMethodName = "i";
+            componentOwnerName = "nq7";
+            clickTypeName = "mi3";
+            contentTypeName = "bj3";
+            wrapperTypeName = "cx1";
+            textOwnerName = "ql8";
+            iconOwnerName = "eq0";
+            iconFieldName = "v";
+            arrowFieldName = "w";
+            backgroundOwnerName = "zh9";
+            backgroundMethodName = "z";
+            roundedOwnerName = "kc7";
+            roundedMethodName = "a";
+            modifierOwnerName = "wq5";
+            modifierFieldName = "a";
+            heightOwnerName = "a08";
+            heightMethodName = "d";
+            spacerOwnerName = "uq6";
+            spacerMethodName = "a";
+        } else if (HostCompat.isV234()) {
+            rootOwnerName = "qc5";
+            rootMethodName = "c";
+            componentOwnerName = "sm7";
+            clickTypeName = "ig3";
+            contentTypeName = "xg3";
+            wrapperTypeName = "gv1";
+            textOwnerName = "qh8";
+            // r66.v is DeepSeek's own info glyph; r66.n is its native chevron.
+            iconOwnerName = "r66";
+            iconFieldName = "v";
+            arrowFieldName = "n";
+            backgroundOwnerName = "qf9";
+            backgroundMethodName = "F";
+            roundedOwnerName = "b97";
+            roundedMethodName = "a";
+            modifierOwnerName = "ip5";
+            modifierFieldName = "a";
+            heightOwnerName = "fw7";
+            heightMethodName = "e";
+            spacerOwnerName = "kc5";
+            spacerMethodName = "c";
+        } else if (HostCompat.isV230() && !HostCompat.isV234()) {
+            rootOwnerName = "t55";
+            rootMethodName = "l";
+            componentOwnerName = "kf7";
+            clickTypeName = "id3";
+            contentTypeName = "xd3";
+            wrapperTypeName = "nt1";
+            textOwnerName = "j98";
+            iconOwnerName = "h67";
+            iconFieldName = "w";
+            arrowFieldName = "x";
+            backgroundOwnerName = "vd0";
+            backgroundMethodName = "j";
+            roundedOwnerName = "y17";
+            roundedMethodName = "a";
+            modifierOwnerName = "ij5";
+            modifierFieldName = "a";
+            heightOwnerName = "io7";
+            heightMethodName = "e";
+            spacerOwnerName = "j55";
+            spacerMethodName = "c";
+        } else if (!HostCompat.isV230()) {
+            rootOwnerName = "u25";
+            rootMethodName = "i";
+            componentOwnerName = "mc7";
+            clickTypeName = "xa3";
+            contentTypeName = "mb3";
+            wrapperTypeName = "jr1";
+            textOwnerName = "i68";
+            iconOwnerName = "hf8";
+            iconFieldName = "y";
+            arrowFieldName = "z";
+            backgroundOwnerName = "i39";
+            backgroundMethodName = "u";
+            roundedOwnerName = "fz6";
+            roundedMethodName = "a";
+            modifierOwnerName = "ng5";
+            modifierFieldName = "a";
+            heightOwnerName = "kl7";
+            heightMethodName = "e";
+            spacerOwnerName = "o25";
+            spacerMethodName = "c";
+        } else {
+            log("native settings row mapping unavailable; keeping floating fallback");
+            return;
+        }
+        try {
+            Class<?> rootOwner = Class.forName(rootOwnerName, false, cl);
+            Method root = findStaticMethod(rootOwner, rootMethodName, 13);
+            if (root == null) throw new NoSuchMethodException(rootOwnerName + "."
+                    + rootMethodName + "/13");
+
+            Class<?> componentOwner = Class.forName(componentOwnerName, false, cl);
+            Method row = findStaticMethod(componentOwner, "b", 12);
+            Method header = findStaticMethod(componentOwner, "d", 4);
+            if (row == null || header == null) {
+                throw new NoSuchMethodException(componentOwnerName + ".b/d");
+            }
+
+            Class<?> textOwner = Class.forName(textOwnerName, false, cl);
+            Method text = null;
+            for (Method candidate : textOwner.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && "b".equals(candidate.getName())
+                        && parameters.length == 18
+                        && parameters[0] == String.class) {
+                    text = candidate;
+                    break;
+                }
+            }
+            if (text == null) throw new NoSuchMethodException(textOwnerName + ".b/18");
+
+            final Class<?> clickType = Class.forName(clickTypeName, false, cl);
+            final Class<?> contentType = Class.forName(contentTypeName, false, cl);
+            Class<?> wrapperType = Class.forName(wrapperTypeName, false, cl);
+            Constructor<?> wrapperConstructor = wrapperType.getDeclaredConstructor(
+                    Object.class, boolean.class, int.class);
+            wrapperConstructor.setAccessible(true);
+            Class<?> unitType = Class.forName(HostCompat.unitClass(), false, cl);
+            Field unitField = unitType.getDeclaredField(HostCompat.unitField());
+            unitField.setAccessible(true);
+            final Object unit = unitField.get(null);
+            Class<?> icons = Class.forName(iconOwnerName, false, cl);
+            Field infoIcon = icons.getDeclaredField(iconFieldName);
+            Field arrowIcon = icons.getDeclaredField(arrowFieldName);
+            infoIcon.setAccessible(true);
+            arrowIcon.setAccessible(true);
+            final Object nativeIcon = infoIcon.get(null);
+            final Object nativeArrow = arrowIcon.get(null);
+            final Method nativeRow = row;
+            final Method nativeHeader = header;
+            final Method nativeText = text;
+            final NativeSettingsDecoration nativeDecoration =
+                    prepareNativeSettingsDecoration(
+                            cl, componentOwner, backgroundOwnerName,
+                            backgroundMethodName, roundedOwnerName,
+                            roundedMethodName, modifierOwnerName,
+                            modifierFieldName, heightOwnerName,
+                            heightMethodName, spacerOwnerName,
+                            spacerMethodName);
+
+            final Object click = Proxy.newProxyInstance(cl, new Class<?>[]{clickType},
+                    new InvocationHandler() {
+                        @Override public Object invoke(Object proxy, Method method, Object[] args) {
+                            if (method.getDeclaringClass() == Object.class) {
+                                if ("toString".equals(method.getName())) return "DeekseepSettingsClick";
+                                if ("hashCode".equals(method.getName())) {
+                                    return Integer.valueOf(System.identityHashCode(proxy));
+                                }
+                                if ("equals".equals(method.getName())) {
+                                    return Boolean.valueOf(args != null && args.length > 0
+                                            && proxy == args[0]);
+                                }
+                            }
+                            if ("u".equals(method.getName())) {
+                                main.post(new Runnable() {
+                                    @Override public void run() {
+                                        Activity activity = curAct.get();
+                                        if (activity == null || activity.isFinishing()) return;
+                                        try { DeekseepUi.showPage(activity); }
+                                        catch (Throwable error) {
+                                            log("native settings entry click failed: "
+                                                    + safeThrowableMessage(error));
+                                        }
+                                    }
+                                });
+                            }
+                            return unit;
+                        }
+                    });
+            final Object title = makeNativeTextContent(
+                    cl, contentType, nativeText, unit, "Deekseep", "Title");
+            final Object headerContent = makeNativeTextContent(
+                    cl, contentType, nativeText, unit, null, "Header");
+            final Object pluginHeader = wrapperConstructor.newInstance(
+                    headerContent, false, -2075140913);
+
+            root.setAccessible(true);
+            hook(root).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    Boolean previousRoot = NATIVE_SETTINGS_ROOT.get();
+                    Boolean previousInserted = NATIVE_SETTINGS_ROW_INSERTED.get();
+                    NATIVE_SETTINGS_ROOT.set(Boolean.TRUE);
+                    NATIVE_SETTINGS_ROW_INSERTED.set(Boolean.FALSE);
+                    try {
+                        return chain.proceed();
+                    } finally {
+                        if (previousRoot == null) NATIVE_SETTINGS_ROOT.remove();
+                        else NATIVE_SETTINGS_ROOT.set(previousRoot);
+                        if (previousInserted == null) NATIVE_SETTINGS_ROW_INSERTED.remove();
+                        else NATIVE_SETTINGS_ROW_INSERTED.set(previousInserted);
+                    }
+                }
+            });
+
+            header.setAccessible(true);
+            hook(header).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    if (nativeSettingsRowHooked && isNativeSettingsEntryEnabled()
+                            && Boolean.TRUE.equals(NATIVE_SETTINGS_ROOT.get())
+                            && !Boolean.TRUE.equals(NATIVE_SETTINGS_ROW_INSERTED.get())
+                            && !Boolean.TRUE.equals(NATIVE_SETTINGS_ROW_INSERTING.get())) {
+                        NATIVE_SETTINGS_ROW_INSERTED.set(Boolean.TRUE);
+                        NATIVE_SETTINGS_ROW_INSERTING.set(Boolean.TRUE);
+                        try {
+                            nativeHeader.invoke(null,
+                                    chain.getArg(0), pluginHeader, chain.getArg(2), 54);
+                            if (nativeDecoration != null) {
+                                nativeDecoration.emitHeaderGap(chain.getArg(2));
+                            }
+                            nativeRow.invoke(null,
+                                    null, click, false, false, 0L,
+                                    nativeIcon, null, nativeArrow, title,
+                                    chain.getArg(2), 113442816, 93);
+                            if (nativeDecoration != null) {
+                                nativeDecoration.emitSectionGap(chain.getArg(2));
+                            }
+                        } catch (Throwable error) {
+                            nativeSettingsRowHooked = false;
+                            log("native settings section emit failed: "
+                                    + safeThrowableMessage(error));
+                            main.post(new Runnable() {
+                                @Override public void run() { showButton(); }
+                            });
+                        } finally {
+                            NATIVE_SETTINGS_ROW_INSERTING.remove();
+                        }
+                    }
+                    return chain.proceed();
+                }
+            });
+            nativeSettingsRowHooked = true;
+            if (isNativeSettingsEntryEnabled()) {
+                main.post(new Runnable() {
+                    @Override public void run() { hideButton(); }
+                });
+            }
+            log("native settings section hooked " + rootOwnerName + "." + rootMethodName
+                    + " -> " + componentOwnerName + ".d/b");
+        } catch (Throwable error) {
+            nativeSettingsRowHooked = false;
+            log("native settings section unavailable: " + safeThrowableMessage(error));
+        }
+    }
+
+    private static Method findStaticMethod(Class<?> owner, String name, int parameterCount) {
+        for (Method candidate : owner.getDeclaredMethods()) {
+            if (Modifier.isStatic(candidate.getModifiers())
+                    && name.equals(candidate.getName())
+                    && candidate.getParameterTypes().length == parameterCount) {
+                candidate.setAccessible(true);
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private NativeSettingsDecoration prepareNativeSettingsDecoration(
+            final ClassLoader cl, Class<?> componentOwner,
+            String backgroundOwnerName, String backgroundMethodName,
+            String roundedOwnerName, String roundedMethodName,
+            String modifierOwnerName, String modifierFieldName,
+            String heightOwnerName, String heightMethodName,
+            String spacerOwnerName, String spacerMethodName) {
+        try {
+            Class<?> backgroundOwner = Class.forName(backgroundOwnerName, false, cl);
+            final Method background = findStaticMethod(
+                    backgroundOwner, backgroundMethodName, 3);
+            if (background == null) throw new NoSuchMethodException(
+                    backgroundOwnerName + "." + backgroundMethodName + "/3");
+
+            Class<?> roundedOwner = Class.forName(roundedOwnerName, false, cl);
+            Method rounded = null;
+            for (Method candidate : roundedOwner.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && roundedMethodName.equals(candidate.getName())
+                        && parameters.length == 1 && parameters[0] == float.class
+                        && background.getParameterTypes()[2]
+                        .isAssignableFrom(candidate.getReturnType())) {
+                    candidate.setAccessible(true);
+                    rounded = candidate;
+                    break;
+                }
+            }
+            if (rounded == null) throw new NoSuchMethodException(
+                    roundedOwnerName + "." + roundedMethodName + "(float)");
+            final Object roundedShape = rounded.invoke(null, Float.valueOf(16f));
+
+            Class<?> modifierOwner = Class.forName(modifierOwnerName, false, cl);
+            Field modifierField = modifierOwner.getDeclaredField(modifierFieldName);
+            modifierField.setAccessible(true);
+            Object baseModifier = modifierField.get(null);
+            Class<?> heightOwner = Class.forName(heightOwnerName, false, cl);
+            Method height = null;
+            for (Method candidate : heightOwner.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && heightMethodName.equals(candidate.getName())
+                        && parameters.length == 2 && parameters[1] == float.class
+                        && parameters[0].isInstance(baseModifier)) {
+                    candidate.setAccessible(true);
+                    height = candidate;
+                    break;
+                }
+            }
+            if (height == null) throw new NoSuchMethodException(
+                    heightOwnerName + "." + heightMethodName + "(modifier,float)");
+            Object headerGapModifier = height.invoke(
+                    null, baseModifier, Float.valueOf(4f));
+            Object sectionGapModifier = height.invoke(
+                    null, baseModifier, Float.valueOf(19f));
+            Class<?> spacerOwner = Class.forName(spacerOwnerName, false, cl);
+            Method spacer = null;
+            for (Method candidate : spacerOwner.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && spacerMethodName.equals(candidate.getName())
+                        && parameters.length == 2
+                        && parameters[1].isInstance(sectionGapModifier)) {
+                    candidate.setAccessible(true);
+                    spacer = candidate;
+                    break;
+                }
+            }
+            if (spacer == null) throw new NoSuchMethodException(
+                    spacerOwnerName + "." + spacerMethodName + "/2");
+
+            Method rowSurface = findStaticMethod(componentOwner, "a", 4);
+            deoptimizeBubbleMethod(rowSurface);
+            deoptimizeBubbleMethod(background);
+            hook(background).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    if (!Boolean.TRUE.equals(NATIVE_SETTINGS_ROW_INSERTING.get())) {
+                        return chain.proceed();
+                    }
+                    Object[] args = chain.getArgs().toArray();
+                    args[2] = roundedShape;
+                    return chain.proceed(args);
+                }
+            });
+            log("native settings decoration ready radius=16dp headerGap=4dp sectionGap=19dp");
+            return new NativeSettingsDecoration(
+                    spacer, headerGapModifier, sectionGapModifier);
+        } catch (Throwable error) {
+            log("native settings decoration unavailable: "
+                    + safeThrowableMessage(error));
+            return null;
+        }
+    }
+
+    private static final class NativeSettingsDecoration {
+        final Method spacer;
+        final Object headerGapModifier;
+        final Object sectionGapModifier;
+
+        NativeSettingsDecoration(
+                Method spacer, Object headerGapModifier, Object sectionGapModifier) {
+            this.spacer = spacer;
+            this.headerGapModifier = headerGapModifier;
+            this.sectionGapModifier = sectionGapModifier;
+        }
+
+        void emitHeaderGap(Object composer) throws Throwable {
+            spacer.invoke(null, composer, headerGapModifier);
+        }
+
+        void emitSectionGap(Object composer) throws Throwable {
+            spacer.invoke(null, composer, sectionGapModifier);
+        }
+    }
+
+    private static Object makeNativeTextContent(
+            ClassLoader cl, final Class<?> contentType, final Method nativeText,
+            final Object unit, final String fixedText, final String debugName) {
+        return Proxy.newProxyInstance(cl, new Class<?>[]{contentType}, new InvocationHandler() {
+            @Override public Object invoke(Object proxy, Method method, Object[] args)
+                    throws Throwable {
+                if (method.getDeclaringClass() == Object.class) {
+                    if ("toString".equals(method.getName())) return "DeekseepSettings" + debugName;
+                    if ("hashCode".equals(method.getName())) {
+                        return Integer.valueOf(System.identityHashCode(proxy));
+                    }
+                    if ("equals".equals(method.getName())) {
+                        return Boolean.valueOf(args != null && args.length > 0
+                                && proxy == args[0]);
+                    }
+                }
+                if ("r".equals(method.getName()) && args != null && args.length >= 1) {
+                    String value = fixedText != null ? fixedText
+                            : UiLanguage.text(hostApplicationContext, "插件", "Plugins");
+                    nativeText.invoke(null,
+                            value, null, 0L, null, 0L, null, 0L, null, 0L,
+                            0, false, 0, 0, null, args[0], 0, 0, 262142);
+                }
+                return unit;
+            }
+        });
+    }
+
+    private static void probeConfiguredAgentBackendOnce(Context context) {
+        if (!AGENT_PRIVILEGED_BACKEND_PROBED.compareAndSet(false, true)) return;
+        String backend = AgentToolConfig.load().backend;
+        if (AgentToolConfig.BACKEND_IN_APP.equals(backend)) return;
+        AgentDeviceBridge.probe(context, backend,
+                new AgentDeviceBridge.StatusCallback() {
+                    @Override public void onStatus(AgentDeviceBridge.Status status) {
+                        log("Agent configured backend probe connected="
+                                + status.connected + " detail=" + status.detail);
+                    }
+                });
+    }
+
+    /** Install the settings entry resolved by the reviewed static compatibility table. */
+    private void maybeInstallAdaptedSettingsEntry(Context context, ClassLoader loader) {
+        if (!ADAPTED_SETTINGS_ENTRY_HOOKED.compareAndSet(false, true)) return;
+        try {
+            Method method = HostCompat.settingsEntryMethod(loader);
+            if (method == null) {
+                ADAPTED_SETTINGS_ENTRY_HOOKED.set(false);
+                return;
+            }
+            hook(method).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    Object event = null;
+                    try { event = chain.getArg(0); } catch (Throwable ignored) {}
+                    Object result = chain.proceed();
+                    if ("settings".equals(event)) {
+                        main.post(new Runnable() {
+                            @Override public void run() { showButton(); }
+                        });
+                    }
+                    return result;
+                }
+            });
+            log("hooked settings entry " + method.getDeclaringClass().getName()
+                    + "." + method.getName());
+        } catch (Throwable error) {
+            ADAPTED_SETTINGS_ENTRY_HOOKED.set(false);
+            log("hook cached settings entry failed: " + error);
+        }
+    }
+
+    /** Replaces only DeepSeek's assistant-avatar drawable with the configured local image. */
+    private void hookAssistantAvatarPainter(final ClassLoader cl) throws Exception {
+        final String loaderOwner;
+        final String loaderMethod;
+        final int parameterCount;
+        final String painterType;
+        final String metadataType;
+        final String painterFilterMethod;
+        if (HostCompat.isV234()) {
+            if (HostCompat.isGooglePlay()) {
+                loaderOwner = "ms9";
+                loaderMethod = "U";
+                painterType = "u13";
+                metadataType = "f23";
+                painterFilterMethod = "e";
+            } else {
+                loaderOwner = "ye5";
+                loaderMethod = "C";
+                painterType = "rz2";
+                metadataType = "c03";
+                painterFilterMethod = "d";
+            }
+            parameterCount = 3;
+        } else if (HostCompat.isV230()) {
+            loaderOwner = "t75";
+            loaderMethod = "s";
+            parameterCount = 2;
+            painterType = "dx2";
+            metadataType = "px2";
+            painterFilterMethod = "d";
+        } else {
+            loaderOwner = "z45";
+            loaderMethod = "w";
+            parameterCount = 2;
+            painterType = "wu2";
+            metadataType = "iv2";
+            painterFilterMethod = "d";
+        }
+
+        Class<?> painterClass = cl.loadClass(painterType);
+        Method filterSetter = null;
+        for (Method candidate : painterClass.getDeclaredMethods()) {
+            if (painterFilterMethod.equals(candidate.getName())
+                    && candidate.getParameterTypes().length == 1
+                    && candidate.getReturnType() == boolean.class) {
+                filterSetter = candidate;
+                break;
+            }
+        }
+        if (filterSetter == null) {
+            throw new NoSuchMethodException(painterType + "."
+                    + painterFilterMethod + "(ColorFilter)");
+        }
+        filterSetter.setAccessible(true);
+        deoptimize(filterSetter);
+        hook(filterSetter).intercept(new Hooker() {
+            @Override public Object intercept(Chain chain) throws Throwable {
+                // Material Icon applies its semantic blue tint through Painter.applyColorFilter.
+                // The custom avatar is a real image, so keep its original colours; every other
+                // bitmap painter continues through DeepSeek's unmodified implementation.
+                if (chain.getThisObject() == assistantAvatarPainter) return Boolean.TRUE;
+                return chain.proceed();
+            }
+        });
+
+        Method loader = null;
+        for (Method candidate : cl.loadClass(loaderOwner).getDeclaredMethods()) {
+            Class<?>[] parameters = candidate.getParameterTypes();
+            if (Modifier.isStatic(candidate.getModifiers())
+                    && loaderMethod.equals(candidate.getName())
+                    && parameters.length == parameterCount
+                    && parameters[0] == int.class) {
+                loader = candidate;
+                break;
+            }
+        }
+        if (loader == null) {
+            throw new NoSuchMethodException(loaderOwner + "." + loaderMethod
+                    + "/" + parameterCount);
+        }
+        loader.setAccessible(true);
+        deoptimize(loader);
+        final String painterClassName = painterType;
+        final String metadataClassName = metadataType;
+        hook(loader).intercept(new Hooker() {
+            @Override public Object intercept(Chain chain) throws Throwable {
+                Object id = chain.getArg(0);
+                // R.drawable.assistant_message_avatar is stable across all supported hosts.
+                if (!(id instanceof Number) || ((Number) id).intValue() != 0x7f070059) {
+                    return chain.proceed();
+                }
+                Object custom = assistantAvatarPainter(
+                        cl, painterClassName, metadataClassName);
+                return custom == null ? chain.proceed() : custom;
+            }
+        });
+        log("installed custom assistant avatar painter " + loaderOwner + "."
+                + loaderMethod + " -> " + painterType);
+    }
+
+    private static Object assistantAvatarPainter(
+            ClassLoader cl, String painterType, String metadataType) {
+        File file = ChatAppearance.assistantAvatarFileForRender();
+        if (file == null) {
+            synchronized (ASSISTANT_AVATAR_PAINTER_LOCK) {
+                assistantAvatarPainter = null;
+                assistantAvatarPainterPath = "";
+                assistantAvatarPainterModified = Long.MIN_VALUE;
+                assistantAvatarPainterLength = Long.MIN_VALUE;
+            }
+            return null;
+        }
+        String path = file.getAbsolutePath();
+        long modified = file.lastModified();
+        long length = file.length();
+        Object cachedPainter = assistantAvatarPainter;
+        if (cachedPainter != null && assistantAvatarPainterLoader == cl
+                && path.equals(assistantAvatarPainterPath)
+                && modified == assistantAvatarPainterModified
+                && length == assistantAvatarPainterLength) {
+            return cachedPainter;
+        }
+        synchronized (ASSISTANT_AVATAR_PAINTER_LOCK) {
+            cachedPainter = assistantAvatarPainter;
+            if (cachedPainter != null && assistantAvatarPainterLoader == cl
+                    && path.equals(assistantAvatarPainterPath)
+                    && modified == assistantAvatarPainterModified
+                    && length == assistantAvatarPainterLength) {
+                return cachedPainter;
+            }
+            try {
+                Bitmap bitmap = ChatAppearance.loadAssistantAvatarBitmap(file, 512);
+                if (bitmap == null) return null;
+                Class<?> metadata = cl.loadClass(metadataType);
+                Constructor<?> metadataConstructor =
+                        metadata.getDeclaredConstructor(int.class, boolean.class);
+                metadataConstructor.setAccessible(true);
+                Object exif = metadataConstructor.newInstance(1, false);
+                Class<?> painter = cl.loadClass(painterType);
+                Constructor<?> painterConstructor =
+                        painter.getDeclaredConstructor(Bitmap.class, metadata);
+                painterConstructor.setAccessible(true);
+                Object created = painterConstructor.newInstance(bitmap, exif);
+                assistantAvatarPainter = created;
+                assistantAvatarPainterLoader = cl;
+                assistantAvatarPainterPath = path;
+                assistantAvatarPainterModified = modified;
+                assistantAvatarPainterLength = length;
+                return created;
+            } catch (Throwable error) {
+                log("custom assistant avatar decode failed: "
+                        + safeThrowableMessage(error));
+                return null;
+            }
+        }
     }
 
     /**
@@ -1040,10 +1980,11 @@ public class Main extends XposedModule {
             @Override public Object intercept(Chain chain) throws Throwable {
                 ChatAppearance.BubbleStyle style =
                         ChatAppearance.bubbleStyleForRender(true);
-                // Keep a zero-cost graphics layer attached even while spatial mode is disabled.
-                // Its shared Compose state can then activate immediately after the hidden switch
-                // changes, without waiting for this message row to be recomposed.
-                if (style == null) style = new ChatAppearance.BubbleStyle();
+                // A null style means the appearance master switch or bubble customization is off.
+                // Passing the host Modifier through untouched is important: BubbleStyle's normal
+                // defaults are glass, so manufacturing a fallback here used to draw a phantom
+                // bubble even though the user had disabled the whole appearance page.
+                if (style == null) return chain.proceed();
                 BubbleRenderContext context =
                         runtime.newContext(style, true, isBubbleDark());
                 Object[] args = chain.getArgs().toArray();
@@ -1106,7 +2047,10 @@ public class Main extends XposedModule {
             @Override public Object intercept(Chain chain) throws Throwable {
                 ChatAppearance.BubbleStyle style =
                         ChatAppearance.bubbleStyleForRender(false);
-                if (style == null) style = new ChatAppearance.BubbleStyle();
+                // DeepSeek responses do not have a native outer bubble. Never decorate the broad
+                // response container when customization is inactive; in dark mode that accidental
+                // background appeared as a visibly offset slab below the answer.
+                if (style == null) return chain.proceed();
                 BubbleRenderContext context =
                         runtime.newContext(style, false, isBubbleDark());
                 Object[] args = chain.getArgs().toArray();
@@ -1354,7 +2298,68 @@ public class Main extends XposedModule {
 
         BubbleHostMapping(boolean googlePlay) {
             this.googlePlay = googlePlay;
-            if (googlePlay) {
+            if (googlePlay && HostCompat.isV234()) {
+                // Google Play 2.3.4 (code 246).  This table is derived from the actually
+                // installed split APK, not from the similarly-versioned mainland build.  R8
+                // reused several old names for unrelated SDK classes, so carrying the 2.2 table
+                // forward (for example xz9/w3a/m27) silently targeted the wrong code.
+                userOwner = "pi6";
+                userMethod = "c";
+                assistantBodyOwner = "ala";
+                assistantBodyMethod = "a";
+                assistantOuterOwner = "lw8";
+                assistantOuterMethod = "Y";
+                assistantResolvedOwner = "lw8";
+                assistantResolvedMethod = "Y";
+                assistantRestartOwner = "fu";
+                surfaceOwner = "bz7";
+                surfaceMethod = "a";
+                modifierClass = "zq5";
+                callbackClass = "xi3";
+                shapeClass = "fs7";
+                roundedOwner = "kc7";
+                roundedMethod = "a";
+                clipOwner = "rv1";
+                clipMethod = "T";
+                backgroundOwner = "zh9";
+                backgroundMethod = "z";
+                borderOwner = "n86";
+                borderMethod = "Y";
+                drawOwner = "rv1";
+                drawMethod = "Y";
+                imageClass = "me";
+                drawScopeClass = "iv4";
+                drawImageMethod = "f";
+                unitClass = "hy8";
+                unitField = "a";
+                attachmentOwner = "pf6";
+                attachmentMethod = "j";
+                inputOwner = "y52";
+                inputMethod = "d";
+                searchOwner = "c16";
+                searchMethod = "s";
+                modeItemOwner = "p7a";
+                modeItemMethod = "f";
+                modeLabelOwner = "p7a";
+                modeLabelMethod = "h";
+                modeContainerOwner = "lw8";
+                modeContainerMethod = "Y";
+                positionElementClass = "e76";
+                coordinatesClass = "ru4";
+                coordinatesAttachedMethod = "h";
+                coordinatesSizeMethod = "j";
+                coordinatesWindowMethod = "r";
+                spatialElementClass = "rh0";
+                spatialScopeClass = "ab7";
+                spatialStateClass = "we6";
+                spatialStatePolicyOwner = "h7a";
+                spatialStatePolicyField = "t";
+                spatialScaleXMethod = "j";
+                spatialScaleYMethod = "k";
+                spatialTranslationXMethod = "t";
+                spatialTranslationYMethod = "v";
+                spatialRotationXMethod = "h";
+            } else if (googlePlay) {
                 userOwner = "xz9";
                 userMethod = "c";
                 assistantBodyOwner = "w3a";
@@ -1410,6 +2415,65 @@ public class Main extends XposedModule {
                 spatialScaleYMethod = "k";
                 spatialTranslationXMethod = "w";
                 spatialTranslationYMethod = "x";
+                spatialRotationXMethod = "h";
+            } else if (HostCompat.isV234()) {
+                // Mainland 2.3.4 (code 245).  The store channels use independent R8 maps,
+                // while sharing the same Compose contracts and feature implementation.
+                userOwner = "ic5";
+                userMethod = "e";
+                assistantBodyOwner = "hz5";
+                assistantBodyMethod = "a";
+                assistantOuterOwner = "sq8";
+                assistantOuterMethod = "r0";
+                assistantResolvedOwner = "sq8";
+                assistantResolvedMethod = "r0";
+                assistantRestartOwner = "bu";
+                surfaceOwner = "sc";
+                surfaceMethod = "a";
+                modifierClass = "lp5";
+                callbackClass = "tg3";
+                shapeClass = "ko7";
+                roundedOwner = "b97";
+                roundedMethod = "a";
+                clipOwner = "d42";
+                clipMethod = "r";
+                backgroundOwner = "qf9";
+                backgroundMethod = "F";
+                borderOwner = "d42";
+                borderMethod = "o";
+                drawOwner = "td9";
+                drawMethod = "L";
+                imageClass = "je";
+                drawScopeClass = "bt4";
+                drawImageMethod = "g";
+                unitClass = "fu8";
+                unitField = "a";
+                attachmentOwner = "ra5";
+                attachmentMethod = "m";
+                inputOwner = "f02";
+                inputMethod = "a";
+                searchOwner = "sh4";
+                searchMethod = "p";
+                modeItemOwner = "oc5";
+                modeItemMethod = "c";
+                modeLabelOwner = "oc5";
+                modeLabelMethod = "c";
+                modeContainerOwner = "sq8";
+                modeContainerMethod = "r0";
+                positionElementClass = "i56";
+                coordinatesClass = "ks4";
+                coordinatesAttachedMethod = "h";
+                coordinatesSizeMethod = "j";
+                coordinatesWindowMethod = "q";
+                spatialElementClass = "bg0";
+                spatialScopeClass = "r77";
+                spatialStateClass = "ad6";
+                spatialStatePolicyOwner = "v2a";
+                spatialStatePolicyField = "t";
+                spatialScaleXMethod = "j";
+                spatialScaleYMethod = "k";
+                spatialTranslationXMethod = "s";
+                spatialTranslationYMethod = "u";
                 spatialRotationXMethod = "h";
             } else if (HostCompat.isV230()) {
                 // DeepSeek 2.3.0 upgraded Compose and R8 split several helpers that lived in
@@ -1499,8 +2563,8 @@ public class Main extends XposedModule {
                 imageClass = "ce";
                 drawScopeClass = "sm4";
                 drawImageMethod = "h";
-                unitClass = "ui8";
-                unitField = "a";
+                unitClass = HostCompat.unitClass();
+                unitField = HostCompat.unitField();
                 attachmentOwner = "i85";
                 attachmentMethod = "g";
                 inputOwner = "uf0";
@@ -1657,7 +2721,8 @@ public class Main extends XposedModule {
                     .getDeclaredConstructor(android.graphics.Bitmap.class);
             Class<?> drawScope = classLoader.loadClass(mapping.drawScopeClass);
             drawContentMethod = drawScope.getDeclaredMethod("a");
-            drawSizeMethod = drawScope.getDeclaredMethod("d");
+            drawSizeMethod = drawScope.getDeclaredMethod(
+                    HostCompat.isV234() && !mapping.googlePlay ? "b" : "d");
             densityMethod = drawScope.getDeclaredMethod("getDensity");
             drawImageMethod = findBubbleMethod(
                     drawScope, mapping.drawImageMethod, 9, null, null);
@@ -1666,7 +2731,8 @@ public class Main extends XposedModule {
             positionElementConstructor =
                     positionElementClass.getDeclaredConstructor(callbackClass);
             modifierThenMethod = modifierClass.getMethod(
-                    !mapping.googlePlay && HostCompat.isV230() ? "s" : "w",
+                    HostCompat.isV234() ? (mapping.googlePlay ? "t" : "u")
+                            : (!mapping.googlePlay && HostCompat.isV230() ? "s" : "w"),
                     modifierClass);
             Class<?> coordinatesClass =
                     classLoader.loadClass(mapping.coordinatesClass);
@@ -3480,6 +4546,962 @@ public class Main extends XposedModule {
         return new File(ENABLED_FILE).exists();
     }
 
+    static boolean isWelcomeWhaleMotionEnabled() {
+        return new File(WHALE_MOTION_FILE).isFile();
+    }
+
+    static void setWelcomeWhaleMotionEnabled(boolean enabled) {
+        try {
+            if (enabled) overwriteTextFile(WHALE_MOTION_FILE, "1");
+            else new File(WHALE_MOTION_FILE).delete();
+        } catch (Throwable error) {
+            log("welcome whale setting failed: " + safeThrowableMessage(error));
+        }
+        Main module = MODULE;
+        Activity activity = module == null ? null : module.curAct.get();
+        if (enabled) welcomeWhaleDrawCount.set(0);
+        if (enabled) startWelcomeWhaleFrames(activity);
+        else stopWelcomeWhaleFrames(activity);
+        if (activity != null && activity.getWindow() != null) {
+            activity.getWindow().getDecorView().invalidate();
+        }
+    }
+
+    static float welcomeWhaleMotionSpeed() {
+        try {
+            String value = readSmallText(WHALE_MOTION_SPEED_FILE);
+            float parsed = value == null ? 0.35f : Float.parseFloat(value.trim());
+            return Math.max(0.1f, Math.min(1.0f, parsed));
+        } catch (Throwable ignored) {
+            return 0.35f;
+        }
+    }
+
+    static void setWelcomeWhaleMotionSpeed(float speed) {
+        float safe = Math.max(0.1f, Math.min(1.0f, speed));
+        try {
+            overwriteTextFile(WHALE_MOTION_SPEED_FILE,
+                    String.format(Locale.US, "%.2f", safe));
+        } catch (Throwable error) {
+            log("welcome whale speed setting failed: " + safeThrowableMessage(error));
+        }
+    }
+
+    static boolean isTextWaveEnabled() {
+        return TextWaveEngine.isEnabled();
+    }
+
+    static boolean isMessageDetailsEnabled() {
+        return new File(MESSAGE_DETAILS_FILE).isFile();
+    }
+
+    static boolean setMessageDetailsEnabled(boolean enabled) {
+        try {
+            File marker = new File(MESSAGE_DETAILS_FILE);
+            if (enabled) overwriteTextFile(MESSAGE_DETAILS_FILE, "1");
+            else if (marker.exists() && !marker.delete()) return false;
+            return true;
+        } catch (Throwable error) {
+            log("message details setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    static boolean isAutoContinueEnabled() {
+        return new File(AUTO_CONTINUE_FILE).isFile();
+    }
+
+    static boolean setAutoContinueEnabled(boolean enabled) {
+        try {
+            File marker = new File(AUTO_CONTINUE_FILE);
+            if (enabled) overwriteTextFile(AUTO_CONTINUE_FILE, "1");
+            else if (marker.exists() && !marker.delete()) return false;
+            if (!enabled) AUTO_CONTINUE_DISPATCHED.clear();
+            return true;
+        } catch (Throwable error) {
+            log("auto-continue setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    /** Keep the existing default-on behavior while allowing users to opt out. */
+    static boolean isReplyReadyNotificationsEnabled() {
+        return !new File(REPLY_READY_DISABLED_FILE).isFile();
+    }
+
+    static boolean setReplyReadyNotificationsEnabled(boolean enabled) {
+        try {
+            File marker = new File(REPLY_READY_DISABLED_FILE);
+            if (enabled) {
+                if (marker.exists() && !marker.delete()) return false;
+            } else {
+                overwriteTextFile(REPLY_READY_DISABLED_FILE, "1");
+            }
+            return isReplyReadyNotificationsEnabled() == enabled;
+        } catch (Throwable error) {
+            log("reply-ready notification setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    static boolean setTextWaveEnabled(boolean enabled) {
+        Main module = MODULE;
+        Activity activity = module == null ? null : module.curAct.get();
+        return TextWaveEngine.setEnabled(activity, enabled);
+    }
+
+    static float textWaveSpeed() {
+        return TextWaveEngine.speed();
+    }
+
+    static boolean setTextWaveSpeed(float speed) {
+        return TextWaveEngine.setSpeed(speed);
+    }
+
+    static String homeGreeting() {
+        return sanitizeHomeGreeting(readSmallText(HOME_GREETING_FILE));
+    }
+
+    static boolean setHomeGreeting(String greeting) {
+        String safe = sanitizeHomeGreeting(greeting);
+        try {
+            File file = new File(HOME_GREETING_FILE);
+            if (safe.length() == 0) {
+                return !file.exists() || file.delete();
+            }
+            overwriteTextFile(HOME_GREETING_FILE, safe);
+            return true;
+        } catch (Throwable error) {
+            log("home greeting setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    static boolean isNativeSettingsEntryEnabled() {
+        // Opt-in by design: a missing marker means the safer floating entry on both fresh and
+        // upgraded installs. The old disabled marker is retained only for downgrade safety.
+        return new File(NATIVE_SETTINGS_ENTRY_ENABLED_FILE).isFile();
+    }
+
+    static boolean setNativeSettingsEntryEnabled(boolean enabled) {
+        try {
+            File enabledMarker = new File(NATIVE_SETTINGS_ENTRY_ENABLED_FILE);
+            File disabled = new File(NATIVE_SETTINGS_ENTRY_DISABLED_FILE);
+            if (enabled) {
+                overwriteTextFile(NATIVE_SETTINGS_ENTRY_ENABLED_FILE, "1");
+                if (disabled.exists() && !disabled.delete()) return false;
+            } else {
+                if (enabledMarker.exists() && !enabledMarker.delete()) return false;
+                overwriteTextFile(NATIVE_SETTINGS_ENTRY_DISABLED_FILE, "1");
+            }
+            Main module = MODULE;
+            if (module != null && module.main != null) {
+                if (enabled) module.main.post(new Runnable() {
+                    @Override public void run() { module.hideButton(); }
+                });
+                else module.main.post(new Runnable() {
+                    @Override public void run() { module.showButton(); }
+                });
+            }
+            return true;
+        } catch (Throwable error) {
+            log("native settings entry setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    static boolean isDataOptOutEnforced() {
+        return new File(DATA_OPT_OUT_ENFORCED_FILE).isFile();
+    }
+
+    static boolean setDataOptOutEnforced(Context context, boolean enabled) {
+        try {
+            File marker = new File(DATA_OPT_OUT_ENFORCED_FILE);
+            if (enabled) overwriteTextFile(marker.getPath(), "1");
+            else if (marker.exists() && !marker.delete()) return false;
+            DATA_OPT_OUT_SYNCED.set(false);
+            if (enabled && context != null) requestTrainingOptOut(context, true);
+            return true;
+        } catch (Throwable error) {
+            log("data optimization lock setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    static boolean isHotUpdateDisabled() {
+        return new File(HOT_UPDATE_DISABLED_FILE).isFile();
+    }
+
+    static boolean setHotUpdateDisabled(boolean disabled) {
+        try {
+            File marker = new File(HOT_UPDATE_DISABLED_FILE);
+            if (disabled) overwriteTextFile(marker.getPath(), "1");
+            else if (marker.exists() && !marker.delete()) return false;
+            return true;
+        } catch (Throwable error) {
+            log("hot-update setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    private static void requestTrainingOptOut(final Context context, final boolean showResult) {
+        if (context == null || !isDataOptOutEnforced()
+                || (!showResult && DATA_OPT_OUT_SYNCED.get())
+                || !DATA_OPT_OUT_SYNC_RUNNING.compareAndSet(false, true)) return;
+        final Context app = context.getApplicationContext() == null
+                ? context : context.getApplicationContext();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                AccountManager.ServerValidation result = AccountManager.setTrainingAllowed(
+                        app, hostClassLoader, false);
+                if (result.valid) DATA_OPT_OUT_SYNCED.set(true);
+                DATA_OPT_OUT_SYNC_RUNNING.set(false);
+                log("data optimization opt-out sync=" + result.valid
+                        + (result.error == null ? "" : ", error=" + result.error));
+                if (!showResult) return;
+                final String message = result.valid
+                        ? UiLanguage.text(app, "已关闭数据用于优化体验",
+                                "Data use for service improvement is now off")
+                        : UiLanguage.text(app, "禁用已启用，但服务器同步失败：",
+                                "Data-use blocking is enabled, but server sync failed: ")
+                                + (result.error == null ? "unknown" : result.error);
+                Main module = MODULE;
+                Handler handler = module == null ? null : module.main;
+                if (handler == null) handler = new Handler(Looper.getMainLooper());
+                handler.post(new Runnable() {
+                    @Override public void run() {
+                        try { Toast.makeText(app, message, Toast.LENGTH_LONG).show(); }
+                        catch (Throwable ignored) {}
+                    }
+                });
+            }
+        }, "deekseep-training-opt-out").start();
+    }
+
+    private static String sanitizeHomeGreeting(String greeting) {
+        if (greeting == null) return "";
+        String safe = greeting.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ').trim();
+        while (safe.contains("  ")) safe = safe.replace("  ", " ");
+        if (safe.length() > 60) safe = safe.substring(0, 60).trim();
+        return safe;
+    }
+
+    private static float nextWelcomeWhaleAngle() {
+        long now = SystemClock.uptimeMillis();
+        long previous = welcomeWhaleAngleAt;
+        welcomeWhaleAngleAt = now;
+        if (previous <= 0L || now <= previous) return welcomeWhaleAngle;
+        long elapsed = Math.min(100L, now - previous);
+        float degreesPerSecond = 90f * welcomeWhaleMotionSpeed();
+        welcomeWhaleAngle = (welcomeWhaleAngle
+                + degreesPerSecond * elapsed / 1000f) % 360f;
+        return welcomeWhaleAngle;
+    }
+
+    private static void startWelcomeWhaleFrames(final Activity activity) {
+        if (activity == null || !isWelcomeWhaleMotionEnabled()) return;
+        welcomeWhaleActivity = new WeakReference<>(activity);
+        final int generation = welcomeWhaleFrameGeneration.incrementAndGet();
+        final View decor = activity.getWindow() == null
+                ? null : activity.getWindow().getDecorView();
+        if (decor == null) return;
+        ArrayList<WeakReference<View>> renderViews = new ArrayList<>();
+        collectWelcomeWhaleRenderViews(decor, renderViews);
+        if (renderViews.isEmpty()) renderViews.add(new WeakReference<View>(decor));
+        welcomeWhaleRenderViews = renderViews;
+        welcomeWhaleAngleAt = SystemClock.uptimeMillis();
+        log("welcome whale frame driver started views=" + renderViews.size());
+        decor.post(new Runnable() {
+            int frame;
+            @Override public void run() {
+                Activity current = welcomeWhaleActivity.get();
+                if (generation != welcomeWhaleFrameGeneration.get()
+                        || current != activity || !isWelcomeWhaleMotionEnabled()
+                        || activity.isFinishing()
+                        || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed())) return;
+                if (frame == 0 || frame == 30 || frame == 120) {
+                    ArrayList<WeakReference<View>> refreshed = new ArrayList<>();
+                    collectWelcomeWhaleRenderViews(decor, refreshed);
+                    if (!refreshed.isEmpty()) welcomeWhaleRenderViews = refreshed;
+                }
+                frame++;
+                Method invalidateScope = welcomeWhaleScopeInvalidate;
+                if (invalidateScope != null && !WELCOME_WHALE_SCOPES.isEmpty()) {
+                    ArrayList<Object> scopes;
+                    synchronized (WELCOME_WHALE_SCOPES) {
+                        scopes = new ArrayList<>(WELCOME_WHALE_SCOPES.keySet());
+                    }
+                    for (Object scope : scopes) {
+                        if (scope == null) continue;
+                        try {
+                            Object invalidation = invalidateScope.invoke(
+                                    scope, Long.valueOf(frame));
+                            if (welcomeWhaleInvalidateLogged.compareAndSet(false, true)) {
+                                log("welcome whale scope invalidate result="
+                                        + String.valueOf(invalidation));
+                            }
+                        } catch (Throwable ignored) {
+                            WELCOME_WHALE_SCOPES.remove(scope);
+                        }
+                    }
+                }
+                if (frame == 30) {
+                    log("welcome whale frame driver tick scopes="
+                            + WELCOME_WHALE_SCOPES.size()
+                            + " draws=" + welcomeWhaleDrawCount.get());
+                }
+                Method invalidateDrawNode = welcomeWhaleDrawNodeInvalidate;
+                Object drawNode = welcomeWhaleDrawNode.get();
+                if (invalidateDrawNode != null && drawNode != null) {
+                    try {
+                        invalidateDrawNode.invoke(null, drawNode);
+                        if (welcomeWhaleDrawNodeLogged.compareAndSet(false, true)) {
+                            log("welcome whale draw node invalidation active type="
+                                    + drawNode.getClass().getName());
+                        }
+                    } catch (Throwable ignored) {
+                        welcomeWhaleDrawNode = new WeakReference<>(null);
+                    }
+                }
+                final boolean saver = isSystemPowerSaver(activity);
+                final long frameDelay = saver ? 50L : 16L;
+                for (WeakReference<View> reference : welcomeWhaleRenderViews) {
+                    View renderView = reference == null ? null : reference.get();
+                    if (renderView != null && renderView.isShown()) {
+                        if (saver) renderView.postInvalidateDelayed(frameDelay);
+                        else renderView.postInvalidateOnAnimation();
+                    }
+                }
+                decor.postDelayed(this, frameDelay);
+            }
+        });
+    }
+
+    private static void collectWelcomeWhaleRenderViews(
+            View view, List<WeakReference<View>> result) {
+        if (view == null || result == null) return;
+        String name = view.getClass().getName();
+        if (name.contains("ComposeView") || name.contains("AndroidComposeView")) {
+            result.add(new WeakReference<View>(view));
+        }
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) view;
+        for (int index = 0; index < group.getChildCount(); index++) {
+            collectWelcomeWhaleRenderViews(group.getChildAt(index), result);
+        }
+    }
+
+    private static void captureWelcomeWhaleDrawNode(
+            Object drawScope, Class<?> invalidatorOwner,
+            String invalidatorMethod) {
+        if (drawScope == null || invalidatorOwner == null) return;
+        try {
+            Method invalidate = welcomeWhaleDrawNodeInvalidate;
+            for (Field field : drawScope.getClass().getDeclaredFields()) {
+                field.setAccessible(true);
+                Object value = field.get(drawScope);
+                if (value == null) continue;
+                if (invalidate == null) {
+                    for (Method candidate : invalidatorOwner.getDeclaredMethods()) {
+                        Class<?>[] p = candidate.getParameterTypes();
+                        if (Modifier.isStatic(candidate.getModifiers())
+                                && invalidatorMethod.equals(candidate.getName())
+                                && p.length == 1 && p[0].isInstance(value)) {
+                            candidate.setAccessible(true);
+                            invalidate = candidate;
+                            welcomeWhaleDrawNodeInvalidate = candidate;
+                            break;
+                        }
+                    }
+                }
+                if (invalidate != null
+                        && invalidate.getParameterTypes()[0].isInstance(value)) {
+                    welcomeWhaleDrawNode = new WeakReference<>(value);
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void stopWelcomeWhaleFrames(Activity activity) {
+        Activity current = welcomeWhaleActivity.get();
+        if (activity == null || current == activity) {
+            welcomeWhaleFrameGeneration.incrementAndGet();
+            welcomeWhaleActivity = new WeakReference<>(null);
+            welcomeWhaleRenderViews = Collections.emptyList();
+            welcomeWhaleDrawNode = new WeakReference<>(null);
+            welcomeWhaleAngleAt = 0L;
+        }
+    }
+
+    /**
+     * Rotates only DeepSeek's native chat_welcome_logo painter. The painter is identified at the
+     * resource-loader boundary, then its DrawScope canvas is transformed at draw time. This keeps
+     * the rest of the ComposeView stationary and works without replacing DeepSeek's drawable.
+     */
+    private void hookWelcomeWhaleMotion(ClassLoader cl) {
+        final String loaderOwner;
+        final String loaderMethod;
+        final String painterOwner;
+        final String drawStateMethod;
+        final String canvasMethod;
+        if (HostCompat.isV234()) {
+            if (HostCompat.isGooglePlay()) {
+                loaderOwner = "ms9";
+                loaderMethod = "U";
+                painterOwner = "td6";
+                drawStateMethod = "g0";
+                canvasMethod = "r";
+            } else {
+                loaderOwner = "ye5";
+                loaderMethod = "C";
+                painterOwner = "xb6";
+                drawStateMethod = "e0";
+                canvasMethod = "v";
+            }
+        } else if (HostCompat.isV230()) {
+            loaderOwner = "t75";
+            loaderMethod = "s";
+            painterOwner = "s56";
+            drawStateMethod = "d0";
+            canvasMethod = "v";
+        } else {
+            loaderOwner = "z45";
+            loaderMethod = "w";
+            painterOwner = "z26";
+            drawStateMethod = "g0";
+            canvasMethod = "E";
+        }
+        try {
+            final Class<?> painterClass = Class.forName(painterOwner, false, cl);
+            Class<?> resources = Class.forName(loaderOwner, false, cl);
+            Method resourceLoader = null;
+            for (Method candidate : resources.getDeclaredMethods()) {
+                Class<?>[] p = candidate.getParameterTypes();
+                if (loaderMethod.equals(candidate.getName())
+                        && Modifier.isStatic(candidate.getModifiers())
+                        && p.length >= 3 && p[0] == int.class
+                        && painterClass.isAssignableFrom(candidate.getReturnType())) {
+                    resourceLoader = candidate;
+                    break;
+                }
+            }
+            if (resourceLoader == null) throw new NoSuchMethodException(
+                    loaderOwner + "." + loaderMethod + " drawable loader");
+            resourceLoader.setAccessible(true);
+            hook(resourceLoader).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    List<Object> args = chain.getArgs();
+                    boolean whale = args != null && !args.isEmpty()
+                            && args.get(0) instanceof Number
+                            && ((Number) args.get(0)).intValue() == 0x7f070063;
+                    Object composer = whale && args.size() >= 3 ? args.get(2) : null;
+                    Object painter = chain.proceed();
+                    if (painter != null && whale) {
+                        WELCOME_WHALE_PAINTERS.put(painter, Boolean.TRUE);
+                        if (composer != null) {
+                            // Register only after painterResource returns.  Its own restart scope
+                            // merely reloads the cached Painter and does not invalidate the Image
+                            // draw node.  The next scope closed by the caller owns the Image and
+                            // can make the whale draw again on every frame.
+                            WELCOME_WHALE_COMPOSERS.put(composer, Boolean.TRUE);
+                        }
+                        if (welcomeWhaleCapturedLogged.compareAndSet(false, true)) {
+                            log("welcome whale painter captured");
+                        }
+                    }
+                    return painter;
+                }
+            });
+
+            final Class<?> composerClass = resourceLoader.getParameterTypes()[2];
+            final Method endRestartGroup = composerClass.getMethod("v");
+            endRestartGroup.setAccessible(true);
+            final Method invalidateScope = endRestartGroup.getReturnType()
+                    .getMethod("b", Object.class);
+            invalidateScope.setAccessible(true);
+            welcomeWhaleScopeInvalidate = invalidateScope;
+            hook(endRestartGroup).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    Object scope = chain.proceed();
+                    Object composer = chain.getThisObject();
+                    // Keep the marker through any non-restartable groups until the first usable
+                    // caller scope is returned.
+                    if (scope != null
+                            && WELCOME_WHALE_COMPOSERS.remove(composer) != null) {
+                        WELCOME_WHALE_SCOPES.put(scope, Boolean.TRUE);
+                        if (welcomeWhaleScopeLogged.compareAndSet(false, true)) {
+                            log("welcome whale recompose scope captured type="
+                                    + scope.getClass().getName());
+                        }
+                    }
+                    return scope;
+                }
+            });
+
+            Method painterDraw = null;
+            for (Method candidate : painterClass.getDeclaredMethods()) {
+                Class<?>[] p = candidate.getParameterTypes();
+                if ("g".equals(candidate.getName()) && p.length == 4
+                        && p[1] == long.class && p[2] == float.class) {
+                    painterDraw = candidate;
+                    break;
+                }
+            }
+            if (painterDraw == null) throw new NoSuchMethodException(painterOwner + ".g");
+            painterDraw.setAccessible(true);
+            final Class<?> drawScopeClass = painterDraw.getParameterTypes()[0];
+            final Class<?> drawInvalidatorOwner = HostCompat.isV234()
+                    ? Class.forName(HostCompat.isGooglePlay() ? "wj9" : "a94", false, cl)
+                    : null;
+            final String drawInvalidatorMethod = HostCompat.isGooglePlay() ? "F" : "I";
+            final Method stateGetter = drawScopeClass.getMethod(drawStateMethod);
+            stateGetter.setAccessible(true);
+            final Method canvasGetter = stateGetter.getReturnType().getMethod(canvasMethod);
+            canvasGetter.setAccessible(true);
+            final Class<?> canvasClass = canvasGetter.getReturnType();
+            final Method save = canvasClass.getMethod("h");
+            final Method rotate = canvasClass.getMethod("b", float.class);
+            final Method translate = canvasClass.getMethod("n", float.class, float.class);
+            final Method restore = canvasClass.getMethod("o");
+            final AtomicBoolean drawErrorLogged = new AtomicBoolean(false);
+            hook(painterDraw).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    Object painter = chain.getThisObject();
+                    if (!isWelcomeWhaleMotionEnabled()
+                            || !WELCOME_WHALE_PAINTERS.containsKey(painter)) {
+                        return chain.proceed();
+                    }
+                    Object canvas = null;
+                    boolean saved = false;
+                    try {
+                        List<Object> args = chain.getArgs();
+                        Object drawScope = args.get(0);
+                        captureWelcomeWhaleDrawNode(
+                                drawScope, drawInvalidatorOwner,
+                                drawInvalidatorMethod);
+                        long size = ((Number) args.get(1)).longValue();
+                        float width = Float.intBitsToFloat((int) (size >> 32));
+                        float height = Float.intBitsToFloat((int) size);
+                        canvas = canvasGetter.invoke(stateGetter.invoke(drawScope));
+                        save.invoke(canvas);
+                        saved = true;
+                        translate.invoke(canvas, width * 0.5f, height * 0.5f);
+                        rotate.invoke(canvas, nextWelcomeWhaleAngle());
+                        if (welcomeWhaleDrawLogged.compareAndSet(false, true)) {
+                            log("welcome whale continuous draw active");
+                        }
+                        if (welcomeWhaleDrawCount.incrementAndGet() == 30) {
+                            log("welcome whale continuous frames confirmed");
+                        }
+                        translate.invoke(canvas, width * -0.5f, height * -0.5f);
+                    } catch (Throwable error) {
+                        if (drawErrorLogged.compareAndSet(false, true)) {
+                            log("welcome whale draw transform disabled: "
+                                    + safeThrowableMessage(error));
+                        }
+                        if (saved && canvas != null) {
+                            try { restore.invoke(canvas); } catch (Throwable ignored) {}
+                        }
+                        return chain.proceed();
+                    }
+                    try {
+                        return chain.proceed();
+                    } finally {
+                        if (saved && canvas != null) {
+                            try { restore.invoke(canvas); } catch (Throwable ignored) {}
+                        }
+                    }
+                }
+            });
+            Class<?> composeViewClass = cl.loadClass(
+                    "androidx.compose.ui.platform.AndroidComposeView");
+            Method dispatchDraw = composeViewClass.getDeclaredMethod(
+                    "dispatchDraw", Canvas.class);
+            dispatchDraw.setAccessible(true);
+            hook(dispatchDraw).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    Object result = chain.proceed();
+                    Object owner = chain.getThisObject();
+                    if (owner instanceof View && isWelcomeWhaleMotionEnabled()
+                            && !WELCOME_WHALE_PAINTERS.isEmpty()) {
+                        View renderView = (View) owner;
+                        if (isSystemPowerSaver(renderView.getContext())) {
+                            renderView.postInvalidateDelayed(50L);
+                        } else {
+                            renderView.postInvalidateOnAnimation();
+                        }
+                    }
+                    return result;
+                }
+            });
+            log("welcome whale painter motion hooked owner=" + painterOwner);
+        } catch (Throwable error) {
+            log("welcome whale painter motion unavailable: " + safeThrowableMessage(error));
+        }
+    }
+
+    /**
+     * Adds a travelling black/ocean-blue shader at the final Android and Compose text draw
+     * boundaries. Keeping the effect at the canvas boundary means host typography, layout,
+     * selection, accessibility text and semantic error colours all remain intact.
+     */
+    private void hookTextWaveMotion(ClassLoader cl) {
+        int nativeHooks = 0;
+        try {
+            Method onDraw = TextView.class.getDeclaredMethod("onDraw", Canvas.class);
+            onDraw.setAccessible(true);
+            hook(onDraw).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    TextView text = (TextView) chain.getThisObject();
+                    float density = text.getResources().getDisplayMetrics().density;
+                    TextWaveEngine.PaintState state = TextWaveEngine.apply(
+                            text.getPaint(), density);
+                    try {
+                        return chain.proceed();
+                    } finally {
+                        TextWaveEngine.restore(state);
+                    }
+                }
+            });
+            nativeHooks = 1;
+        } catch (Throwable error) {
+            log("native text wave unavailable: " + safeThrowableMessage(error));
+        }
+
+        final String canvasWrapperName;
+        final String textNodeName;
+        final String textDrawMethodName;
+        final String invalidatorOwnerName;
+        final String invalidatorMethodName;
+        if (HostCompat.isV234() && HostCompat.isGooglePlay()) {
+            canvasWrapperName = "ei8";
+            textNodeName = "ii8";
+            textDrawMethodName = "m0";
+            invalidatorOwnerName = "wj9";
+            invalidatorMethodName = "F";
+        } else if (HostCompat.isV234()) {
+            canvasWrapperName = "ce8";
+            textNodeName = "ge8";
+            textDrawMethodName = "k0";
+            invalidatorOwnerName = "a94";
+            invalidatorMethodName = "I";
+        } else if (HostCompat.isV230()) {
+            canvasWrapperName = "x58";
+            textNodeName = "b68";
+            textDrawMethodName = "j0";
+            invalidatorOwnerName = "is1";
+            invalidatorMethodName = "C";
+        } else {
+            canvasWrapperName = "v28";
+            textNodeName = "z28";
+            textDrawMethodName = "m0";
+            invalidatorOwnerName = "zp1";
+            invalidatorMethodName = "g0";
+        }
+        try {
+            final float density = hostApplicationContext == null
+                    ? 1f : hostApplicationContext.getResources()
+                    .getDisplayMetrics().density;
+            Class<?> canvasWrapper = Class.forName(canvasWrapperName, false, cl);
+            int composeCanvasHooks = 0;
+            for (Method candidate : canvasWrapper.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                String name = candidate.getName();
+                if (!(name.startsWith("drawText") || "drawGlyphs".equals(name))
+                        || parameters.length == 0
+                        || parameters[parameters.length - 1] != android.graphics.Paint.class) {
+                    continue;
+                }
+                candidate.setAccessible(true);
+                hook(candidate).intercept(new Hooker() {
+                    @Override public Object intercept(Chain chain) throws Throwable {
+                        List<Object> args = chain.getArgs();
+                        Object last = args.isEmpty() ? null : args.get(args.size() - 1);
+                        TextWaveEngine.PaintState state = last instanceof android.graphics.Paint
+                                ? TextWaveEngine.apply((android.graphics.Paint) last, density)
+                                : null;
+                        try {
+                            return chain.proceed();
+                        } finally {
+                            TextWaveEngine.restore(state);
+                        }
+                    }
+                });
+                composeCanvasHooks++;
+            }
+            if (composeCanvasHooks == 0) {
+                throw new NoSuchMethodException(
+                        canvasWrapperName + ".drawText*/drawGlyphs");
+            }
+
+            Class<?> textNode = Class.forName(textNodeName, false, cl);
+            Method textDraw = null;
+            for (Method candidate : textNode.getDeclaredMethods()) {
+                if (textDrawMethodName.equals(candidate.getName())
+                        && candidate.getParameterTypes().length == 1) {
+                    textDraw = candidate;
+                    break;
+                }
+            }
+            if (textDraw == null) throw new NoSuchMethodException(
+                    textNodeName + "." + textDrawMethodName);
+            Class<?> invalidatorOwner = Class.forName(
+                    invalidatorOwnerName, false, cl);
+            Method invalidate = null;
+            for (Method candidate : invalidatorOwner.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && invalidatorMethodName.equals(candidate.getName())
+                        && parameters.length == 1
+                        && parameters[0].isAssignableFrom(textNode)) {
+                    invalidate = candidate;
+                    break;
+                }
+            }
+            if (invalidate == null) throw new NoSuchMethodException(
+                    invalidatorOwnerName + "." + invalidatorMethodName
+                            + "(textNode)");
+            textDraw.setAccessible(true);
+            invalidate.setAccessible(true);
+            final Method nodeInvalidator = invalidate;
+            hook(textDraw).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    TextWaveEngine.captureComposeTextNode(
+                            chain.getThisObject(), nodeInvalidator);
+                    return chain.proceed();
+                }
+            });
+            log("text wave hooked native=" + nativeHooks
+                    + ", composeCanvas=" + composeCanvasHooks
+                    + ", node=" + textNodeName);
+        } catch (Throwable error) {
+            log("compose text wave unavailable: " + safeThrowableMessage(error));
+        }
+    }
+
+    /** Replaces DeepSeek's model-specific and unified home welcome strings when configured. */
+    private void hookHomeGreeting(final ClassLoader cl) {
+        final String helperName;
+        final String formattedMethodName;
+        final String plainMethodName;
+        final String composeTextOwnerName;
+        if (HostCompat.isV234() && HostCompat.isGooglePlay()) {
+            helperName = "em6";
+            formattedMethodName = "u";
+            plainMethodName = "t";
+            composeTextOwnerName = "ql8";
+            hostWelcomeMessageResourceId = 0x7f0f01df;
+            hostWelcomeTitleResourceId = 0x7f0f0377;
+        } else if (HostCompat.isV234()) {
+            helperName = "aa5";
+            formattedMethodName = "D";
+            plainMethodName = "C";
+            composeTextOwnerName = "qh8";
+            hostWelcomeMessageResourceId = 0x7f0f01df;
+            hostWelcomeTitleResourceId = 0x7f0f0377;
+        } else if (HostCompat.isV230() && !HostCompat.isV234()) {
+            helperName = "w85";
+            formattedMethodName = "v";
+            plainMethodName = "u";
+            composeTextOwnerName = "j98";
+            hostWelcomeMessageResourceId = 0x7f0e01d0;
+            hostWelcomeTitleResourceId = 0x7f0e0352;
+        } else if (!HostCompat.isV230()) {
+            helperName = "c65";
+            formattedMethodName = "v";
+            plainMethodName = "u";
+            composeTextOwnerName = "i68";
+            hostWelcomeMessageResourceId = 0x7f0e01c2;
+            hostWelcomeTitleResourceId = 0x7f0e031c;
+        } else {
+            log("home greeting mapping unavailable for this host");
+            return;
+        }
+        try {
+            try {
+                Class<?> strings = Class.forName("com.deepseek.chat.R$string", false, cl);
+                Field welcome = strings.getDeclaredField("model_welcome_message");
+                welcome.setAccessible(true);
+                hostWelcomeMessageResourceId = welcome.getInt(null);
+                Field title = strings.getDeclaredField("welcome_message_title_unified");
+                title.setAccessible(true);
+                hostWelcomeTitleResourceId = title.getInt(null);
+            } catch (Throwable resourceError) {
+                // Release builds inline and strip R$string. The verified per-generation IDs
+                // above remain the authoritative fallback.
+            }
+            Context greetingContext = hostApplicationContext;
+            if (greetingContext != null) {
+                try {
+                    hostWelcomeMessagePattern = greetingContext.getResources()
+                            .getText(hostWelcomeMessageResourceId).toString();
+                    hostWelcomeTitleText = greetingContext.getResources()
+                            .getText(hostWelcomeTitleResourceId).toString();
+                } catch (Throwable ignored) {}
+            }
+            Class<?> helper = Class.forName(helperName, false, cl);
+            Method formattedString = null;
+            for (Method candidate : helper.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && formattedMethodName.equals(candidate.getName())
+                        && parameters.length == 3
+                        && parameters[0] == int.class
+                        && parameters[1].isArray()) {
+                    formattedString = candidate;
+                    break;
+                }
+            }
+            if (formattedString == null) {
+                throw new NoSuchMethodException(
+                        helperName + "." + formattedMethodName);
+            }
+            formattedString.setAccessible(true);
+            Method plainString = null;
+            for (Method candidate : helper.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && plainMethodName.equals(candidate.getName())
+                        && parameters.length == 2
+                        && parameters[0] == int.class) {
+                    plainString = candidate;
+                    break;
+                }
+            }
+            if (plainString == null) {
+                throw new NoSuchMethodException(
+                        helperName + "." + plainMethodName);
+            }
+            plainString.setAccessible(true);
+            deoptimizeBubbleMethod(formattedString);
+            deoptimizeBubbleMethod(plainString);
+            hook(formattedString).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    String greeting = homeGreetingForResource(chain.getArg(0));
+                    if (greeting != null) return greeting;
+                    return chain.proceed();
+                }
+            });
+            hook(plainString).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    String greeting = homeGreetingForResource(chain.getArg(0));
+                    if (greeting != null) return greeting;
+                    return chain.proceed();
+                }
+            });
+            // R8/ART can inline the tiny Compose resource helpers above.  Keep a precise
+            // resource-boundary fallback for the two verified welcome IDs so the custom text
+            // still applies without touching any unrelated DeepSeek strings.
+            Method resourcesPlain = android.content.res.Resources.class.getDeclaredMethod(
+                    "getString", int.class);
+            Method resourcesFormatted = android.content.res.Resources.class.getDeclaredMethod(
+                    "getString", int.class, Object[].class);
+            resourcesPlain.setAccessible(true);
+            resourcesFormatted.setAccessible(true);
+            hook(resourcesPlain).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    String greeting = homeGreetingForResource(chain.getArg(0));
+                    return greeting != null ? greeting : chain.proceed();
+                }
+            });
+            hook(resourcesFormatted).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    String greeting = homeGreetingForResource(chain.getArg(0));
+                    return greeting != null ? greeting : chain.proceed();
+                }
+            });
+            Class<?> composeTextOwner = Class.forName(
+                    composeTextOwnerName, false, cl);
+            Method composeText = null;
+            for (Method candidate : composeTextOwner.getDeclaredMethods()) {
+                Class<?>[] parameters = candidate.getParameterTypes();
+                if (Modifier.isStatic(candidate.getModifiers())
+                        && "b".equals(candidate.getName())
+                        && parameters.length == 18
+                        && parameters[0] == String.class) {
+                    candidate.setAccessible(true);
+                    composeText = candidate;
+                    break;
+                }
+            }
+            if (composeText == null) throw new NoSuchMethodException(
+                    composeTextOwnerName + ".b/18");
+            deoptimizeBubbleMethod(composeText);
+            hook(composeText).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    Object current = chain.getArg(0);
+                    String greeting = current instanceof String
+                            && isHostWelcomeText((String) current)
+                            ? homeGreeting() : "";
+                    if (greeting.length() == 0) return chain.proceed();
+                    if (HOME_GREETING_MATCH_LOGGED.compareAndSet(false, true)) {
+                        log("home greeting applied at compose text length="
+                                + greeting.length());
+                    }
+                    Object[] args = chain.getArgs().toArray();
+                    args[0] = greeting;
+                    return chain.proceed(args);
+                }
+            });
+            log("home greeting hooked " + helperName + "."
+                    + formattedMethodName + "/" + plainMethodName
+                    + " resources=0x"
+                    + Integer.toHexString(hostWelcomeMessageResourceId)
+                    + ",0x" + Integer.toHexString(hostWelcomeTitleResourceId));
+        } catch (Throwable error) {
+            log("home greeting hook unavailable: " + safeThrowableMessage(error));
+        }
+    }
+
+    private static String homeGreetingForResource(Object resourceId) {
+        if (!(resourceId instanceof Integer)) return null;
+        int id = ((Integer) resourceId).intValue();
+        if (id != hostWelcomeMessageResourceId && id != hostWelcomeTitleResourceId) {
+            return null;
+        }
+        String greeting = homeGreeting();
+        if (greeting.length() == 0) return null;
+        if (HOME_GREETING_MATCH_LOGGED.compareAndSet(false, true)) {
+            log("home greeting applied resource=0x" + Integer.toHexString(id)
+                    + " length=" + greeting.length());
+        }
+        return greeting;
+    }
+
+    private static boolean isHostWelcomeText(String text) {
+        if (text == null || text.length() == 0) return false;
+        ensureHomeGreetingPatterns();
+        String title = hostWelcomeTitleText;
+        if (title.length() > 0 && title.equals(text)) return true;
+        String pattern = hostWelcomeMessagePattern;
+        if (pattern.length() == 0) return false;
+        int marker = pattern.indexOf("%1$s");
+        int markerLength = 4;
+        if (marker < 0) {
+            marker = pattern.indexOf("%s");
+            markerLength = 2;
+        }
+        if (marker < 0) return pattern.equals(text);
+        String prefix = pattern.substring(0, marker);
+        String suffix = pattern.substring(marker + markerLength);
+        return text.length() > prefix.length() + suffix.length()
+                && text.startsWith(prefix) && text.endsWith(suffix);
+    }
+
+    private static void ensureHomeGreetingPatterns() {
+        if (hostWelcomeMessagePattern.length() > 0
+                && hostWelcomeTitleText.length() > 0) return;
+        Context context = hostApplicationContext;
+        if (context == null) return;
+        try {
+            hostWelcomeMessagePattern = context.getResources()
+                    .getText(hostWelcomeMessageResourceId).toString();
+            hostWelcomeTitleText = context.getResources()
+                    .getText(hostWelcomeTitleResourceId).toString();
+        } catch (Throwable ignored) {}
+    }
+
     /** True when the opt-in bundled prompt, rather than an imported prompt, is active. */
     static boolean isEmbeddedPromptEnabled() {
         if (!isEnabled()) return false;
@@ -3493,7 +5515,7 @@ public class Main extends XposedModule {
 
     /** Ensures the opaque bundled prompt is present in DeepSeek's own private no-backup area. */
     static boolean ensureEmbeddedPromptInstalled(Context host) {
-        if (BuildInfo.GOOGLE_PLAY || host == null) return false;
+        if (HostCompat.isGooglePlay() || host == null) return false;
         File destination = new File(EMBEDDED_PROMPT_FILE);
         if (destination.isFile() && destination.length() > 0L) return true;
         InputStream input = null;
@@ -3528,6 +5550,17 @@ public class Main extends XposedModule {
         } finally {
             try { if (output != null) output.close(); } catch (Throwable ignored) {}
             try { if (input != null) input.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    static boolean isSystemPowerSaver(Context context) {
+        if (context == null) return false;
+        try {
+            PowerManager manager = (PowerManager) context.getSystemService(
+                    Context.POWER_SERVICE);
+            return manager != null && manager.isPowerSaveMode();
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
@@ -3605,7 +5638,7 @@ public class Main extends XposedModule {
 
     /** Enables the mainland-only hidden embedded prompt without exposing its source in the UI. */
     static boolean setEmbeddedPromptEnabled(Context host, boolean enabled) {
-        if (BuildInfo.GOOGLE_PLAY) return false;
+        if (HostCompat.isGooglePlay()) return false;
         if (!enabled) {
             try {
                 restorePreviousPromptState();
@@ -3675,6 +5708,178 @@ public class Main extends XposedModule {
         } catch (Throwable ignored) {}
     }
 
+    static long fakeMuteUntilMillis() {
+        long cached = cachedFakeMuteUntil;
+        if (cached == Long.MIN_VALUE) {
+            String value = readSmallText(FAKE_MUTE_UNTIL_FILE);
+            try { cached = value == null ? 0L : Long.parseLong(value.trim()); }
+            catch (Throwable ignored) { cached = 0L; }
+            cachedFakeMuteUntil = cached;
+        }
+        return Math.max(0L, cached);
+    }
+
+    static boolean isFakeMuteEnabled() {
+        boolean enabled = new File(FAKE_MUTE_ENABLED_FILE).isFile();
+        if (enabled && fakeMuteUntilMillis() <= System.currentTimeMillis()) {
+            try { new File(FAKE_MUTE_ENABLED_FILE).delete(); } catch (Throwable ignored) {}
+            enabled = false;
+        }
+        return enabled;
+    }
+
+    /** Saves only the configured deadline. Enabling is deliberately a separate user action. */
+    static boolean setFakeMuteUntilMillis(long until) {
+        try {
+            if (until <= System.currentTimeMillis()) {
+                return false;
+            }
+            overwriteTextFile(FAKE_MUTE_UNTIL_FILE, Long.toString(until));
+            cachedFakeMuteUntil = until;
+            return fakeMuteUntilMillis() == until;
+        } catch (Throwable error) {
+            log("native fake mute setting failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    static boolean setFakeMuteEnabled(boolean enabled) {
+        try {
+            File marker = new File(FAKE_MUTE_ENABLED_FILE);
+            if (!enabled) return !marker.exists() || marker.delete();
+            if (fakeMuteUntilMillis() <= System.currentTimeMillis()) return false;
+            overwriteTextFile(marker.getPath(), "1");
+            return marker.isFile();
+        } catch (Throwable error) {
+            log("native fake mute enable failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    static void clearFakeMute() {
+        setFakeMuteEnabled(false);
+    }
+
+    /** Forces the host privacy switch off and replaces its enable callback with a stable no-op. */
+    private void hookTrainingOptOutControl(final ClassLoader loader) {
+        try {
+            Method method = HostCompat.trainingControlMethod(loader);
+            if (method == null) {
+                log("native training control not found for " + HostCompat.generationName());
+                return;
+            }
+            final Class<?> callbackType = method.getParameterTypes()[1];
+            final Object unit = kotlinUnit(loader);
+            final Object noOp = callbackType.isInterface()
+                    ? Proxy.newProxyInstance(loader, new Class<?>[]{callbackType},
+                    new InvocationHandler() {
+                        @Override public Object invoke(Object proxy, Method called, Object[] args) {
+                            if (called.getDeclaringClass() == Object.class) {
+                                if ("toString".equals(called.getName())) {
+                                    return "DeekseepTrainingOptOutNoOp";
+                                }
+                                if ("hashCode".equals(called.getName())) {
+                                    return System.identityHashCode(proxy);
+                                }
+                                if ("equals".equals(called.getName())) {
+                                    return args != null && args.length == 1 && proxy == args[0];
+                                }
+                            }
+                            return unit;
+                        }
+                    }) : null;
+            hook(method).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    if (!isDataOptOutEnforced()) return chain.proceed();
+                    Object[] args = chain.getArgs().toArray();
+                    args[0] = Boolean.FALSE;
+                    if (noOp != null) args[1] = noOp;
+                    return chain.proceed(args);
+                }
+            });
+            log("native training opt-out control hooked: " + method);
+        } catch (Throwable error) {
+            log("hook native training opt-out control failed: " + error);
+        }
+    }
+
+    /** Suppresses DeepSeek's shared normal/forced update dialog while the opt-in marker exists. */
+    private void hookHotUpdateDialog(final ClassLoader loader) {
+        try {
+            Method method = HostCompat.updateDialogMethod(loader);
+            if (method == null) {
+                log("client update renderer not found for " + HostCompat.generationName());
+                return;
+            }
+            hook(method).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    return isHotUpdateDisabled() ? null : chain.proceed();
+                }
+            });
+            log("client update renderer hooked: " + method);
+        } catch (Throwable error) {
+            log("hook client update renderer failed: " + error);
+        }
+    }
+
+    private static Object kotlinUnit(ClassLoader loader) {
+        try {
+            Class<?> type = Class.forName(HostCompat.unitClass(), false, loader);
+            Field field = type.getDeclaredField(HostCompat.unitField());
+            field.setAccessible(true);
+            return field.get(null);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** Replaces only the native Compose renderer's mute-state argument. Network models and
+     * requests remain untouched, so the host draws its own mute bar without sending fake data. */
+    private void hookNativeFakeMute(ClassLoader loader) {
+        String[][] generations = {
+                {"w19", "zh9"},       // Google Play 2.3.4
+                {"qx8", "js8"},       // Mainland 2.3.4
+                {"fp8", "h67"},       // 2.3.0
+                {"em8", "ux5"},       // Mainland 2.2.x
+                {"kq8", "f77"},       // Google Play 2.2.x
+        };
+        int installed = 0;
+        for (String[] generation : generations) {
+            try {
+                // JADX displays R8's default-package classes under a synthetic
+                // "defpackage" directory, but that prefix is not part of the runtime name.
+                final Class<?> muteType = loader.loadClass(generation[0]);
+                Class<?> renderer = loader.loadClass(generation[1]);
+                final Constructor<?> factory = muteType.getDeclaredConstructor(Double.class);
+                factory.setAccessible(true);
+                for (Method method : renderer.getDeclaredMethods()) {
+                    Class<?>[] params = method.getParameterTypes();
+                    int found = -1;
+                    for (int i = 0; i < params.length; i++) {
+                        if (params[i] == muteType) { found = i; break; }
+                    }
+                    if (found < 0) continue;
+                    method.setAccessible(true);
+                    final int index = found;
+                    hook(method).intercept(new Hooker() {
+                        @Override public Object intercept(Chain chain) throws Throwable {
+                            if (!isFakeMuteEnabled()) return chain.proceed();
+                            Object[] args = chain.getArgs().toArray(new Object[0]);
+                            double seconds = fakeMuteUntilMillis() / 1000.0d;
+                            args[index] = factory.newInstance(Double.valueOf(seconds));
+                            return chain.proceed(args);
+                        }
+                    });
+                    installed++;
+                }
+                log("native fake mute renderer hooked model=" + muteType.getName()
+                        + " owner=" + renderer.getName());
+                break;
+            } catch (Throwable ignored) {}
+        }
+        if (installed == 0) log("native fake mute renderer unavailable for host");
+    }
+
     static boolean hasAcceptedExperimentalDisclaimer() {
         BufferedReader reader = null;
         try {
@@ -3741,7 +5946,7 @@ public class Main extends XposedModule {
             return dozeExempt && !backgroundRestricted && error.length() == 0;
         }
 
-        String describe(boolean approved) {
+        String describe() {
             StringBuilder out = new StringBuilder();
             out.append(UiLanguage.text("电池优化：", "Battery optimization: "))
                     .append(dozeExempt
@@ -3751,10 +5956,13 @@ public class Main extends XposedModule {
                     .append(backgroundRestricted
                             ? UiLanguage.text("✗ 系统禁止后台活动", "✗ Blocked by the system")
                             : UiLanguage.text("✓ 系统允许后台活动", "✓ Allowed by the system"))
-                    .append(UiLanguage.text("\n首次放行：", "\nInitial approval: "))
-                    .append(approved && allowed()
-                            ? UiLanguage.text("✓ 校验通过", "✓ Approved")
-                            : UiLanguage.text("✗ 尚未通过校验", "✗ Not approved"));
+                    .append(UiLanguage.text("\n系统白名单：", "\nSystem allowlist: "))
+                    .append(allowed()
+                            ? UiLanguage.text("✓ 已启用（推荐）", "✓ Enabled (recommended)")
+                            : UiLanguage.text("○ 未启用（不影响启动）",
+                                    "○ Not enabled (startup is still allowed)"))
+                    .append(UiLanguage.text("\n保活方式：前台服务 + CPU WakeLock + 心跳",
+                            "\nKeepalive: foreground service + CPU wake lock + heartbeat"));
             if (error.length() > 0) out.append(UiLanguage.text(
                     "\n检测错误：", "\nDetection error: ")).append(UiLanguage.dynamic(error));
             return out.toString();
@@ -3799,46 +6007,31 @@ public class Main extends XposedModule {
         return new LocalApiBackgroundState(dozeExempt, restricted, error);
     }
 
-    static boolean isLocalApiBackgroundApproved(Context context) {
-        return new File(LOCAL_API_BACKGROUND_READY_FILE).exists()
-                && localApiBackgroundState(context).allowed();
-    }
-
     static String localApiBackgroundStatus(Context context) {
-        return localApiBackgroundState(context).describe(
-                new File(LOCAL_API_BACKGROUND_READY_FILE).exists());
+        return localApiBackgroundState(context).describe();
     }
 
     static boolean verifyLocalApiBackground(Activity activity) {
         LocalApiBackgroundState state = localApiBackgroundState(activity);
-        try {
-            if (state.allowed()) overwriteTextFile(LOCAL_API_BACKGROUND_READY_FILE,
-                    String.valueOf(System.currentTimeMillis()));
-            else new File(LOCAL_API_BACKGROUND_READY_FILE).delete();
-        } catch (Throwable t) {
-            log("local API background marker update failed: " + t);
-            return false;
-        }
-        if (!state.allowed()) {
-            LocalApiGateway.stop();
-            requestLocalApiKeepAlive(activity, false);
-            return false;
-        }
+        // Battery exemption is a stability recommendation, not a hard gate. The companion
+        // foreground service owns the wake lock and foreground heartbeat in rootless mode.
         if (isLocalApiEnabled()) {
             requestLocalApiKeepAlive(activity, true);
             startLocalApiGateway(activity);
         }
-        return true;
+        return state.allowed();
     }
 
     static boolean openLocalApiBatterySettings(Activity activity) {
         if (activity == null || activity.isFinishing()) return false;
         Intent[] intents = new Intent[]{
-                new Intent("android.settings.VIEW_ADVANCED_POWER_USAGE_DETAIL")
-                        .setData(Uri.parse("package:" + TARGET)),
-                new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                        .setData(Uri.parse("package:" + TARGET)),
-                new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                // Global background-app/battery-usage list. On this ColorOS 16 device it resolves
+                // to Settings$AppBatteryUsageActivity, which is the requested management page.
+                new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                // ColorOS/OxygenOS background-start management fallback.
+                new Intent("com.oplus.battery.permission.startup.StartupAppListActivity")
+                        .setPackage("com.oplus.battery"),
+                new Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
         };
         for (Intent intent : intents) {
             try {
@@ -3850,14 +6043,30 @@ public class Main extends XposedModule {
     }
 
     static boolean isLocalApiEnabled() {
-        return new File(LOCAL_API_ENABLED_FILE).exists();
+        return new File(LOCAL_API_ENABLED_FILE).exists()
+                && RuntimeProtection.allowSensitiveFeature(hostApplicationContext);
+    }
+
+    static boolean isLocalApiContextRelayEnabled() {
+        return !new File(LOCAL_API_CONTEXT_RELAY_DISABLED_FILE).isFile();
+    }
+
+    static void setLocalApiContextRelayEnabled(boolean enabled) {
+        try {
+            if (enabled) new File(LOCAL_API_CONTEXT_RELAY_DISABLED_FILE).delete();
+            else overwriteTextFile(LOCAL_API_CONTEXT_RELAY_DISABLED_FILE, "1");
+        } catch (Throwable error) {
+            log("local API context relay setting failed: "
+                    + safeThrowableMessage(error));
+        }
     }
 
     static boolean setLocalApiEnabled(boolean on) {
         Main module = MODULE;
         Activity activity = module == null ? null : module.curAct.get();
-        if (on && !isLocalApiBackgroundApproved(activity)) {
-            log("local API enable rejected: unrestricted background access not verified");
+        if (on && !RuntimeProtection.allowSensitiveFeature(activity)) {
+            log("local API enable rejected by runtime protection: "
+                    + RuntimeProtection.status());
             LocalApiGateway.stop();
             return false;
         }
@@ -4133,21 +6342,25 @@ public class Main extends XposedModule {
 
     static String localApiKey() { return LocalApiGateway.apiKey(); }
 
-    static String localApiRuntimeStatus() { return LocalApiGateway.runtimeStatus(); }
+    static String localApiRuntimeStatus() {
+        String status = LocalApiGateway.runtimeStatus();
+        if (RuntimeProtection.enabled()) {
+            status += UiLanguage.text("\n运行保护：", "\nRuntime protection: ")
+                    + RuntimeProtection.status();
+        }
+        return status;
+    }
 
     private static void startLocalApiGateway(Context context) {
         if (context == null || !isLocalApiEnabled()
-                || !isLocalApiBackgroundApproved(context)) return;
+                || !RuntimeProtection.allowSensitiveFeature(context)) return;
         final Context appContext = context.getApplicationContext();
         LocalApiGateway.start(appContext, new LocalApiGateway.Backend() {
             @Override public boolean isReady() {
-                return isLocalApiBackgroundApproved(appContext)
-                        && hostClassLoader != null && liveR92 != null && liveQ71 != null;
+                return hostClassLoader != null && liveR92 != null && liveQ71 != null;
             }
 
             @Override public String readinessDetail() {
-                if (!isLocalApiBackgroundApproved(appContext)) return UiLanguage.text(
-                        "后台运行权限未通过校验", "Background permission is not approved");
                 if (hostClassLoader == null) return UiLanguage.text(
                         "等待宿主类加载器", "Waiting for host class loader");
                 if (liveR92 == null && liveQ71 == null) return UiLanguage.text(
@@ -4308,8 +6521,50 @@ public class Main extends XposedModule {
                             .equals(action);
                     boolean proactiveAction = ProactiveHeartbeatReceiver.ACTION_REQUEST
                             .equals(action);
-                    if (!heartbeatAction && !controlAction && !proactiveAction) {
+                    boolean agentCommandAction = ACTION_AGENT_COMMAND.equals(action);
+                    boolean agentDelayAction = AgentDelayReceiver.ACTION_COMPLETE
+                            .equals(action);
+                    if (!heartbeatAction && !controlAction && !proactiveAction
+                            && !agentCommandAction && !agentDelayAction) {
                         return chain.proceed();
+                    }
+                    if (agentDelayAction) {
+                        if (!AgentDelayActivity.TOKEN.equals(
+                                intent.getStringExtra(AgentDelayReceiver.EXTRA_TOKEN))) {
+                            log("rejected unauthenticated Agent delay result");
+                            return null;
+                        }
+                        Context context = chain.getArg(0) instanceof Context
+                                ? (Context) chain.getArg(0) : null;
+                        handleAgentDelayComplete(context, intent);
+                        return null;
+                    }
+                    if (agentCommandAction) {
+                        if (!LocalApiKeepAliveService.CONTROL_TOKEN.equals(
+                                intent.getStringExtra(
+                                        LocalApiKeepAliveService.EXTRA_CONTROL_TOKEN))) {
+                            log("rejected unauthenticated Agent command");
+                            return null;
+                        }
+                        Context context = chain.getArg(0) instanceof Context
+                                ? (Context) chain.getArg(0) : null;
+                        String command = intent.getStringExtra(
+                                EXTRA_AGENT_COMMAND);
+                        if (command == null || command.length() == 0) {
+                            String encoded = intent.getStringExtra(
+                                    EXTRA_AGENT_COMMAND_BASE64);
+                            if (encoded != null && encoded.length() <= 32 * 1024) {
+                                try {
+                                    command = new String(
+                                            android.util.Base64.decode(
+                                                    encoded,
+                                                    android.util.Base64.DEFAULT),
+                                            java.nio.charset.StandardCharsets.UTF_8);
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                        handleAgentCommand(context, command);
+                        return null;
                     }
                     if (proactiveAction) {
                         if (!ProactiveHeartbeatReceiver.TOKEN.equals(
@@ -4350,8 +6605,7 @@ public class Main extends XposedModule {
                         }
                         return null;
                     }
-                    boolean active = context != null && isLocalApiEnabled()
-                            && isLocalApiBackgroundApproved(context);
+                    boolean active = context != null && isLocalApiEnabled();
                     localApiKeepAliveHeartbeatAt = SystemClock.elapsedRealtime();
                     localApiKeepAliveError = "";
                     if (active) {
@@ -4519,7 +6773,9 @@ public class Main extends XposedModule {
                     String prompt = HistoryBridge.wrapSystemPrompt(
                             HeartbeatToolProtocol.systemPrompt(
                                     now, heartbeatPlanForConversation(conversationId),
-                                    proactiveHeartbeatIntervalMinutes(), conversationId),
+                                    proactiveHeartbeatIntervalMinutes(), conversationId,
+                                    AgentToolConfig.effectiveTools(
+                                            isProactiveHeartbeatEnabled())),
                             event);
                     if (conversationId.length() > 0
                             && module.dispatchProactiveThroughNativeUi(
@@ -4661,6 +6917,9 @@ public class Main extends XposedModule {
 
     private static boolean isIdleGenerationState(Object state) {
         String name = simpleName(state);
+        if (HostCompat.isV234()) {
+            return HostCompat.isGooglePlay() ? "bq".equals(name) : "xp".equals(name);
+        }
         return HostCompat.isV230() ? "np".equals(name) : "gp".equals(name);
     }
 
@@ -4714,58 +6973,7 @@ public class Main extends XposedModule {
                     Object state = invokeNoArg(readHostField(current, "i"), "getValue");
                     if (!isIdleGenerationState(state)) return;
 
-                    ClassLoader cl = viewModel.getClass().getClassLoader();
-                    Field emptyField = HostCompat.load(cl, "jm7").getDeclaredField("b");
-                    emptyField.setAccessible(true);
-                    Object emptyAttachments = emptyField.get(null);
-                    if (emptyAttachments == null) return;
-                    Method sendMethod = null;
-                    if (HostCompat.isV230()) {
-                        Class<?> persistentList = HostCompat.load(cl, "h1");
-                        for (Method method : viewModel.getClass().getDeclaredMethods()) {
-                            Class<?>[] types = method.getParameterTypes();
-                            if ("R".equals(method.getName())
-                                    && java.lang.reflect.Modifier.isStatic(
-                                    method.getModifiers())
-                                    && types.length == 5
-                                    && types[0] == viewModel.getClass()
-                                    && types[1] == String.class
-                                    && types[2] == persistentList
-                                    && types[3] == String.class
-                                    && types[4] == int.class) {
-                                sendMethod = method;
-                                break;
-                            }
-                        }
-                    } else {
-                        for (Method method : viewModel.getClass().getDeclaredMethods()) {
-                            Class<?>[] types = method.getParameterTypes();
-                            if ("Q".equals(method.getName()) && types.length == 4
-                                    && types[0] == String.class
-                                    && types[2] == String.class) {
-                                sendMethod = method;
-                                break;
-                            }
-                        }
-                    }
-                    if (sendMethod == null) return;
-                    sendMethod.setAccessible(true);
-                    // za1.Q(String, h1, String, yq7): the first String is the
-                    // actual user prompt; the third is an optional audio id.
-                    // Passing these in the opposite order makes DeepSeek send
-                    // "proactive_heartbeat" as the prompt and treat the event
-                    // payload as an audio id, which the server rejects with 422.
-                    if (HostCompat.isV230()) {
-                        // cc1.R is the Kotlin default bridge for the 2.3.0 send pipeline.
-                        // Bit 8 supplies the absent audio id while preserving the prompt and
-                        // immutable attachment list.
-                        sendMethod.invoke(null, viewModel, prompt,
-                                emptyAttachments, null, 8);
-                    } else {
-                        sendMethod.invoke(viewModel, prompt,
-                                emptyAttachments, null, null);
-                    }
-                    invoked.set(true);
+                    invoked.set(invokeNativeUiTextSend(viewModel, prompt));
                 } catch (Throwable error) {
                     log("native proactive stream start failed sid=" + pending.sid
                             + ": " + safeThrowableMessage(error));
@@ -4790,6 +6998,89 @@ public class Main extends XposedModule {
             return false;
         }
         log("native proactive stream started id=" + requestId + " sid=" + sid);
+        return true;
+    }
+
+    /**
+     * Sends a normal, visible user text through the host's own composer pipeline. The mappings are
+     * shared by proactive heartbeats and Agent question answers so 2.2.x and 2.3.0 cannot silently
+     * diverge.
+     */
+    private static boolean invokeNativeUiTextSend(
+            Object viewModel, String prompt) throws Exception {
+        if (viewModel == null || prompt == null || prompt.trim().length() == 0) return false;
+        ClassLoader cl = viewModel.getClass().getClassLoader();
+        Field emptyField = HostCompat.load(cl, "jm7").getDeclaredField("b");
+        emptyField.setAccessible(true);
+        Object emptyAttachments = emptyField.get(null);
+        if (emptyAttachments == null) return false;
+        return invokeNativeUiTextSend(viewModel, prompt, emptyAttachments);
+    }
+
+    private static boolean invokeNativeUiTextSend(
+            Object viewModel, String prompt, Object attachments) throws Exception {
+        if (viewModel == null || prompt == null || prompt.trim().length() == 0
+                || attachments == null) return false;
+        ClassLoader cl = viewModel.getClass().getClassLoader();
+        Method sendMethod = null;
+        if (HostCompat.isV234()) {
+            Class<?> persistentList = HostCompat.load(cl, "h1");
+            for (Method method : viewModel.getClass().getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if ("P".equals(method.getName())
+                        && java.lang.reflect.Modifier.isStatic(method.getModifiers())
+                        && types.length == 6
+                        && types[0] == viewModel.getClass()
+                        && types[1] == String.class
+                        && types[2] == persistentList
+                        && types[3] == String.class
+                        && types[4] == boolean.class
+                        && types[5] == int.class) {
+                    sendMethod = method;
+                    break;
+                }
+            }
+        } else if (HostCompat.isV230()) {
+            Class<?> persistentList = HostCompat.load(cl, "h1");
+            for (Method method : viewModel.getClass().getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if ("R".equals(method.getName())
+                        && java.lang.reflect.Modifier.isStatic(method.getModifiers())
+                        && types.length == 5
+                        && types[0] == viewModel.getClass()
+                        && types[1] == String.class
+                        && types[2] == persistentList
+                        && types[3] == String.class
+                        && types[4] == int.class) {
+                    sendMethod = method;
+                    break;
+                }
+            }
+        } else {
+            for (Method method : viewModel.getClass().getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if ("Q".equals(method.getName()) && types.length == 4
+                        && types[0] == String.class
+                        && types[2] == String.class) {
+                    sendMethod = method;
+                    break;
+                }
+            }
+        }
+        if (sendMethod == null) return false;
+        sendMethod.setAccessible(true);
+        // za1.Q(String, h1, String, yq7): the first String is the actual user prompt and the
+        // third is an optional audio id. 2.3.0 cc1.R is the Kotlin default bridge; bit 8 supplies
+        // the absent audio id while retaining the prompt and immutable attachment list.
+        if (HostCompat.isV234()) {
+            // ef1/kd1.P is the 2.3.4 Kotlin default bridge. Mask 36 retains the supplied prompt
+            // and attachment vector while defaulting the optional audio/source arguments.
+            sendMethod.invoke(null, viewModel, prompt, attachments, null, false, 36);
+        } else if (HostCompat.isV230()) {
+            sendMethod.invoke(null, viewModel, prompt, attachments, null, 8);
+        } else {
+            sendMethod.invoke(viewModel, prompt, attachments, null, null);
+        }
         return true;
     }
 
@@ -5154,19 +7445,141 @@ public class Main extends XposedModule {
         return HeartbeatToolProtocol.cleanInstruction(value);
     }
 
+    /**
+     * Local command seam for repeatable device tests. It is consumed by the already hooked
+     * DeepSeek receiver and accepts the same narrow, validated call schema as model output.
+     */
+    private static void handleAgentCommand(Context context, String json) {
+        if (json == null || json.trim().length() == 0 || json.length() > 48 * 1024) {
+            log("ignored empty/oversized Agent command");
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(json);
+            String visibleText = root.optString("visible_text", "").trim();
+            String scope = HeartbeatToolProtocol.cleanScope(
+                    root.optString("scope", ""));
+            if (scope.length() == 0) {
+                scope = currentAgentConversationScope();
+            }
+            if (visibleText.length() > 0) {
+                if (visibleText.length() > 4000) {
+                    visibleText = visibleText.substring(0, 4000);
+                }
+                queueVisibleAgentAnswer(context, scope, visibleText);
+                log("Agent command queued visible text sid=" + scope);
+                return;
+            }
+            JSONObject call = root.optJSONObject("call");
+            if (call == null) call = root;
+            if (scope.length() == 0
+                    && HeartbeatToolProtocol.TOOL_ASK_USER.equals(
+                    call.optString("tool", ""))) {
+                // Preview-only scope lets the shell command verify the bottom sheet on a blank
+                // new-chat screen. A real model call always carries the server conversation id.
+                scope = "agent-command-preview";
+            }
+            if (!call.has("scope")) call.put("scope", scope);
+            if (!call.has("id")) {
+                call.put("id", "cmd_" + Long.toHexString(
+                        System.currentTimeMillis()));
+            }
+            String framed = HeartbeatToolProtocol.CONTROL_START
+                    + "\n{\"call\":" + call.toString() + "}\n"
+                    + HeartbeatToolProtocol.CONTROL_END;
+            HeartbeatToolProtocol.Result parsed =
+                    HeartbeatToolProtocol.parse(framed);
+            int completed = executeHeartbeatToolCalls(
+                    context, parsed.calls, true);
+            log("Agent command executed calls=" + parsed.calls.size()
+                    + " completed=" + completed + " sid=" + scope);
+        } catch (Throwable error) {
+            log("Agent command failed: " + safeThrowableMessage(error));
+        }
+    }
+
+    private static String currentAgentConversationScope() {
+        String latest = HeartbeatToolProtocol.cleanScope(
+                lastInteractiveConversationId);
+        if (latest.length() > 0) return latest;
+        String sidebar = HeartbeatToolProtocol.cleanScope(sidebarCurrentSid);
+        if (sidebar.length() > 0) return sidebar;
+        for (Map.Entry<String, WeakReference<Object>> entry
+                : ACTIVE_CHAT_VIEW_MODELS.entrySet()) {
+            WeakReference<Object> reference = entry.getValue();
+            Object viewModel = reference == null ? null : reference.get();
+            if (viewModel == null) continue;
+            Object session = invokeNoArg(viewModel, "G");
+            String scope = HeartbeatToolProtocol.cleanScope(
+                    String.valueOf(readHostField(session, "a")));
+            if (scope.length() > 0 && scope.equals(entry.getKey())) return scope;
+        }
+        return "";
+    }
+
     private static int executeHeartbeatToolCalls(
             Context context, List<HeartbeatToolProtocol.ToolCall> calls,
             boolean announce) {
-        if (!isProactiveHeartbeatEnabled() || calls == null || calls.isEmpty()) return 0;
+        if (!AgentToolConfig.load().enabled || calls == null || calls.isEmpty()) return 0;
         Context effective = context != null ? context : currentHostContext();
         if (effective == null) return 0;
+        AgentStepResult step = null;
         int completed = 0;
+        boolean consumedStep = false;
         for (HeartbeatToolProtocol.ToolCall call : calls) {
             if (call == null) continue;
+            if (consumedStep) {
+                log("ignored later local tool call until the first result returns tool="
+                        + call.tool + " id=" + call.id);
+                HookLogOverlay.event("AGENT", "Tool call deferred",
+                        "name=" + call.tool + " id=" + call.id
+                                + " reason=waiting for previous result");
+                break;
+            }
+            consumedStep = true;
             try {
                 boolean success = false;
                 String scope = HeartbeatToolProtocol.cleanScope(call.scope);
                 if (scope.length() == 0) continue;
+                HookLogOverlay.event("AGENT", "Tool call",
+                        "name=" + call.tool + " id=" + call.id
+                                + " scope=" + scope);
+                if (!claimAgentToolExecution(call)) {
+                    log("ignored duplicate local tool call tool="
+                            + call.tool + " id=" + call.id
+                            + " scope=" + scope);
+                    HookLogOverlay.event("AGENT", "Tool call ignored",
+                            "name=" + call.tool + " id=" + call.id
+                                    + " reason=duplicate");
+                    continue;
+                }
+                step = new AgentStepResult(effective, scope, call);
+                if (!AgentToolConfig.allows(call.tool)) {
+                    log("local tool blocked by Agent settings tool=" + call.tool);
+                    HookLogOverlay.event("ERROR", "Tool blocked",
+                            "name=" + call.tool
+                                    + " reason=disabled in Agent settings");
+                    queueSimpleAgentToolResult(effective, step, call, false, "",
+                            UiLanguage.text(effective,
+                                    "此工具已在 Agent 设置中关闭",
+                                    "This tool is disabled in Agent settings"));
+                    continue;
+                }
+                if (AgentToolConfig.isHeartbeatTool(call.tool)
+                        && !isProactiveHeartbeatEnabled()) {
+                    log("heartbeat tool blocked because proactive messages are disabled tool="
+                            + call.tool);
+                    HookLogOverlay.event("ERROR", "Tool blocked",
+                            "name=" + call.tool
+                                    + " reason=proactive heartbeat disabled");
+                    queueSimpleAgentToolResult(effective, step, call, false, "",
+                            UiLanguage.text(effective,
+                                    "心跳功能当前未开启",
+                                    "The heartbeat feature is currently disabled"));
+                    continue;
+                }
+                boolean resultWillArriveSeparately = false;
+                String resultOutput = "";
                 if (HeartbeatToolProtocol.TOOL_SCHEDULE_ONCE.equals(call.tool)) {
                     long triggerAt = parseHeartbeatToolTime(
                             call.at, System.currentTimeMillis());
@@ -5184,6 +7597,7 @@ public class Main extends XposedModule {
                                 "AI 给出的时间无效，未安排心跳",
                                 "The AI supplied an invalid time; no heartbeat was scheduled"));
                     }
+                    resultOutput = call.at;
                 } else if (HeartbeatToolProtocol.TOOL_SET_PLAN.equals(call.tool)) {
                     String plan = HeartbeatToolProtocol.cleanInstruction(call.instruction);
                     if (plan.length() > 0) success =
@@ -5233,6 +7647,7 @@ public class Main extends XposedModule {
                             : UiLanguage.text(effective,
                             "AI 设置心跳间隔失败",
                             "AI could not set the heartbeat interval"));
+                    resultOutput = String.valueOf(call.minutes);
                 } else if (HeartbeatToolProtocol.TOOL_CANCEL_HEARTBEAT.equals(call.tool)) {
                     boolean cancelOnce = "once".equals(call.mode)
                             || "all_once".equals(call.mode) || "all".equals(call.mode);
@@ -5251,30 +7666,887 @@ public class Main extends XposedModule {
                             : UiLanguage.text(effective,
                             "取消心跳失败",
                             "Could not cancel the heartbeat"));
+                    resultOutput = call.mode;
                 } else if (HeartbeatToolProtocol.TOOL_GET_CURRENT_TIME.equals(call.tool)) {
-                    // The exact device time is already rendered into this call's activity row.
                     success = true;
+                    resultOutput = formatAgentToolResultTime(
+                            System.currentTimeMillis());
+                } else if (HeartbeatToolProtocol.TOOL_RENDER_RICH_PANEL.equals(call.tool)) {
+                    success = RichPanelRenderer.isRenderedPanel(call.content);
+                    resultOutput = success
+                            ? "rendered=true; title=" + call.instruction
+                            : "rendered=false";
+                } else if (HeartbeatToolProtocol.TOOL_ASK_USER.equals(call.tool)) {
+                    success = queueAgentQuestion(effective, step, call, announce);
+                    resultWillArriveSeparately = success;
+                } else if (HeartbeatToolProtocol.TOOL_DELAY.equals(call.tool)) {
+                    success = queueAgentDelay(effective, step, call, announce);
+                    resultWillArriveSeparately = success;
+                } else if (HeartbeatToolProtocol.TOOL_MUSIC.equals(call.tool)) {
+                    success = queueAgentMusic(effective, step, call, announce);
+                    resultWillArriveSeparately = success;
                 } else if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)
                         || HeartbeatToolProtocol.TOOL_TAP_SCREEN.equals(call.tool)
                         || HeartbeatToolProtocol.TOOL_SWIPE_SCREEN.equals(call.tool)
-                        || HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)) {
-                    success = queueAgentUiTool(effective, call, announce);
+                        || HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_OPEN_APP.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_SCREEN_POWER.equals(call.tool)) {
+                    success = queueAgentUiTool(effective, step, call, announce);
+                    resultWillArriveSeparately = success;
+                } else if (HeartbeatToolProtocol.TOOL_READ_FILE.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_WRITE_FILE.equals(call.tool)
+                        || HeartbeatToolProtocol.TOOL_SHELL.equals(call.tool)) {
+                    success = queueAgentDataTool(effective, step, call, announce);
+                    resultWillArriveSeparately = success;
                 }
                 if (success) {
                     completed++;
                     log("local tool completed tool=" + call.tool
                             + " id=" + call.id);
+                    HookLogOverlay.event("AGENT", "Tool accepted",
+                            "name=" + call.tool + " id=" + call.id
+                                    + " result=" + (resultWillArriveSeparately
+                                    ? "pending" : "completed"));
+                } else {
+                    HookLogOverlay.event("ERROR", "Tool failed",
+                            "name=" + call.tool + " id=" + call.id
+                                    + " reason=operation returned false");
+                }
+                if (!resultWillArriveSeparately) {
+                    queueSimpleAgentToolResult(
+                            effective, step, call, success, resultOutput,
+                            success
+                                    ? UiLanguage.text(effective,
+                                    "工具执行完成", "Tool completed")
+                                    : UiLanguage.text(effective,
+                                    "工具执行失败", "Tool failed"));
                 }
             } catch (Throwable t) {
                 log("local tool failed tool=" + call.tool + ": " + t);
+                HookLogOverlay.event("ERROR", "Tool exception",
+                        "name=" + call.tool + " id=" + call.id
+                                + " reason=" + safeThrowableMessage(t));
+                if (step != null) {
+                    queueSimpleAgentToolResult(effective, step, call, false, "",
+                            UiLanguage.text(effective,
+                                    "工具执行异常：" + safeThrowableMessage(t),
+                                    "Tool execution failed: " + safeThrowableMessage(t)));
+                }
             }
         }
+        if (step != null) scheduleAgentStepTimeout(step);
         return completed;
     }
 
-    private static boolean queueAgentUiTool(
-            final Context context, final HeartbeatToolProtocol.ToolCall call,
+    /**
+     * Turns a recognized-but-invalid model call into a real private failure result. Nothing is
+     * dispatched to the device: this only closes the Agent step and gives the model one chance to
+     * correct its schema instead of silently ending after a false promise.
+     */
+    private static void queueRejectedAgentToolResult(
+            Context context, HeartbeatToolProtocol.RejectedCall rejected) {
+        if (rejected == null || rejected.call == null) return;
+        Context effective = context != null ? context : currentHostContext();
+        if (effective == null) return;
+        HeartbeatToolProtocol.ToolCall call = rejected.call;
+        if (!claimAgentToolExecution(call)) {
+            log("ignored duplicate rejected Agent call tool="
+                    + call.tool + " id=" + call.id + " scope=" + call.scope);
+            return;
+        }
+        String detail;
+        if (HeartbeatToolProtocol.TOOL_RENDER_RICH_PANEL.equals(call.tool)) {
+            detail = UiLanguage.text(effective,
+                    "富视觉参数未通过校验，绘制没有执行。请换一个新的 id，使用更简单的合法"
+                            + " panel 重试一次；pixel_art 的 pixels 应为等宽字符串数组，"
+                            + "palette 应为颜色数组，透明像素使用点号。若重试仍失败，请直接"
+                            + "告诉用户未完成，不能声称已经画好。",
+                    "The rich-visual arguments failed validation and nothing was rendered. "
+                            + "Retry once with a new id and a simpler valid panel. For pixel_art, "
+                            + "use equal-width strings in pixels, an array for palette, and dots "
+                            + "for transparency. If that retry fails, tell the user it did not "
+                            + "complete; do not claim it was drawn.");
+        } else {
+            detail = UiLanguage.text(effective,
+                    "工具参数未通过校验，操作没有执行。请按工具定义修正参数，换一个新的 id"
+                            + " 后最多重试一次；再次失败时应如实说明，不能声称已经完成。",
+                    "The tool arguments failed validation and the operation was not run. "
+                            + "Correct the arguments according to the tool schema and retry at "
+                            + "most once with a new id. If it fails again, report that honestly "
+                            + "instead of claiming completion.");
+        }
+        AgentStepResult step = new AgentStepResult(effective, call.scope, call);
+        queueSimpleAgentToolResult(
+                effective, step, call, false, rejected.reason, detail);
+        log("Agent validation failure queued tool=" + call.tool
+                + " id=" + call.id + " scope=" + call.scope
+                + " reason=" + rejected.reason);
+    }
+
+    private static boolean claimAgentToolExecution(
+            HeartbeatToolProtocol.ToolCall call) {
+        if (call == null) return false;
+        String scope = HeartbeatToolProtocol.cleanScope(call.scope);
+        if (scope.length() == 0 || call.id == null || call.tool == null) {
+            return false;
+        }
+        // A call id is unique inside its conversation.  Do not let a malformed retry reuse the
+        // same id with another tool name to bypass the side-effect guard.
+        String fingerprint = scope + "|" + call.id;
+        long now = System.currentTimeMillis();
+        while (true) {
+            Long previous = AGENT_TOOL_EXECUTION_CLAIMS.putIfAbsent(
+                    fingerprint, Long.valueOf(now));
+            if (previous == null) break;
+            if (now - previous.longValue()
+                    <= AGENT_TOOL_EXECUTION_CLAIM_TTL_MS) {
+                return false;
+            }
+            if (AGENT_TOOL_EXECUTION_CLAIMS.replace(
+                    fingerprint, previous, Long.valueOf(now))) {
+                break;
+            }
+        }
+        if (AGENT_TOOL_EXECUTION_CLAIMS.size() > 256) {
+            long oldestAllowed = now - AGENT_TOOL_EXECUTION_CLAIM_TTL_MS;
+            for (Map.Entry<String, Long> entry
+                    : AGENT_TOOL_EXECUTION_CLAIMS.entrySet()) {
+                Long claimedAt = entry.getValue();
+                if (claimedAt == null
+                        || claimedAt.longValue() < oldestAllowed) {
+                    AGENT_TOOL_EXECUTION_CLAIMS.remove(
+                            entry.getKey(), claimedAt);
+                }
+            }
+        }
+        if (!"agent-command-preview".equals(scope)
+                && !AgentRunStore.claim(call)) {
+            AGENT_TOOL_EXECUTION_CLAIMS.remove(
+                    fingerprint, Long.valueOf(now));
+            log("ignored durably claimed local tool call tool="
+                    + call.tool + " id=" + call.id + " scope=" + scope);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean queueAgentQuestion(
+            final Context context, final AgentStepResult step,
+            final HeartbeatToolProtocol.ToolCall call,
             final boolean announce) {
+        final Activity activity = currentHostActivity();
+        if (activity == null || activity.isFinishing()
+                || (Build.VERSION.SDK_INT >= 17 && activity.isDestroyed())) {
+            if (announce) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "当前没有可显示问题的 DeepSeek 界面",
+                            "There is no active DeepSeek screen for the question"));
+            return false;
+        }
+        boolean queued = AgentQuestionUi.enqueue(
+                activity, call, new AgentQuestionUi.AnswerListener() {
+                    @Override public void onAnswer(
+                            String scope, String visibleAnswer) {
+                        queueVisibleAgentAnswer(
+                                context, scope, visibleAnswer,
+                                new Runnable() {
+                                    @Override public void run() {
+                                        if (step != null) step.release(call.id);
+                                    }
+                                },
+                                new Runnable() {
+                                    @Override public void run() {
+                                        queueSimpleAgentToolResult(
+                                                context, step, call, false, "",
+                                                UiLanguage.text(context,
+                                                        "用户答案未能发送",
+                                                        "The user's answer could not be sent"));
+                                    }
+                                });
+                    }
+
+                    @Override public void onCancel(String scope) {
+                        queueSimpleAgentToolResult(
+                                context, step, call, false, "",
+                                UiLanguage.text(context,
+                                        "用户关闭了问题，未提供答案",
+                                        "The user dismissed the question without answering"));
+                    }
+                });
+        if (queued) AgentRunStore.waitingUser(call);
+        return queued;
+    }
+
+    private static String agentDelayKey(String scope, String id) {
+        return HeartbeatToolProtocol.cleanScope(scope) + "|" + String.valueOf(id);
+    }
+
+    private static boolean queueAgentDelay(
+            Context context, AgentStepResult step,
+            HeartbeatToolProtocol.ToolCall call, boolean announce) {
+        if (context == null || step == null || call == null
+                || call.durationMs < 1) return false;
+        Uri uri = new Uri.Builder()
+                .scheme(AgentDelayActivity.SCHEME)
+                .authority(AgentDelayActivity.HOST)
+                .appendQueryParameter("token", AgentDelayActivity.TOKEN)
+                .appendQueryParameter("id", call.id)
+                .appendQueryParameter("scope", call.scope)
+                .appendQueryParameter("duration_ms",
+                        String.valueOf(call.durationMs))
+                .build();
+        Intent schedule = new Intent(Intent.ACTION_VIEW, uri)
+                .addCategory(Intent.CATEGORY_BROWSABLE)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_NO_ANIMATION
+                        | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        String key = agentDelayKey(call.scope, call.id);
+        AGENT_DELAY_STEPS.put(key, step);
+        try {
+            context.startActivity(schedule);
+            if (announce) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "已开始等待 " + call.durationMs + " 毫秒",
+                            "Waiting for " + call.durationMs + " milliseconds"));
+            log("Agent durable delay scheduled id=" + call.id
+                    + " ms=" + call.durationMs + " scope=" + call.scope);
+            return true;
+        } catch (Throwable error) {
+            AGENT_DELAY_STEPS.remove(key, step);
+            log("Agent durable delay schedule failed: "
+                    + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    private static void handleAgentDelayComplete(Context context, Intent intent) {
+        String id = intent == null ? "" : intent.getStringExtra(
+                AgentDelayReceiver.EXTRA_ID);
+        String scope = intent == null ? "" : intent.getStringExtra(
+                AgentDelayReceiver.EXTRA_SCOPE);
+        long requested = intent == null ? 0L : intent.getLongExtra(
+                AgentDelayReceiver.EXTRA_DURATION_MS, 0L);
+        long started = intent == null ? 0L : intent.getLongExtra(
+                AgentDelayReceiver.EXTRA_STARTED_AT, 0L);
+        String safeScope = HeartbeatToolProtocol.cleanScope(scope);
+        if (id == null || id.length() == 0 || safeScope.length() == 0
+                || requested < 1L || requested > 604_800_000L) {
+            log("ignored malformed Agent delay completion");
+            return;
+        }
+        boolean claimed = false;
+        for (AgentRunStore.Record record : AgentRunStore.snapshot()) {
+            if (safeScope.equals(record.scope) && id.equals(record.callId)
+                    && HeartbeatToolProtocol.TOOL_DELAY.equals(record.tool)
+                    && AgentRunStore.STATE_EXECUTING.equals(record.state)) {
+                claimed = true;
+                break;
+            }
+        }
+        if (!claimed) {
+            log("ignored unclaimed or duplicate Agent delay completion id=" + id);
+            return;
+        }
+        HeartbeatToolProtocol.ToolCall call = new HeartbeatToolProtocol.ToolCall(
+                id, HeartbeatToolProtocol.TOOL_DELAY, safeScope,
+                "", "", 0, "", "", -1, -1, -1, -1,
+                (int) requested);
+        long elapsed = started > 0L
+                ? Math.max(0L, System.currentTimeMillis() - started) : requested;
+        String output = "requested_ms=" + requested + "; elapsed_ms=" + elapsed;
+        String detail = UiLanguage.text(context,
+                "延迟结束，可继续下一步",
+                "Delay completed; the next step may continue");
+        AgentDeviceBridge.ToolResult result = new AgentDeviceBridge.ToolResult(
+                true, 0, output, detail, "utf-8", false);
+        AgentStepResult step = AGENT_DELAY_STEPS.remove(
+                agentDelayKey(safeScope, id));
+        if (step != null) step.addResult(call, result);
+        else queueHiddenAgentToolResult(context, call, result);
+        log("Agent durable delay completed id=" + id
+                + " requested_ms=" + requested + " elapsed_ms=" + elapsed);
+    }
+
+    private static boolean queueAgentDataTool(
+            final Context context, final AgentStepResult step,
+            final HeartbeatToolProtocol.ToolCall call,
+            final boolean announce) {
+        AgentDeviceBridge.executeDataTool(
+                context, call, new AgentDeviceBridge.ResultCallback() {
+                    @Override public void onResult(
+                            AgentDeviceBridge.ToolResult result) {
+                        log("Agent data tool result tool=" + call.tool
+                                + " id=" + call.id
+                                + " ok=" + result.success
+                                + " exit=" + result.exitCode
+                                + " chars=" + result.output.length()
+                                + " truncated=" + result.truncated
+                                + " detail=" + truncateForLog(
+                                result.detail, 320));
+                        if (!result.success && announce) {
+                            showHeartbeatToolToast(context, result.detail);
+                        }
+                        if (HeartbeatToolProtocol.TOOL_READ_FILE.equals(call.tool)
+                                && result.success
+                                && result.output.length() > AGENT_TXT_ATTACH_THRESHOLD) {
+                            queueAgentTextFileUpload(context, step, call, result);
+                        } else if (step != null) {
+                            step.addResult(call, result);
+                        } else {
+                            queueHiddenAgentToolResult(context, call, result);
+                        }
+                    }
+                });
+        return true;
+    }
+
+    private static void queueSimpleAgentToolResult(
+            Context context, AgentStepResult step,
+            HeartbeatToolProtocol.ToolCall call,
+            boolean success, String output, String detail) {
+        AgentDeviceBridge.ToolResult result = new AgentDeviceBridge.ToolResult(
+                success, success ? 0 : 1, output, detail,
+                "utf-8", false);
+        if (step != null) {
+            step.addResult(call, result);
+        } else {
+            queueHiddenAgentToolResult(context, call, result);
+        }
+    }
+
+    private static String formatAgentToolResultTime(long value) {
+        SimpleDateFormat format = new SimpleDateFormat(
+                "yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US);
+        format.setTimeZone(TimeZone.getDefault());
+        return format.format(new Date(value));
+    }
+
+    /** Restores results that were durable before this DeepSeek process or Activity resumed. */
+    private static void recoverAgentRuns(Context context, boolean recoverInterrupted) {
+        try {
+            if (recoverInterrupted) {
+                for (AgentRunStore.Record record : AgentRunStore.snapshot()) {
+                    if (!AgentRunStore.STATE_EXECUTING.equals(record.state)
+                            && !AgentRunStore.STATE_WAITING_USER.equals(record.state)) {
+                        continue;
+                    }
+                    HeartbeatToolProtocol.ToolCall call = restoredAgentCall(record);
+                    if (call == null) continue;
+                    // The module-side AlarmManager owns durable delay completion and will wake
+                    // DeepSeek through an explicit receiver even after this process restarts.
+                    if (HeartbeatToolProtocol.TOOL_DELAY.equals(call.tool)) continue;
+                    String detail = UiLanguage.text(context,
+                            "DeepSeek 进程在工具返回前重启，原操作结果无法确认；"
+                                    + "为避免重复副作用，本次不会自动重执行",
+                            "DeepSeek restarted before the tool returned. The outcome is unknown; "
+                                    + "the operation will not be repeated automatically");
+                    String event = HeartbeatToolProtocol.toolResultEvent(
+                            call, false, -3, "", detail, "utf-8", false);
+                    AgentRunStore.queueResult(call, false, event, detail);
+                }
+            }
+            if (!AgentToolConfig.enabledFast()) return;
+            for (AgentRunStore.Record record : AgentRunStore.pending()) {
+                queueHiddenAgentEvent(
+                        context, record.scope, record.event, record.outboxId);
+            }
+        } catch (Throwable error) {
+            log("Agent outbox recovery failed: " + safeThrowableMessage(error));
+        }
+    }
+
+    /** Called when a native chat ViewModel becomes available, including after switching chats. */
+    private static void recoverAgentRunsForScope(Context context, String scope) {
+        if (!AgentToolConfig.enabledFast()) return;
+        String safeScope = HeartbeatToolProtocol.cleanScope(scope);
+        if (safeScope.length() == 0) return;
+        for (AgentRunStore.Record record : AgentRunStore.pending()) {
+            if (safeScope.equals(record.scope)) {
+                queueHiddenAgentEvent(
+                        context, record.scope, record.event, record.outboxId);
+            }
+        }
+    }
+
+    private static HeartbeatToolProtocol.ToolCall restoredAgentCall(
+            AgentRunStore.Record record) {
+        if (record == null || record.scope.length() == 0
+                || record.callId.length() == 0 || record.tool.length() == 0) {
+            return null;
+        }
+        return new HeartbeatToolProtocol.ToolCall(
+                record.callId, record.tool, record.scope,
+                "", "", 0, "", "");
+    }
+
+    static void resumeAgentOutbox(Context context) {
+        recoverAgentRuns(context, false);
+    }
+
+    static boolean retryAgentOutbox(Context context, String outboxId) {
+        if (!AgentToolConfig.enabledFast()) return false;
+        AgentRunStore.Record record = AgentRunStore.findOutbox(outboxId);
+        if (record == null || !record.hasPendingResult()) return false;
+        queueHiddenAgentEvent(context, record.scope, record.event, record.outboxId);
+        return true;
+    }
+
+    static boolean cancelAgentOutbox(String outboxId) {
+        AgentRunStore.Record record = AgentRunStore.findOutbox(outboxId);
+        if (record == null || !AgentRunStore.cancel(outboxId)) return false;
+        String key = record.scope + "|outbox|" + record.outboxId;
+        AGENT_TOOL_RESULT_TOKENS.remove(key);
+        AGENT_RESULT_SEND_LOCKED.remove(record.scope);
+        return true;
+    }
+
+    static int clearFinishedAgentRuns() {
+        return AgentRunStore.clearFinished();
+    }
+
+    private static void queueHiddenAgentToolResult(
+            Context context, HeartbeatToolProtocol.ToolCall call,
+            AgentDeviceBridge.ToolResult result) {
+        if (call == null || result == null) return;
+        String scope = HeartbeatToolProtocol.cleanScope(call.scope);
+        if (scope.length() == 0) return;
+        String event = HeartbeatToolProtocol.toolResultEvent(
+                call, result.success, result.exitCode, result.output,
+                result.detail, result.encoding, result.truncated);
+        if (event.length() == 0) return;
+        String outboxId = AgentRunStore.queueResult(
+                call, result.success, event, result.detail);
+        queueHiddenAgentEvent(context, scope, event, outboxId);
+    }
+
+    /** Queues a private tool-result turn that waits for the originating stream to go idle. */
+    private static void queueHiddenAgentEvent(
+            Context context, String scope, String event, String outboxId) {
+        if (event == null || event.length() == 0) return;
+        if ("agent-command-preview".equals(scope)) {
+            log("Agent command preview result chars=" + event.length());
+            return;
+        }
+        Context source = context == null ? currentHostContext() : context;
+        Context application = source == null ? null : source.getApplicationContext();
+        Context safeContext = application == null ? source : application;
+        Handler handler = currentMainHandler();
+        if (handler == null) {
+            log("Agent tool result could not queue: main handler unavailable");
+            return;
+        }
+        String durableId = outboxId == null ? "" : outboxId.trim();
+        String key = scope + "|outbox|" + (durableId.length() == 0
+                ? Long.toHexString(System.nanoTime()) : durableId);
+        Object token = new Object();
+        if (AGENT_TOOL_RESULT_TOKENS.putIfAbsent(key, token) != null) return;
+        if (durableId.length() > 0) {
+            AgentRunStore.markDelivering(durableId, 0);
+        }
+        handler.post(new HiddenAgentToolResultAttempt(
+                safeContext, scope, key, token, event, durableId, 0));
+    }
+
+    /** Owns exactly one call until its result (or an attachment/visible answer) is delivered. */
+    private static final class AgentStepResult {
+        private static final long DEFAULT_DEADLINE_MS = 90_000L;
+        private static final long QUESTION_DEADLINE_MS = 30L * 60L * 1000L;
+
+        final Context context;
+        final String scope;
+        private final HeartbeatToolProtocol.ToolCall call;
+        private boolean finished;
+
+        AgentStepResult(Context context, String scope,
+                        HeartbeatToolProtocol.ToolCall call) {
+            this.context = context;
+            this.scope = scope;
+            this.call = call;
+        }
+
+        long deadlineMs() {
+            if (call != null && HeartbeatToolProtocol.TOOL_ASK_USER.equals(call.tool)) {
+                return QUESTION_DEADLINE_MS;
+            }
+            if (call != null && HeartbeatToolProtocol.TOOL_DELAY.equals(call.tool)) {
+                return Math.max(DEFAULT_DEADLINE_MS,
+                        (long) call.durationMs + 120_000L);
+            }
+            return DEFAULT_DEADLINE_MS;
+        }
+
+        synchronized void addResult(HeartbeatToolProtocol.ToolCall call,
+                                    AgentDeviceBridge.ToolResult result) {
+            if (finished || call == null || call.id == null || result == null) return;
+            if (this.call == null || !call.id.equals(this.call.id)) return;
+            finished = true;
+            if (HeartbeatToolProtocol.TOOL_DELAY.equals(this.call.tool)) {
+                AGENT_DELAY_STEPS.remove(agentDelayKey(
+                        this.call.scope, this.call.id), this);
+            }
+            String event = HeartbeatToolProtocol.toolResultEvent(
+                    this.call, result.success, result.exitCode, result.output,
+                    result.detail, result.encoding, result.truncated);
+            if (event.length() == 0) return;
+            String outboxId = AgentRunStore.queueResult(
+                    this.call, result.success, event, result.detail);
+            queueHiddenAgentEvent(context, scope, event, outboxId);
+            log("Agent step result queued sid=" + scope
+                    + " tool=" + this.call.tool + " id=" + this.call.id
+                    + " ok=" + result.success);
+        }
+
+        synchronized void release(String callId) {
+            if (finished || callId == null || call == null
+                    || !callId.equals(call.id)) return;
+            finished = true;
+            AgentRunStore.complete(
+                    call, "Delivered as a native visible message or attachment");
+        }
+
+        /** A missing callback must become a real failure result instead of stalling the model. */
+        synchronized void flushIfPending() {
+            if (finished) return;
+            AgentDeviceBridge.ToolResult timeout = new AgentDeviceBridge.ToolResult(
+                    false, -2, "",
+                    UiLanguage.text(context,
+                            "工具等待结果超时",
+                            "Timed out waiting for the tool result"),
+                    "utf-8", false);
+            addResult(call, timeout);
+        }
+    }
+
+    private static void scheduleAgentStepTimeout(final AgentStepResult step) {
+        Handler handler = currentMainHandler();
+        if (handler == null) return;
+        handler.postDelayed(new Runnable() {
+            @Override public void run() {
+                step.flushIfPending();
+            }
+        }, step.deadlineMs());
+    }
+
+    /**
+     * Sends a private tool-result turn only after the originating assistant stream is idle. The
+     * request is filtered out of Compose and folded from history, while its assistant child uses
+     * DeepSeek's normal streaming pipeline. A per-scope lock keeps two result turns from
+     * racing through the same idle window.
+     */
+    private static final class HiddenAgentToolResultAttempt implements Runnable {
+        private static final int MAX_ATTEMPTS = 200;
+        private static final long RETRY_MS = 300L;
+
+        final Context context;
+        final String scope;
+        final String key;
+        final Object token;
+        final String event;
+        final String outboxId;
+        final int attempt;
+
+        HiddenAgentToolResultAttempt(
+                Context context, String scope, String key,
+                Object token, String event, String outboxId, int attempt) {
+            this.context = context;
+            this.scope = scope;
+            this.key = key;
+            this.token = token;
+            this.event = event;
+            this.outboxId = outboxId == null ? "" : outboxId;
+            this.attempt = attempt;
+        }
+
+        @Override public void run() {
+            if (AGENT_TOOL_RESULT_TOKENS.get(key) != token) return;
+            boolean sent = false;
+            boolean locked = false;
+            boolean terminalFailure = false;
+            boolean missingViewModel = false;
+            try {
+                WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                Object viewModel = reference == null ? null : reference.get();
+                if (reference != null && viewModel == null) {
+                    ACTIVE_CHAT_VIEW_MODELS.remove(scope, reference);
+                }
+                missingViewModel = viewModel == null;
+                if (viewModel != null) {
+                    Object session = invokeNoArg(viewModel, "G");
+                    String activeScope = String.valueOf(
+                            readHostField(session, "a"));
+                    Object state = invokeNoArg(
+                            readHostField(session, "i"), "getValue");
+                    boolean idle = scope.equals(activeScope)
+                            && isIdleGenerationState(state);
+                    if (!idle && AGENT_RESULT_SEND_LOCKED.contains(scope)) {
+                        // The lock owner's send took effect: generation is running, so the
+                        // lock has served its purpose and the next result may be delivered
+                        // once this turn ends.
+                        AGENT_RESULT_SEND_LOCKED.remove(scope);
+                    }
+                    if (idle && AGENT_RESULT_SEND_LOCKED.add(scope)) {
+                        locked = true;
+                        sent = invokeNativeUiTextSend(viewModel, event);
+                    }
+                }
+            } catch (Throwable error) {
+                terminalFailure = isAgentHostStructureFailure(error);
+                log("Agent tool result send failed sid=" + scope
+                        + " attempt=" + attempt + ": "
+                        + safeThrowableMessage(error)
+                        + (terminalFailure ? " (stopped: incompatible host mapping)" : ""));
+            }
+            if (sent) {
+                AGENT_TOOL_RESULT_TOKENS.remove(key, token);
+                if (outboxId.length() > 0) AgentRunStore.delivered(outboxId);
+                log("Agent hidden tool result sent sid=" + scope
+                        + " chars=" + event.length());
+                scheduleAgentResultLockRelease(scope);
+                return;
+            }
+            if (locked) {
+                AGENT_RESULT_SEND_LOCKED.remove(scope);
+            }
+            // Missing host symbols cannot recover by retrying every 300 ms. Apart from wasting
+            // CPU, the former 200-attempt loop flooded the on-screen diagnostics and could leave
+            // multiple recovered outbox rows competing for the same chat. Keep the durable row
+            // for a future compatible build, but stop this attempt immediately.
+            if (terminalFailure) {
+                AGENT_TOOL_RESULT_TOKENS.remove(key, token);
+                if (outboxId.length() > 0) {
+                    AgentRunStore.waitingForChat(outboxId,
+                            "Host message interface is incompatible with this version");
+                }
+                if (context != null) showHeartbeatToolToast(context,
+                        UiLanguage.text(context,
+                                "工具已执行，但当前版本的结果回传接口不兼容",
+                                "The tool ran, but this host version has an incompatible result interface"));
+                return;
+            }
+            // Recovered rows may belong to chats that are not currently open. Poll briefly to
+            // cover Activity recreation, then leave the durable row dormant until that exact
+            // conversation registers again. This avoids 200 wakeups per historical result.
+            if (missingViewModel && attempt >= 19) {
+                AGENT_TOOL_RESULT_TOKENS.remove(key, token);
+                if (outboxId.length() > 0) {
+                    AgentRunStore.waitingForChat(outboxId,
+                            "Return to the original chat to deliver this result");
+                }
+                log("Agent hidden tool result waiting for original chat sid=" + scope);
+                return;
+            }
+            if (attempt + 1 < MAX_ATTEMPTS) {
+                Handler handler = currentMainHandler();
+                if (handler != null) {
+                    handler.postDelayed(new HiddenAgentToolResultAttempt(
+                            context, scope, key, token,
+                            event, outboxId, attempt + 1), RETRY_MS);
+                    return;
+                }
+            }
+            AGENT_TOOL_RESULT_TOKENS.remove(key, token);
+            if (outboxId.length() > 0) {
+                AgentRunStore.waitingForChat(outboxId,
+                        "Return to the original chat to deliver this result");
+            }
+            if (context != null) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "工具已执行，但结果未能回传：请返回原对话",
+                            "The tool ran, but its result could not be returned; "
+                                    + "go back to the original chat"));
+            log("Agent hidden tool result paused sid=" + scope
+                    + " attempts=" + (attempt + 1));
+        }
+    }
+
+    /**
+     * Frees the per-scope result lock once the sent turn actually begins generating. If the
+     * generation transition is missed (very fast reply), the timeout still unblocks the queue.
+     */
+    private static void scheduleAgentResultLockRelease(final String scope) {
+        final Handler handler = currentMainHandler();
+        if (handler == null) return;
+        handler.post(new Runnable() {
+            int polls;
+
+            @Override public void run() {
+                if (!AGENT_RESULT_SEND_LOCKED.contains(scope)) return;
+                boolean busy = false;
+                try {
+                    WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                    Object viewModel = reference == null ? null : reference.get();
+                    if (viewModel != null) {
+                        Object session = invokeNoArg(viewModel, "G");
+                        Object state = invokeNoArg(
+                                readHostField(session, "i"), "getValue");
+                        busy = !isIdleGenerationState(state);
+                    }
+                } catch (Throwable ignored) {}
+                if (busy || ++polls >= 60) {
+                    AGENT_RESULT_SEND_LOCKED.remove(scope);
+                    return;
+                }
+                handler.postDelayed(this, 250L);
+            }
+        });
+    }
+
+    /**
+     * The tool block can finish slightly before DeepSeek marks the assistant stream idle. Retry
+     * the native composer for a short bounded window instead of dropping a fast user selection.
+     */
+    private static void queueVisibleAgentAnswer(
+            Context context, String scope, String visibleAnswer) {
+        queueVisibleAgentAnswer(context, scope, visibleAnswer, null, null);
+    }
+
+    private static void queueVisibleAgentAnswer(
+            Context context, String scope, String visibleAnswer,
+            Runnable onSent, Runnable onFailed) {
+        String safeScope = HeartbeatToolProtocol.cleanScope(scope);
+        String safeAnswer = visibleAnswer == null ? "" : visibleAnswer.trim();
+        if (safeScope.length() == 0 || safeAnswer.length() == 0) {
+            runAgentDeliveryCallback(onFailed);
+            return;
+        }
+        Context source = context == null ? currentHostContext() : context;
+        Context application = source == null ? null : source.getApplicationContext();
+        Context safeContext = application == null ? source : application;
+        Handler handler = currentMainHandler();
+        if (handler == null) {
+            if (safeContext != null) showHeartbeatToolToast(safeContext,
+                    UiLanguage.text(safeContext,
+                            "答案发送失败：主界面尚未就绪",
+                            "Could not send the answer: the UI is not ready"));
+            runAgentDeliveryCallback(onFailed);
+            return;
+        }
+        handler.post(new VisibleAgentAnswerAttempt(
+                safeContext, safeScope, safeAnswer, onSent, onFailed, 0));
+    }
+
+    private static void runAgentDeliveryCallback(Runnable callback) {
+        if (callback == null) return;
+        try {
+            callback.run();
+        } catch (Throwable error) {
+            log("Agent delivery callback failed: " + safeThrowableMessage(error));
+        }
+    }
+
+    private static final class VisibleAgentAnswerAttempt implements Runnable {
+        private static final int MAX_ATTEMPTS = 150;
+        private static final long RETRY_MS = 300L;
+
+        final Context context;
+        final String scope;
+        final String answer;
+        final Runnable onSent;
+        final Runnable onFailed;
+        final int attempt;
+
+        VisibleAgentAnswerAttempt(
+                Context context, String scope, String answer,
+                Runnable onSent, Runnable onFailed, int attempt) {
+            this.context = context;
+            this.scope = scope;
+            this.answer = answer;
+            this.onSent = onSent;
+            this.onFailed = onFailed;
+            this.attempt = attempt;
+        }
+
+        @Override public void run() {
+            boolean sent = false;
+            boolean retryable = true;
+            try {
+                WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                Object viewModel = reference == null ? null : reference.get();
+                if (reference != null && viewModel == null) {
+                    ACTIVE_CHAT_VIEW_MODELS.remove(scope, reference);
+                }
+                if (viewModel != null) {
+                    Object session = invokeNoArg(viewModel, "G");
+                    String currentScope = String.valueOf(readHostField(session, "a"));
+                    if (!scope.equals(currentScope)) {
+                        retryable = false;
+                    } else {
+                        Object state = invokeNoArg(
+                                readHostField(session, "i"), "getValue");
+                        if (isIdleGenerationState(state)) {
+                            sent = invokeNativeUiTextSend(viewModel, answer);
+                            retryable = !sent;
+                        }
+                    }
+                }
+            } catch (Throwable error) {
+                retryable = !isAgentHostStructureFailure(error);
+                log("Agent visible answer send failed sid=" + scope
+                        + " attempt=" + attempt + ": "
+                        + safeThrowableMessage(error)
+                        + (!retryable ? " (stopped: incompatible host mapping)" : ""));
+            }
+            if (sent) {
+                log("Agent visible answer sent sid=" + scope
+                        + " chars=" + answer.length());
+                runAgentDeliveryCallback(onSent);
+                return;
+            }
+            if (retryable && attempt + 1 < MAX_ATTEMPTS) {
+                Handler handler = currentMainHandler();
+                if (handler != null) {
+                    handler.postDelayed(new VisibleAgentAnswerAttempt(
+                            context, scope, answer,
+                            onSent, onFailed, attempt + 1), RETRY_MS);
+                    return;
+                }
+            }
+            if (context != null) showHeartbeatToolToast(context,
+                    UiLanguage.text(context,
+                            "答案未发送：请保持在原对话并等待当前回复结束",
+                            "Answer not sent: stay in the original chat and wait "
+                                    + "for the current response to finish"));
+            log("Agent visible answer abandoned sid=" + scope
+                    + " attempts=" + (attempt + 1));
+            runAgentDeliveryCallback(onFailed);
+        }
+    }
+
+    private static boolean queueAgentUiTool(
+            final Context context, final AgentStepResult step,
+            final HeartbeatToolProtocol.ToolCall call,
+            final boolean announce) {
+        AgentToolConfig.Snapshot config = AgentToolConfig.load();
+        if (!AgentToolConfig.BACKEND_IN_APP.equals(config.backend)
+                && AgentToolConfig.PERMISSION_ALL.equals(config.permission)) {
+            AgentDeviceBridge.execute(
+                    context, call, new AgentDeviceBridge.StatusCallback() {
+                        @Override public void onStatus(
+                                AgentDeviceBridge.Status status) {
+                            log("privileged Agent tool result tool=" + call.tool
+                                    + " ok=" + status.connected
+                                    + " detail=" + status.detail);
+                            if (status.connected
+                                    && HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN
+                                    .equals(call.tool)) {
+                                queueAgentScreenshotUpload(
+                                        context, step, call,
+                                        new File(AGENT_SCREENSHOT_DIR,
+                                                "latest_screen.png"));
+                            } else {
+                                queueSimpleAgentToolResult(
+                                        context, step, call, status.connected, "",
+                                        status.detail);
+                            }
+                            if (!status.connected && announce) {
+                                showHeartbeatToolToast(context, status.detail);
+                            }
+                        }
+                    });
+            return true;
+        }
         final Activity activity = currentHostActivity();
         final Handler handler = currentMainHandler();
         if (activity == null || handler == null || activity.isFinishing()
@@ -5306,7 +8578,7 @@ public class Main extends XposedModule {
                 try {
                     success = live != null && !live.isFinishing()
                             && (Build.VERSION.SDK_INT < 17 || !live.isDestroyed())
-                            && performAgentUiTool(live, context, call);
+                            && performAgentUiTool(live, context, step, call);
                 } catch (Throwable error) {
                     log("agent UI tool failed tool=" + call.tool
                             + " id=" + call.id + ": " + error);
@@ -5316,15 +8588,45 @@ public class Main extends XposedModule {
                             "界面工具执行失败：" + call.tool,
                             "UI tool failed: " + call.tool));
                 }
+                if (!HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)
+                        || !success) {
+                    queueSimpleAgentToolResult(
+                            context, step, call, success, "",
+                            success
+                                    ? UiLanguage.text(context,
+                                    "界面工具执行完成", "UI tool completed")
+                                    : UiLanguage.text(context,
+                                    "界面工具执行失败", "UI tool failed"));
+                }
             }
         }, delay);
     }
 
+    private static boolean queueAgentMusic(
+            final Context context, final AgentStepResult step,
+            final HeartbeatToolProtocol.ToolCall call,
+            final boolean announce) {
+        AgentDeviceBridge.executeMusic(context, call,
+                new AgentDeviceBridge.StatusCallback() {
+                    @Override public void onStatus(AgentDeviceBridge.Status status) {
+                        log("music Agent tool result action=" + call.mode
+                                + " ok=" + status.connected
+                                + " detail=" + status.detail);
+                        queueSimpleAgentToolResult(context, step, call,
+                                status.connected, "", status.detail);
+                        if (!status.connected && announce) {
+                            showHeartbeatToolToast(context, status.detail);
+                        }
+                    }
+                });
+        return true;
+    }
+
     private static boolean performAgentUiTool(
-            Activity activity, Context context,
+            Activity activity, Context context, AgentStepResult step,
             HeartbeatToolProtocol.ToolCall call) {
         if (HeartbeatToolProtocol.TOOL_CAPTURE_SCREEN.equals(call.tool)) {
-            return captureAgentScreenshot(activity, context, call.id);
+            return captureAgentScreenshot(activity, context, step, call);
         }
         if (HeartbeatToolProtocol.TOOL_PRESS_BACK.equals(call.tool)) {
             activity.onBackPressed();
@@ -5413,7 +8715,8 @@ public class Main extends XposedModule {
     }
 
     private static boolean captureAgentScreenshot(
-            Activity activity, Context context, String callId) {
+            Activity activity, Context context, AgentStepResult step,
+            HeartbeatToolProtocol.ToolCall call) {
         Window window = activity.getWindow();
         final View decor = window == null ? null : window.getDecorView();
         if (decor == null || decor.getWidth() <= 0 || decor.getHeight() <= 0) {
@@ -5428,29 +8731,85 @@ public class Main extends XposedModule {
         final Bitmap bitmap;
         try {
             bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            canvas.scale(scale, scale);
-            decor.draw(canvas);
         } catch (Throwable error) {
-            log("agent screenshot render failed: " + error);
+            log("agent screenshot allocation failed: " + error);
             return false;
         }
         Context source = context == null ? activity : context;
         Context application = source.getApplicationContext();
         final Context safeContext = application == null ? source : application;
-        final String safeCallId = callId == null ? "" : callId;
+        final HeartbeatToolProtocol.ToolCall safeCall = call;
+        if (Build.VERSION.SDK_INT >= 26) {
+            Handler handler = currentMainHandler();
+            if (handler == null) {
+                bitmap.recycle();
+                return false;
+            }
+            try {
+                PixelCopy.request(window, bitmap,
+                        new PixelCopy.OnPixelCopyFinishedListener() {
+                            @Override public void onPixelCopyFinished(int result) {
+                                if (result == PixelCopy.SUCCESS) {
+                                    writeAgentScreenshotAsync(
+                                            safeContext, bitmap, step, safeCall);
+                                    return;
+                                }
+                                try { bitmap.recycle(); } catch (Throwable ignored) {}
+                                log("agent screenshot PixelCopy failed code=" + result);
+                                showHeartbeatToolToast(safeContext,
+                                        UiLanguage.text(safeContext,
+                                                "截图失败：窗口画面暂不可用",
+                                                "Capture failed: the window surface "
+                                                        + "is not available"));
+                                queueSimpleAgentToolResult(
+                                        safeContext, step, safeCall, false, "",
+                                        UiLanguage.text(safeContext,
+                                                "截图失败：窗口画面暂不可用",
+                                                "Capture failed: the window surface "
+                                                        + "is not available"));
+                            }
+                        }, handler);
+                return true;
+            } catch (Throwable error) {
+                try { bitmap.recycle(); } catch (Throwable ignored) {}
+                log("agent screenshot PixelCopy request failed: " + error);
+                return false;
+            }
+        }
+        try {
+            Canvas canvas = new Canvas(bitmap);
+            canvas.scale(scale, scale);
+            decor.draw(canvas);
+        } catch (Throwable error) {
+            try { bitmap.recycle(); } catch (Throwable ignored) {}
+            log("agent screenshot legacy render failed: " + error);
+            return false;
+        }
+        writeAgentScreenshotAsync(
+                safeContext, bitmap, step, safeCall);
+        return true;
+    }
+
+    private static void writeAgentScreenshotAsync(
+            final Context context, final Bitmap bitmap,
+            final AgentStepResult step,
+            final HeartbeatToolProtocol.ToolCall call) {
         Thread writer = new Thread(new Runnable() {
             @Override public void run() {
-                saveAgentScreenshot(safeContext, bitmap, safeCallId);
+                saveAgentScreenshot(
+                        context, bitmap, step, call);
             }
         }, "Deekseep-Agent-Screenshot");
         writer.setDaemon(true);
         writer.start();
-        return true;
     }
 
     private static void saveAgentScreenshot(
-            Context context, Bitmap bitmap, String callId) {
+            Context context, Bitmap bitmap, AgentStepResult step,
+            HeartbeatToolProtocol.ToolCall call) {
+        String callId = call == null || call.id == null ? "" : call.id;
+        String scope = call == null
+                ? "" : HeartbeatToolProtocol.cleanScope(call.scope);
         boolean privateSaved = false;
         Uri galleryUri = null;
         OutputStream output = null;
@@ -5502,6 +8861,17 @@ public class Main extends XposedModule {
                     "Screenshot saved to Pictures/DeekseepAgent")
                     : UiLanguage.text(context,
                     "截图保存失败", "Could not save screenshot"));
+            if (privateSaved && scope != null && scope.length() > 0) {
+                queueAgentScreenshotUpload(
+                        context, step, call, new File(
+                                AGENT_SCREENSHOT_DIR, "latest_screen.png"));
+            } else {
+                queueSimpleAgentToolResult(
+                        context, step, call, false, "",
+                        UiLanguage.text(context,
+                                "截图未能上传回原对话",
+                                "The screenshot could not be uploaded to the source chat"));
+            }
         } catch (Throwable error) {
             log("agent screenshot save failed call=" + callId + ": " + error);
             if (galleryUri != null) {
@@ -5512,12 +8882,635 @@ public class Main extends XposedModule {
             showHeartbeatToolToast(context,
                     UiLanguage.text(context,
                             "截图保存失败", "Could not save screenshot"));
+            queueSimpleAgentToolResult(
+                    context, step, call, false, "",
+                    UiLanguage.text(context,
+                            "截图保存失败", "Could not save screenshot"));
         } finally {
             if (output != null) {
                 try { output.close(); } catch (Throwable ignored) {}
             }
             try { bitmap.recycle(); } catch (Throwable ignored) {}
         }
+    }
+
+    private static void queueAgentScreenshotUpload(
+            Context context, AgentStepResult step,
+            HeartbeatToolProtocol.ToolCall call,
+            File screenshot) {
+        String safeScope = call == null ? ""
+                : HeartbeatToolProtocol.cleanScope(call.scope);
+        if (safeScope.length() == 0 || screenshot == null) return;
+        Context source = context == null ? currentHostContext() : context;
+        Context application = source == null ? null : source.getApplicationContext();
+        Context safeContext = application == null ? source : application;
+        Object token = new Object();
+        AGENT_SCREENSHOT_UPLOAD_TOKENS.put(safeScope, token);
+        Handler handler = currentMainHandler();
+        if (handler == null) {
+            AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(safeScope, token);
+            queueSimpleAgentToolResult(
+                    safeContext, step, call, false, "",
+                    UiLanguage.text(safeContext,
+                            "截图无法回传：主界面尚未就绪",
+                            "The capture could not be returned because the UI is not ready"));
+            return;
+        }
+        handler.post(new AgentScreenshotUploadAttempt(
+                safeContext, safeScope, screenshot, token, step, call));
+    }
+
+    /**
+     * Adds the captured PNG through DeepSeek's real composer uploader, waits for its server file
+     * id, and then sends the image as the next visible turn in the same conversation.
+     */
+    private static final class AgentScreenshotUploadAttempt implements Runnable {
+        private static final int MAX_ATTEMPTS = 240;
+        private static final long RETRY_MS = 250L;
+
+        final Context context;
+        final String scope;
+        final File screenshot;
+        final Object token;
+        final AgentStepResult step;
+        final HeartbeatToolProtocol.ToolCall call;
+        int attempts;
+        Object composer;
+        Object attachment;
+        String uploadKey = "";
+        String fileName = "";
+
+        AgentScreenshotUploadAttempt(
+                Context context, String scope, File screenshot,
+                Object token, AgentStepResult step,
+                HeartbeatToolProtocol.ToolCall call) {
+            this.context = context;
+            this.scope = scope;
+            this.screenshot = screenshot;
+            this.token = token;
+            this.step = step;
+            this.call = call;
+        }
+
+        @Override public void run() {
+            if (AGENT_SCREENSHOT_UPLOAD_TOKENS.get(scope) != token) return;
+            attempts++;
+            try {
+                if (!screenshot.isFile() || screenshot.length() < 1024L) {
+                    fail(UiLanguage.text(context,
+                            "截图文件不可用", "The screenshot file is unavailable"));
+                    return;
+                }
+                WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                Object viewModel = reference == null ? null : reference.get();
+                if (reference != null && viewModel == null) {
+                    ACTIVE_CHAT_VIEW_MODELS.remove(scope, reference);
+                }
+                if (viewModel == null) {
+                    retryOrFail(UiLanguage.text(context,
+                            "原对话尚未就绪", "The original chat is not ready"));
+                    return;
+                }
+                Object session = invokeNoArg(viewModel, "G");
+                if (session == null || !scope.equals(String.valueOf(
+                        readHostField(session, "a")))) {
+                    fail(UiLanguage.text(context,
+                            "已离开截图所属对话，未自动上传",
+                            "The source chat is no longer active; the capture was not uploaded"));
+                    return;
+                }
+                Object generation = invokeNoArg(
+                        readHostField(session, "i"), "getValue");
+                if (!isIdleGenerationState(generation)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在等待当前回复结束",
+                            "Waiting for the current response to finish"));
+                    return;
+                }
+                if (attachment == null) {
+                    composer = invokeNoArg(viewModel, "K");
+                    if (composer == null) {
+                        retryOrFail(UiLanguage.text(context,
+                                "图片上传器尚未就绪",
+                                "The image uploader is not ready"));
+                        return;
+                    }
+                    Object currentAttachments =
+                            snapshotComposerAttachments(composer);
+                    if (currentAttachments instanceof List
+                            && !((List) currentAttachments).isEmpty()) {
+                        // Never mix an Agent capture into a draft the user is already composing.
+                        retryOrFail(UiLanguage.text(context,
+                                "输入框已有待发送附件",
+                                "The composer already contains an unsent attachment"));
+                        return;
+                    }
+                    uploadKey = String.valueOf(invokeNoArg(composer, "d"));
+                    if (uploadKey == null || "null".equals(uploadKey)
+                            || uploadKey.length() == 0) {
+                        retryOrFail(UiLanguage.text(context,
+                                "当前模型标识尚未就绪",
+                                "The current model identity is not ready"));
+                        return;
+                    }
+                    fileName = "DeepSeek_Agent_"
+                            + new SimpleDateFormat(
+                            "yyyyMMdd_HHmmss", Locale.US).format(new Date())
+                            + ".png";
+                    Object metadata = createNativeScreenshotMetadata(
+                            viewModel.getClass().getClassLoader(),
+                            screenshot, fileName);
+                    if (metadata == null
+                            || !invokeNativeScreenshotUploader(
+                            composer, metadata, scope)) {
+                        fail(UiLanguage.text(context,
+                                "无法启动 DeepSeek 图片上传",
+                                "Could not start DeepSeek's image upload"));
+                        return;
+                    }
+                    ACTIVE_HIDDEN_ATTACHMENT_NAMES.add(fileName);
+                    Object after = snapshotComposerAttachments(composer);
+                    attachment = findNativeAttachment(after, fileName);
+                    schedule();
+                    return;
+                }
+
+                Object attachments = snapshotComposerAttachments(composer);
+                Object liveAttachment = findNativeAttachment(
+                        attachments, fileName);
+                if (liveAttachment != null) attachment = liveAttachment;
+                if (attachment == null || !(attachments instanceof List)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在等待图片进入输入框",
+                            "Waiting for the image to enter the composer"));
+                    return;
+                }
+                String remoteId = nativeAttachmentRemoteId(
+                        attachment, uploadKey);
+                if (remoteId.length() == 0) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在上传截图",
+                            "Uploading the screenshot"));
+                    return;
+                }
+                // 截图以私有工具结果事件体发送：Compose 过滤整条消息（tp.s 隐藏），
+                // 模型仍收到事件体 + 图片附件，可自然回复而不暴露用户侧的任何发送。
+                String prompt = HeartbeatToolProtocol.toolResultEvent(
+                        call, true, 0, "",
+                        "截图已上传并附加为本消息的图片附件（" + fileName + "）。"
+                                + "请基于图片内容继续处理上一条请求；如果图片信息不足，请明确说明。",
+                        "utf-8", false);
+                if (!invokeNativeUiTextSend(viewModel, prompt, attachments)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "截图已上传，正在等待发送",
+                            "The screenshot is uploaded and waiting to send"));
+                    return;
+                }
+                ACTIVE_HIDDEN_ATTACHMENT_NAMES.remove(fileName);
+                AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(scope, token);
+                if (step != null) step.release(call.id);
+                log("Agent screenshot uploaded and sent sid=" + scope
+                        + " remote=" + truncateForLog(remoteId, 120));
+            } catch (Throwable error) {
+                log("Agent screenshot upload attempt failed sid=" + scope
+                        + " attempt=" + attempts + ": "
+                        + safeThrowableMessage(error));
+                retryOrFail(UiLanguage.text(context,
+                        "截图自动上传失败", "Automatic screenshot upload failed"));
+            }
+        }
+
+        private void retryOrFail(String detail) {
+            if (attempts < MAX_ATTEMPTS) {
+                schedule();
+            } else {
+                fail(detail);
+            }
+        }
+
+        private void schedule() {
+            Handler handler = currentMainHandler();
+            if (handler == null) {
+                fail(UiLanguage.text(context,
+                        "主界面已关闭", "The main UI was closed"));
+                return;
+            }
+            handler.postDelayed(this, RETRY_MS);
+        }
+
+        private void fail(String detail) {
+            if (!AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(scope, token)) return;
+            if (fileName != null && fileName.length() > 0) {
+                ACTIVE_HIDDEN_ATTACHMENT_NAMES.remove(fileName);
+            }
+            log("Agent screenshot upload abandoned sid=" + scope
+                    + " attempts=" + attempts + " detail=" + detail);
+            if (context != null) showHeartbeatToolToast(context, detail);
+            queueSimpleAgentToolResult(
+                    context, step, call, false, "", detail);
+        }
+    }
+
+    /**
+     * Packages a large read_file payload as a real TXT attachment through DeepSeek's composer
+     * uploader, so the file body does not occupy the conversation text context. The private
+     * result event then points the model at the attachment with only a short preview inline.
+     */
+    private static void queueAgentTextFileUpload(
+            Context context, AgentStepResult step,
+            HeartbeatToolProtocol.ToolCall call,
+            AgentDeviceBridge.ToolResult result) {
+        String safeScope = call == null ? ""
+                : HeartbeatToolProtocol.cleanScope(call.scope);
+        if (safeScope.length() == 0 || result == null) return;
+        Context source = context == null ? currentHostContext() : context;
+        Context application = source == null ? null : source.getApplicationContext();
+        Context safeContext = application == null ? source : application;
+        File textFile = writeAgentTextAttachment(safeContext, call, result);
+        if (textFile == null) {
+            if (step != null) {
+                step.addResult(call, result);
+            } else {
+                queueHiddenAgentToolResult(context, call, result);
+            }
+            return;
+        }
+        Object token = new Object();
+        AGENT_SCREENSHOT_UPLOAD_TOKENS.put(safeScope, token);
+        Handler handler = currentMainHandler();
+        if (handler == null) {
+            AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(safeScope, token);
+            try { textFile.delete(); } catch (Throwable ignored) {}
+            if (step != null) {
+                step.addResult(call, result);
+            } else {
+                queueHiddenAgentToolResult(context, call, result);
+            }
+            return;
+        }
+        handler.post(new AgentTextFileUploadAttempt(
+                safeContext, safeScope, textFile, token, step, call, result));
+    }
+
+    private static File writeAgentTextAttachment(
+            Context context, HeartbeatToolProtocol.ToolCall call,
+            AgentDeviceBridge.ToolResult result) {
+        try {
+            if (context == null) return null;
+            File dir = new File(context.getCacheDir(), "ds_agent_txt");
+            if (!dir.isDirectory() && !dir.mkdirs()) return null;
+            String base = "file";
+            String path = call == null ? "" : call.path;
+            if (path.length() > 0) {
+                int slash = path.lastIndexOf('/');
+                if (slash >= 0 && slash + 1 < path.length()) {
+                    base = path.substring(slash + 1);
+                }
+                int dot = base.lastIndexOf('.');
+                if (dot > 0) base = base.substring(0, dot);
+            }
+            String safeBase = base.replaceAll("[^A-Za-z0-9._-]", "_");
+            if (safeBase.length() == 0) safeBase = "file";
+            if (safeBase.length() > 48) safeBase = safeBase.substring(0, 48);
+            String name = safeBase + "_"
+                    + new SimpleDateFormat("yyyyMMdd_HHmmss",
+                    Locale.US).format(new Date()) + ".txt";
+            File target = new File(dir, name);
+            java.io.FileOutputStream output = new java.io.FileOutputStream(target);
+            try {
+                output.write(result.output.getBytes("UTF-8"));
+            } finally {
+                output.close();
+            }
+            return target;
+        } catch (Throwable error) {
+            log("Agent text attachment write failed: "
+                    + safeThrowableMessage(error));
+            return null;
+        }
+    }
+
+    private static final class AgentTextFileUploadAttempt implements Runnable {
+        private static final int MAX_ATTEMPTS = 240;
+        private static final long RETRY_MS = 250L;
+
+        final Context context;
+        final String scope;
+        final File textFile;
+        final Object token;
+        final AgentStepResult step;
+        final HeartbeatToolProtocol.ToolCall call;
+        final AgentDeviceBridge.ToolResult result;
+        int attempts;
+        Object composer;
+        Object attachment;
+        String uploadKey = "";
+        String fileName = "";
+
+        AgentTextFileUploadAttempt(
+                Context context, String scope, File textFile,
+                Object token, AgentStepResult step,
+                HeartbeatToolProtocol.ToolCall call,
+                AgentDeviceBridge.ToolResult result) {
+            this.context = context;
+            this.scope = scope;
+            this.textFile = textFile;
+            this.token = token;
+            this.step = step;
+            this.call = call;
+            this.result = result;
+        }
+
+        @Override public void run() {
+            if (AGENT_SCREENSHOT_UPLOAD_TOKENS.get(scope) != token) return;
+            attempts++;
+            try {
+                if (textFile == null || !textFile.isFile()
+                        || textFile.length() < 1L) {
+                    fail(UiLanguage.text(context,
+                            "文本附件不可用", "The text attachment is unavailable"));
+                    return;
+                }
+                WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(scope);
+                Object viewModel = reference == null ? null : reference.get();
+                if (reference != null && viewModel == null) {
+                    ACTIVE_CHAT_VIEW_MODELS.remove(scope, reference);
+                }
+                if (viewModel == null) {
+                    retryOrFail(UiLanguage.text(context,
+                            "原对话尚未就绪", "The original chat is not ready"));
+                    return;
+                }
+                Object session = invokeNoArg(viewModel, "G");
+                if (session == null || !scope.equals(String.valueOf(
+                        readHostField(session, "a")))) {
+                    fail(UiLanguage.text(context,
+                            "已离开文件所属对话，未自动上传",
+                            "The source chat is no longer active; the file was not uploaded"));
+                    return;
+                }
+                Object generation = invokeNoArg(
+                        readHostField(session, "i"), "getValue");
+                if (!isIdleGenerationState(generation)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在等待当前回复结束",
+                            "Waiting for the current response to finish"));
+                    return;
+                }
+                if (attachment == null) {
+                    composer = invokeNoArg(viewModel, "K");
+                    if (composer == null) {
+                        retryOrFail(UiLanguage.text(context,
+                                "文件上传器尚未就绪",
+                                "The file uploader is not ready"));
+                        return;
+                    }
+                    Object currentAttachments =
+                            snapshotComposerAttachments(composer);
+                    if (currentAttachments instanceof List
+                            && !((List) currentAttachments).isEmpty()) {
+                        retryOrFail(UiLanguage.text(context,
+                                "输入框已有待发送附件",
+                                "The composer already contains an unsent attachment"));
+                        return;
+                    }
+                    uploadKey = String.valueOf(invokeNoArg(composer, "d"));
+                    if (uploadKey == null || "null".equals(uploadKey)
+                            || uploadKey.length() == 0) {
+                        retryOrFail(UiLanguage.text(context,
+                                "当前模型标识尚未就绪",
+                                "The current model identity is not ready"));
+                        return;
+                    }
+                    fileName = textFile.getName();
+                    Object metadata = createNativeFileMetadata(
+                            viewModel.getClass().getClassLoader(),
+                            textFile, fileName);
+                    if (metadata == null
+                            || !invokeNativeScreenshotUploader(
+                            composer, metadata, scope)) {
+                        fail(UiLanguage.text(context,
+                                "无法启动 DeepSeek 文件上传",
+                                "Could not start DeepSeek's file upload"));
+                        return;
+                    }
+                    ACTIVE_HIDDEN_ATTACHMENT_NAMES.add(fileName);
+                    Object after = snapshotComposerAttachments(composer);
+                    attachment = findNativeAttachment(after, fileName);
+                    schedule();
+                    return;
+                }
+
+                Object attachments = snapshotComposerAttachments(composer);
+                Object liveAttachment = findNativeAttachment(
+                        attachments, fileName);
+                if (liveAttachment != null) attachment = liveAttachment;
+                if (attachment == null || !(attachments instanceof List)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在等待文件进入输入框",
+                            "Waiting for the file to enter the composer"));
+                    return;
+                }
+                String remoteId = nativeAttachmentRemoteId(
+                        attachment, uploadKey);
+                if (remoteId.length() == 0) {
+                    retryOrFail(UiLanguage.text(context,
+                            "正在上传文本附件",
+                            "Uploading the text attachment"));
+                    return;
+                }
+                String preview = result.output;
+                if (preview.length() > 600) {
+                    preview = preview.substring(0, 600)
+                            + "\n…（内容已截断，以附件为准）";
+                }
+                String prompt = HeartbeatToolProtocol.toolResultEvent(
+                        call, true, 0, preview,
+                        "文件内容已作为 TXT 附件上传并附加为本消息的文件附件（"
+                                + fileName + "，共 " + result.output.length()
+                                + " 字符）。请读取附件内容后继续处理上一条请求。",
+                        result.encoding, result.truncated);
+                if (!invokeNativeUiTextSend(viewModel, prompt, attachments)) {
+                    retryOrFail(UiLanguage.text(context,
+                            "文本附件已上传，正在等待发送",
+                            "The text attachment is uploaded and waiting to send"));
+                    return;
+                }
+                ACTIVE_HIDDEN_ATTACHMENT_NAMES.remove(fileName);
+                AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(scope, token);
+                if (step != null) step.release(call.id);
+                log("Agent text attachment uploaded and sent sid=" + scope
+                        + " file=" + fileName
+                        + " chars=" + result.output.length()
+                        + " remote=" + truncateForLog(remoteId, 120));
+                deleteAgentTextAttachment();
+            } catch (Throwable error) {
+                log("Agent text file upload attempt failed sid=" + scope
+                        + " attempt=" + attempts + ": "
+                        + safeThrowableMessage(error));
+                retryOrFail(UiLanguage.text(context,
+                        "文本附件自动上传失败", "Automatic text upload failed"));
+            }
+        }
+
+        private void retryOrFail(String detail) {
+            if (attempts < MAX_ATTEMPTS) {
+                schedule();
+            } else {
+                fail(detail);
+            }
+        }
+
+        private void schedule() {
+            Handler handler = currentMainHandler();
+            if (handler == null) {
+                fail(UiLanguage.text(context,
+                        "主界面已关闭", "The main UI was closed"));
+                return;
+            }
+            handler.postDelayed(this, RETRY_MS);
+        }
+
+        private void deleteAgentTextAttachment() {
+            try {
+                if (textFile != null) textFile.delete();
+            } catch (Throwable ignored) {}
+        }
+
+        private void fail(String detail) {
+            if (!AGENT_SCREENSHOT_UPLOAD_TOKENS.remove(scope, token)) return;
+            if (fileName != null && fileName.length() > 0) {
+                ACTIVE_HIDDEN_ATTACHMENT_NAMES.remove(fileName);
+            }
+            deleteAgentTextAttachment();
+            log("Agent text attachment abandoned sid=" + scope
+                    + " attempts=" + attempts + " detail=" + detail);
+            if (context != null) showHeartbeatToolToast(context, detail);
+            // 上传失败时回退为内联结果，保证模型仍能拿到文件内容。
+            if (step != null) {
+                step.addResult(call, result);
+            } else {
+                queueHiddenAgentToolResult(context, call, result);
+            }
+        }
+    }
+
+    private static Object snapshotComposerAttachments(Object composer) {
+        if (composer == null) return null;
+        Object draft = invokeNoArg(composer, "l");
+        if (draft == null) return null;
+        Object mutable = readHostField(
+                draft, HostCompat.isV230() ? "a" : "b");
+        if (mutable == null) return null;
+        Object snapshot = invokeNoArg(mutable, "i");
+        return snapshot == null && mutable instanceof List ? mutable : snapshot;
+    }
+
+    private static Object createNativeFileMetadata(
+            ClassLoader classLoader, File file, String fileName) {
+        try {
+            Class<?> metadataType = HostCompat.load(classLoader, "wu1");
+            Uri uri = Uri.fromFile(file);
+            if (HostCompat.isV230()) {
+                Constructor<?> constructor = metadataType.getDeclaredConstructor(
+                        Uri.class, String.class, long.class,
+                        int.class, int.class);
+                constructor.setAccessible(true);
+                return constructor.newInstance(
+                        uri, fileName, Long.valueOf(file.length()),
+                        Integer.valueOf(0), Integer.valueOf(0));
+            }
+            Constructor<?> constructor = metadataType.getDeclaredConstructor(
+                    Uri.class, String.class, long.class);
+            constructor.setAccessible(true);
+            return constructor.newInstance(
+                    uri, fileName, Long.valueOf(file.length()));
+        } catch (Throwable error) {
+            log("native file metadata creation failed: "
+                    + safeThrowableMessage(error));
+            return null;
+        }
+    }
+
+    private static Object createNativeScreenshotMetadata(
+            ClassLoader classLoader, File screenshot, String fileName) {
+        try {
+            Class<?> metadataType = HostCompat.load(classLoader, "wu1");
+            Uri uri = Uri.fromFile(screenshot);
+            if (HostCompat.isV230()) {
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(screenshot.getAbsolutePath(), options);
+                Constructor<?> constructor = metadataType.getDeclaredConstructor(
+                        Uri.class, String.class, long.class,
+                        int.class, int.class);
+                constructor.setAccessible(true);
+                return constructor.newInstance(
+                        uri, fileName, Long.valueOf(screenshot.length()),
+                        Integer.valueOf(Math.max(1, options.outWidth)),
+                        Integer.valueOf(Math.max(1, options.outHeight)));
+            }
+            Constructor<?> constructor = metadataType.getDeclaredConstructor(
+                    Uri.class, String.class, long.class);
+            constructor.setAccessible(true);
+            return constructor.newInstance(
+                    uri, fileName, Long.valueOf(screenshot.length()));
+        } catch (Throwable error) {
+            log("native screenshot metadata creation failed: "
+                    + safeThrowableMessage(error));
+            return null;
+        }
+    }
+
+    private static boolean invokeNativeScreenshotUploader(
+            Object composer, Object metadata, String scope) {
+        if (composer == null || metadata == null) return false;
+        for (Method method : composer.getClass().getDeclaredMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            if (!"u".equals(method.getName()) || types.length != 2
+                    || types[1] != String.class
+                    || !types[0].isInstance(metadata)) continue;
+            try {
+                method.setAccessible(true);
+                method.invoke(composer, metadata, scope);
+                return true;
+            } catch (Throwable error) {
+                log("native screenshot uploader call failed: "
+                        + safeThrowableMessage(error));
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static Object findNativeAttachment(
+            Object attachments, String fileName) {
+        if (!(attachments instanceof List)) return null;
+        List values = (List) attachments;
+        for (int index = values.size() - 1; index >= 0; index--) {
+            Object candidate = values.get(index);
+            if (fileName.equals(String.valueOf(
+                    readHostField(candidate, "a")))) return candidate;
+        }
+        return null;
+    }
+
+    private static String nativeAttachmentRemoteId(
+            Object attachment, String uploadKey) {
+        if (attachment == null || uploadKey == null) return "";
+        String methodName = HostCompat.isV230() ? "f" : "e";
+        for (Method method : attachment.getClass().getDeclaredMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            if (!methodName.equals(method.getName())
+                    || types.length != 1 || types[0] != String.class
+                    || method.getReturnType() != String.class) continue;
+            try {
+                method.setAccessible(true);
+                Object value = method.invoke(attachment, uploadKey);
+                return value == null ? "" : String.valueOf(value).trim();
+            } catch (Throwable ignored) {}
+        }
+        return "";
     }
 
     private static boolean dispatchProactiveTask(
@@ -5756,6 +9749,25 @@ public class Main extends XposedModule {
             context.sendBroadcast(response);
         } catch (Throwable t) {
             log("proactive heartbeat response dispatch failed: " + t);
+        }
+    }
+
+    private static void dispatchReplyReady(
+            Context context, String conversationId, String responseId) {
+        try {
+            Intent ready = new Intent(ProactiveHeartbeatReceiver.ACTION_REPLY_READY);
+            ready.setClassName(SELF, ProactiveHeartbeatReceiver.class.getName());
+            ready.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+            ready.putExtra(ProactiveHeartbeatReceiver.EXTRA_TOKEN,
+                    ProactiveHeartbeatReceiver.TOKEN);
+            ready.putExtra(ProactiveHeartbeatReceiver.EXTRA_RESPONSE_ID, responseId);
+            ready.putExtra(ProactiveHeartbeatReceiver.EXTRA_CONVERSATION_ID,
+                    HeartbeatToolProtocol.cleanScope(conversationId));
+            context.sendBroadcast(ready);
+        } catch (Throwable t) {
+            REPLY_READY_DISPATCHED.remove(responseId);
+            log("reply-ready notification dispatch failed: "
+                    + safeThrowableMessage(t));
         }
     }
 
@@ -6051,9 +10063,13 @@ public class Main extends XposedModule {
                 final int promptIdx = isSynthetic ? 3 : 2;
                 if (pts.length <= promptIdx) continue;
                 if (pts[promptIdx] != String.class) continue;
+                // Never hook kotlinx serialization/copy construction. It is not a send boundary
+                // and modifying it corrupts host request restoration state.
+                if (isSynthetic) continue;
                 hook(ctor).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
                         try {
+                            if (!isSynthetic) consumeArmedCrashTestAtSend();
                             Object[] originalArgs = chain.getArgs().toArray();
                             String originalPrompt = (String) originalArgs[promptIdx];
                             String originalBody = HistoryBridge.stripInjectedSystemPrompts(
@@ -6067,6 +10083,9 @@ public class Main extends XposedModule {
                             // API callers already supplied their system/developer messages in the
                             // translated prompt. Do not silently prepend the UI's global prompt.
                             if (Boolean.TRUE.equals(tlLocalApiRequest.get())) {
+                                HookLogOverlay.event("HOST", "Local API request passed",
+                                        "body_chars=" + originalBody.length()
+                                                + " prompt_injection=skip");
                                 return chain.proceed();
                             }
                             String conversationId = !isSynthetic
@@ -6077,6 +10096,15 @@ public class Main extends XposedModule {
                             if (conversationId.length() > 0) {
                                 lastInteractiveConversationId = conversationId;
                             }
+                            HookLogOverlay.event("HOST", "Message send started",
+                                    "sid=" + conversationId
+                                            + " body_chars=" + originalBody.length()
+                                            + " attachments="
+                                            + (originalArgs.length > 3
+                                            ? logValue(originalArgs[3]) : "n/a")
+                                            + " thinking="
+                                            + (originalArgs.length > 4
+                                            ? logValue(originalArgs[4]) : "n/a"));
                             boolean forcedNativeReasoning = false;
                             if (nativeProactiveEvent && !isSynthetic
                                     && originalArgs.length > 4) {
@@ -6089,16 +10117,23 @@ public class Main extends XposedModule {
                                     forcedNativeReasoning = true;
                                 }
                             }
+                            long injectStarted = SystemClock.uptimeMillis();
                             String sysPrompt = readPrompt();
+                            java.util.Set<String> enabledLocalTools =
+                                    AgentToolConfig.effectiveTools(
+                                            isProactiveHeartbeatEnabled());
                             String heartbeatTools = !isSynthetic
-                                    && isProactiveHeartbeatEnabled()
                                     && conversationId.length() > 0
-                                    ? HeartbeatToolProtocol.systemPrompt(
+                                    && !enabledLocalTools.isEmpty()
+                                    ? cachedAgentSystemPrompt(
                                             System.currentTimeMillis(),
-                                            heartbeatPlanForConversation(conversationId),
-                                            proactiveHeartbeatIntervalMinutes(),
-                                            conversationId)
+                                            conversationId, enabledLocalTools)
                                     : "";
+                            if (!nativeProactiveEvent
+                                    && heartbeatTools.length() > 0) {
+                                authorizeInteractiveAgentToolScope(
+                                        conversationId);
+                            }
                             String combinedPrompt = combineSystemPrompts(
                                     sysPrompt, heartbeatTools);
                             if (combinedPrompt.length() > 0) {
@@ -6125,15 +10160,32 @@ public class Main extends XposedModule {
                                             + " forced_thinking="
                                             + forcedNativeReasoning);
                                 }
-                                log("injected system prompt (synthetic=" + isSynthetic
-                                        + ", heartbeat_tools="
-                                        + (heartbeatTools.length() > 0) + ")");
+                                long injectCost = SystemClock.uptimeMillis() - injectStarted;
+                                // Do not synchronously write two diagnostic files for every send.
+                                // That I/O ran before ew0 construction completed and could leave
+                                // DeepSeek's default INTERRUPTED placeholder visible for a frame.
+                                if (isSrvLog() || injectCost >= 16L) {
+                                    log("injected system prompt (synthetic=" + isSynthetic
+                                            + ", heartbeat_tools="
+                                            + (heartbeatTools.length() > 0)
+                                            + ", cost_ms=" + injectCost
+                                            + ", chars=" + combinedPrompt.length() + ")");
+                                }
+                                HookLogOverlay.event("NETWORK", "Request modified and submitted",
+                                        "sid=" + conversationId
+                                                + " system_chars=" + combinedPrompt.length()
+                                                + " tools=" + (heartbeatTools.length() > 0)
+                                                + " cost_ms=" + injectCost);
                                 return chain.proceed(args);
                             }
                             if (forcedNativeReasoning) {
                                 return chain.proceed(originalArgs);
                             }
-                        } catch (Throwable t) { log("inject err: " + t); }
+                        } catch (Throwable t) {
+                            HookLogOverlay.event("ERROR", "Request rewrite failed",
+                                    "reason=" + safeThrowableMessage(t));
+                            log("inject err: " + t);
+                        }
                         return chain.proceed();
                     }
                 });
@@ -6149,6 +10201,34 @@ public class Main extends XposedModule {
         if (left.length() == 0) return right;
         if (right.length() == 0) return left;
         return left + "\n\n" + right;
+    }
+
+    private static String cachedAgentSystemPrompt(
+            long now, String conversationId,
+            java.util.Set<String> enabledTools) {
+        String plan = heartbeatPlanForConversation(conversationId);
+        int interval = proactiveHeartbeatIntervalMinutes();
+        // Tool-visible wall time only needs minute accuracy. Exact seconds are supplied by the
+        // get_current_time tool. Reusing the complete contract avoids a large allocation burst on
+        // every send, which could expose DeepSeek's transient INTERRUPTED placeholder for a frame.
+        String key = HeartbeatToolProtocol.cleanScope(conversationId)
+                + "|" + (now / 60_000L) + "|" + interval + "|" + plan
+                + "|" + String.valueOf(enabledTools)
+                + "|" + AgentToolConfig.load().promptStrength;
+        String presentKey = cachedAgentContractKey;
+        String present = cachedAgentContractText;
+        if (key.equals(presentKey) && present.length() > 0) return present;
+        synchronized (Main.class) {
+            if (key.equals(cachedAgentContractKey)
+                    && cachedAgentContractText.length() > 0) {
+                return cachedAgentContractText;
+            }
+            String built = HeartbeatToolProtocol.systemPrompt(
+                    now, plan, interval, conversationId, enabledTools);
+            cachedAgentContractKey = key;
+            cachedAgentContractText = built;
+            return built;
+        }
     }
 
     private void hookHeartbeatToolResponses(ClassLoader cl) {
@@ -6265,12 +10345,18 @@ public class Main extends XposedModule {
                     hook(method).intercept(new Hooker() {
                         @Override public Object intercept(Chain chain) throws Throwable {
                             Object raw = chain.getArg(0);
-                            if (!(raw instanceof String)
-                                    || !HeartbeatToolProtocol.hasToolStatusStyleMarker(
-                                            (String) raw)) {
+                            if (!(raw instanceof String)) {
                                 return chain.proceed();
                             }
                             String marked = (String) raw;
+                            if (HeartbeatToolProtocol.isCompletePrivateTransportBody(marked)) {
+                                Object[] hiddenArgs = chain.getArgs().toArray();
+                                hiddenArgs[0] = "";
+                                return chain.proceed(hiddenArgs);
+                            }
+                            if (!HeartbeatToolProtocol.hasToolStatusStyleMarker(marked)) {
+                                return chain.proceed();
+                            }
                             Object[] args = chain.getArgs().toArray();
                             args[0] = HeartbeatToolProtocol
                                     .stripToolStatusStyleMarkers(marked);
@@ -6322,6 +10408,11 @@ public class Main extends XposedModule {
                         Object raw = chain.getArg(0);
                         if (!(raw instanceof CharSequence)) return chain.proceed();
                         String marked = raw.toString();
+                        if (HeartbeatToolProtocol.isCompletePrivateTransportBody(marked)) {
+                            Object[] hiddenArgs = chain.getArgs().toArray();
+                            hiddenArgs[0] = annotatedTextConstructor.newInstance("");
+                            return chain.proceed(hiddenArgs);
+                        }
                         if (!HeartbeatToolProtocol.hasToolStatusStyleMarker(marked)) {
                             return chain.proceed();
                         }
@@ -6403,6 +10494,11 @@ public class Main extends XposedModule {
                         Object raw = chain.getArg(0);
                         if (!(raw instanceof CharSequence)) return chain.proceed();
                         String rendered = raw.toString();
+                        if (HeartbeatToolProtocol.isCompletePrivateTransportBody(rendered)) {
+                            Object[] hiddenArgs = chain.getArgs().toArray();
+                            hiddenArgs[0] = annotatedTextConstructor.newInstance("");
+                            return chain.proceed(hiddenArgs);
+                        }
                         boolean marked =
                                 HeartbeatToolProtocol.hasToolStatusStyleMarker(rendered);
                         boolean registered =
@@ -6503,11 +10599,13 @@ public class Main extends XposedModule {
     private static void sanitizeLiveHeartbeatResponse(
             Object fragment, boolean appendUpdate, boolean executeTools) {
         if (fragment == null) return;
-        Object stateValue = readHostField(fragment, "c");
+        Object stateValue = liveResponseTextState(fragment);
         Object current = invokeNoArg(stateValue, "getValue");
         if (!(current instanceof String)) return;
         String hostText = (String) current;
         ArrayList<HeartbeatToolProtocol.ToolCall> freshCalls = new ArrayList<>();
+        ArrayList<HeartbeatToolProtocol.RejectedCall> freshRejectedCalls =
+                new ArrayList<>();
         String safe;
         synchronized (HEARTBEAT_RESPONSE_STREAMS) {
             HeartbeatResponseStream stream = HEARTBEAT_RESPONSE_STREAMS.get(fragment);
@@ -6528,13 +10626,61 @@ public class Main extends XposedModule {
             safe = parsed.visibleText;
             stream.visible = safe;
             stream.initialized = true;
-            // API/proactive generations hold the private native lane and parse their own output.
-            // Only an ordinary visible chat response may execute a hidden heartbeat call here.
-            if (executeTools && isProactiveHeartbeatEnabled()
-                    && LOCAL_API_COMPLETION_SLOTS.availablePermits() > 0) {
+            if (executeTools && !parsed.rejectedCalls.isEmpty()
+                    && !stream.invalidControlLogged
+                    && stream.raw.indexOf(HeartbeatToolProtocol.CONTROL_END) >= 0) {
+                stream.invalidControlLogged = true;
+                HeartbeatToolProtocol.RejectedCall rejected =
+                        parsed.rejectedCalls.get(0);
+                HeartbeatToolProtocol.ToolCall call = rejected.call;
+                log("Agent control block rejected before execution"
+                        + " reason=" + rejected.reason
+                        + " tool=" + (call == null ? "" : call.tool)
+                        + " scope=" + (call == null ? "" : call.scope)
+                        + " response_chars=" + stream.raw.length());
+            } else if (executeTools && parsed.calls.isEmpty()
+                    && parsed.rejectedCalls.isEmpty()
+                    && !stream.invalidControlLogged
+                    && stream.raw.indexOf(HeartbeatToolProtocol.CONTROL_START) >= 0
+                    && stream.raw.indexOf(HeartbeatToolProtocol.CONTROL_END) >= 0) {
+                stream.invalidControlLogged = true;
+                log("Agent control block was hidden but could not be parsed"
+                        + " response_chars=" + stream.raw.length());
+            }
+            // The request-side scope lease identifies a real visible-chat generation. Do not use
+            // the local-API semaphore here: an unrelated request can own it for a moment and used
+            // to make this valid call disappear permanently.
+            if (executeTools && AgentToolConfig.enabledFast()) {
                 for (HeartbeatToolProtocol.ToolCall call : parsed.calls) {
+                    if (!isAuthorizedInteractiveAgentToolCall(call)) {
+                        if (!stream.unauthorizedCallLogged) {
+                            stream.unauthorizedCallLogged = true;
+                            log("Agent control block ignored outside authorized visible chat"
+                                    + " scope=" + call.scope + " tool=" + call.tool);
+                        }
+                        continue;
+                    }
                     String fingerprint = call.scope + "|" + call.id + "|" + call.tool;
                     if (stream.executed.add(fingerprint)) freshCalls.add(call);
+                }
+                for (HeartbeatToolProtocol.RejectedCall rejected
+                        : parsed.rejectedCalls) {
+                    HeartbeatToolProtocol.ToolCall call = rejected == null
+                            ? null : rejected.call;
+                    if (!isAuthorizedInteractiveAgentToolCall(call)) {
+                        if (!stream.unauthorizedCallLogged) {
+                            stream.unauthorizedCallLogged = true;
+                            log("Rejected Agent control block ignored outside authorized"
+                                    + " visible chat scope="
+                                    + (call == null ? "" : call.scope));
+                        }
+                        continue;
+                    }
+                    String fingerprint = call.scope + "|" + call.id + "|"
+                            + call.tool + "|rejected";
+                    if (stream.executed.add(fingerprint)) {
+                        freshRejectedCalls.add(rejected);
+                    }
                 }
             }
         }
@@ -6542,6 +10688,50 @@ public class Main extends XposedModule {
         if (!freshCalls.isEmpty()) {
             executeHeartbeatToolCalls(currentHostContext(), freshCalls, true);
         }
+        for (HeartbeatToolProtocol.RejectedCall rejected : freshRejectedCalls) {
+            queueRejectedAgentToolResult(currentHostContext(), rejected);
+        }
+    }
+
+    /**
+     * 2.2.x and 2.3.0 store streamed response text in field c; 2.3.4 inserted an Integer at c and
+     * moved the mutable text state to d. Probe the value contract instead of binding execution to
+     * one obfuscated field name so both host generations keep using the same parser.
+     */
+    private static Object liveResponseTextState(Object fragment) {
+        Object candidate = readHostField(fragment, "c");
+        if (invokeNoArg(candidate, "getValue") instanceof String) return candidate;
+        candidate = readHostField(fragment, "d");
+        if (invokeNoArg(candidate, "getValue") instanceof String) return candidate;
+        return null;
+    }
+
+    private static void authorizeInteractiveAgentToolScope(String value) {
+        String scope = HeartbeatToolProtocol.cleanScope(value);
+        if (scope.length() == 0) return;
+        long now = System.currentTimeMillis();
+        INTERACTIVE_AGENT_TOOL_SCOPES.put(
+                scope, Long.valueOf(now + INTERACTIVE_AGENT_TOOL_SCOPE_TTL_MS));
+        if (INTERACTIVE_AGENT_TOOL_SCOPES.size() <= 32) return;
+        for (Map.Entry<String, Long> entry
+                : INTERACTIVE_AGENT_TOOL_SCOPES.entrySet()) {
+            Long expiry = entry.getValue();
+            if (expiry == null || expiry.longValue() < now) {
+                INTERACTIVE_AGENT_TOOL_SCOPES.remove(
+                        entry.getKey(), expiry);
+            }
+        }
+    }
+
+    private static boolean isAuthorizedInteractiveAgentToolCall(
+            HeartbeatToolProtocol.ToolCall call) {
+        if (call == null) return false;
+        String scope = HeartbeatToolProtocol.cleanScope(call.scope);
+        Long expiry = INTERACTIVE_AGENT_TOOL_SCOPES.get(scope);
+        if (expiry == null) return false;
+        if (expiry.longValue() >= System.currentTimeMillis()) return true;
+        INTERACTIVE_AGENT_TOOL_SCOPES.remove(scope, expiry);
+        return false;
     }
 
     private static boolean setMutableStateValue(Object state, Object value) {
@@ -6565,6 +10755,8 @@ public class Main extends XposedModule {
         String raw = "";
         String visible = "";
         boolean initialized;
+        boolean invalidControlLogged;
+        boolean unauthorizedCallLogged;
         final HashSet<String> executed = new HashSet<>();
     }
 
@@ -6615,7 +10807,8 @@ public class Main extends XposedModule {
                         return r;
                     }
                 });
-                // API 102 坑：调用方若把 sf5 <init> 内联，构造 hook 不会触发 → 该实例 k/l 仍为 null。
+                // If the runtime inlines sf5 construction, the constructor hook does not run and
+                // the instance's k/l fields remain null.
                 // deoptimize 强制运行时不内联该构造器，让所有构造路径都走进 hook。
                 try { boolean d = deoptimize(ctor); log("deopt sf5 ctor ok=" + d); }
                 catch (Throwable t) { log("deopt sf5 ctor err: " + t); }
@@ -6812,6 +11005,11 @@ public class Main extends XposedModule {
                     @Override public Object intercept(Chain chain) throws Throwable {
                         Object r = chain.proceed();
                         try {
+                            String overlayEvent = String.valueOf(chain.getArg(0));
+                            Object overlayData = chain.getArg(1);
+                            HookLogOverlay.serverEvent(overlayEvent,
+                                    overlayData == null ? 0
+                                            : String.valueOf(overlayData).length());
                             if (isSrvLog()) {
                                 String evt = String.valueOf(chain.getArg(0));
                                 Object d = chain.getArg(1);
@@ -6886,7 +11084,7 @@ public class Main extends XposedModule {
         for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
             String cn = e.getClassName();
             if (cn.startsWith("de.robv") || cn.startsWith("java.lang.reflect")
-                    || cn.startsWith("io.github.libxposed") || cn.startsWith("LSPHooker")
+                    || cn.startsWith("LSPHooker")
                     || cn.startsWith("dalvik") || cn.startsWith("com.dsmod")) continue;
             sb.append("\n    ").append(cn).append('.').append(e.getMethodName());
             if (++n >= 25) break;
@@ -6945,14 +11143,35 @@ public class Main extends XposedModule {
                 final String mn = m.getName();
                 if (!mn.equals(HostCompat.messageMethod("S"))
                         && !mn.equals(HostCompat.messageMethod("R"))) continue;
+                final boolean primaryStatus = mn.equals(HostCompat.messageMethod("S"));
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts.length != 1 || pts[0] != String.class) continue;
                 hook(m).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
+                        Object message = chain.getThisObject();
+                        String previousStatus = callStr(
+                                message, primaryStatus ? "D" : "x");
+                        String nextStatus = "";
                         try {
                             Object a0 = chain.getArg(0);
                             String v = a0 instanceof String ? (String) a0 : "";
+                            nextStatus = v;
                             boolean cf = v.contains("CONTENT_FILTER");
+                            String statusDetail = v.length() > 140
+                                    ? v.substring(0, 137) + "…" : v;
+                            String statusLower = statusDetail.toLowerCase(Locale.US);
+                            boolean statusFailure = statusLower.contains("fail")
+                                    || statusLower.contains("error")
+                                    || statusLower.contains("interrupt");
+                            boolean statusSuccess = statusLower.contains("complete")
+                                    || statusLower.contains("success")
+                                    || statusLower.contains("finish")
+                                    || statusLower.contains("done");
+                            HookLogOverlay.event(statusFailure ? "ERROR" : "HOST",
+                                    statusFailure ? "Send or response failed"
+                                            : statusSuccess ? "Send or response completed"
+                                            : "Message status changed",
+                                    "field=" + mn + " value=" + statusDetail);
                             if (isSrvLog()) srvLog("[SR] mv." + mn + "(" + v + ") nocensor=" + isNoCensor());
                             if (cf && isNoCensor()) {
                                 markFilteredOriginal(cl, chain.getThisObject(), "mv." + mn);
@@ -6961,13 +11180,163 @@ public class Main extends XposedModule {
                                 return null;
                             }
                         } catch (Throwable t) { log("status-write block err: " + t); }
-                        return chain.proceed();
+                        Object result = chain.proceed();
+                        try {
+                            maybeAutoContinue(message, previousStatus, nextStatus);
+                        } catch (Throwable t) {
+                            log("auto-continue check failed: "
+                                    + safeThrowableMessage(t));
+                        }
+                        try {
+                            maybeDispatchReplyReady(
+                                    message, previousStatus, nextStatus);
+                        } catch (Throwable t) {
+                            log("reply-ready completion check failed: "
+                                    + safeThrowableMessage(t));
+                        }
+                        return result;
                     }
                 });
                 n++;
             }
             log("hooked mv.S/R x" + n + " (status-write guard)");
         } catch (Throwable t) { log("hookStatusWrite failed: " + t); }
+    }
+
+    private static void maybeAutoContinue(
+            final Object message, String previousStatus, String nextStatus) {
+        if (message == null) return;
+        String role = callStr(message, "A");
+        Integer messageId = callInt(message, "u");
+        String sid = findNativeSessionContainingMessage(message);
+        String responseId = (sid == null ? "unknown" : sid) + ":"
+                + (messageId == null
+                ? Integer.toHexString(System.identityHashCode(message)) : messageId);
+
+        // A successful native resume moves the same message back to WIP/CHECKING. Re-arm the
+        // response here so a later server pause in the same long answer can also be resumed.
+        if ("WIP".equals(nextStatus) || "CHECKING".equals(nextStatus)) {
+            AUTO_CONTINUE_DISPATCHED.remove(responseId);
+            return;
+        }
+        if (!AutoContinuePolicy.shouldResume(
+                isAutoContinueEnabled(), previousStatus, nextStatus, role)) return;
+        if (!isUsableSessionId(sid)) {
+            log("auto-continue skipped: active conversation was not found msg="
+                    + String.valueOf(messageId));
+            return;
+        }
+        final WeakReference<Object> reference = ACTIVE_CHAT_VIEW_MODELS.get(sid);
+        final Object viewModel = reference == null ? null : reference.get();
+        if (reference != null && viewModel == null) {
+            ACTIVE_CHAT_VIEW_MODELS.remove(sid, reference);
+        }
+        if (viewModel == null) {
+            log("auto-continue skipped: chat ViewModel is unavailable sid=" + sid);
+            return;
+        }
+        if (AUTO_CONTINUE_DISPATCHED.putIfAbsent(
+                responseId, SystemClock.elapsedRealtime()) != null) return;
+
+        final String dispatchSid = sid;
+        final String dispatchId = responseId;
+        final Integer dispatchMessageId = messageId;
+        Handler handler = currentMainHandler();
+        if (handler == null) {
+            AUTO_CONTINUE_DISPATCHED.remove(dispatchId);
+            return;
+        }
+        handler.post(new Runnable() {
+            @Override public void run() {
+                if (!isAutoContinueEnabled()) {
+                    AUTO_CONTINUE_DISPATCHED.remove(dispatchId);
+                    return;
+                }
+                try {
+                    dispatchNativeResume(viewModel, message);
+                    log("auto-continued native response sid=" + dispatchSid
+                            + " msg=" + String.valueOf(dispatchMessageId)
+                            + " event=" + HostCompat.resumeMessageEventClass());
+                } catch (Throwable error) {
+                    AUTO_CONTINUE_DISPATCHED.remove(dispatchId);
+                    log("auto-continue native dispatch failed sid=" + dispatchSid
+                            + ": " + safeThrowableMessage(error));
+                }
+            }
+        });
+    }
+
+    private static void dispatchNativeResume(Object viewModel, Object message) throws Throwable {
+        ClassLoader loader = hostClassLoader;
+        if (loader == null) throw new IllegalStateException("host class loader unavailable");
+        Class<?> eventType = Class.forName(
+                HostCompat.resumeMessageEventClass(), false, loader);
+        Constructor<?> eventConstructor = null;
+        for (Constructor<?> candidate : eventType.getDeclaredConstructors()) {
+            Class<?>[] parameterTypes = candidate.getParameterTypes();
+            if (parameterTypes.length == 1
+                    && parameterTypes[0].isAssignableFrom(message.getClass())) {
+                eventConstructor = candidate;
+                break;
+            }
+        }
+        if (eventConstructor == null) {
+            throw new NoSuchMethodException("native resume event constructor");
+        }
+        eventConstructor.setAccessible(true);
+        Object event = eventConstructor.newInstance(message);
+
+        Method eventHandler = null;
+        for (Method candidate : viewModel.getClass().getDeclaredMethods()) {
+            Class<?>[] parameterTypes = candidate.getParameterTypes();
+            if (HostCompat.resumeMessageHandlerMethod().equals(candidate.getName())
+                    && parameterTypes.length == 1
+                    && parameterTypes[0].isAssignableFrom(eventType)) {
+                eventHandler = candidate;
+                break;
+            }
+        }
+        if (eventHandler == null) {
+            throw new NoSuchMethodException("native resume event handler");
+        }
+        eventHandler.setAccessible(true);
+        eventHandler.invoke(viewModel, event);
+    }
+
+    private static void maybeDispatchReplyReady(
+            Object message, String previousStatus, String nextStatus) {
+        if (message == null) return;
+        if (!isReplyReadyNotificationsEnabled()) return;
+        String role = callStr(message, "A");
+        if (!ReplyReadyPolicy.shouldNotify(previousStatus, nextStatus,
+                role, isDeepSeekForeground())) return;
+
+        String sid = findNativeSessionContainingMessage(message);
+        if (sid != null && PENDING_NATIVE_UI_HEARTBEATS.containsKey(sid)) {
+            // Proactive heartbeats own their existing notification path.
+            return;
+        }
+        Integer messageId = callInt(message, "u");
+        String responseId = (sid == null ? "unknown" : sid) + ":"
+                + (messageId == null
+                ? Integer.toHexString(System.identityHashCode(message)) : messageId);
+        long now = SystemClock.elapsedRealtime();
+        for (Map.Entry<String, Long> entry : REPLY_READY_DISPATCHED.entrySet()) {
+            Long at = entry.getValue();
+            if (at == null || now - at.longValue() > REPLY_READY_DEDUPE_MS) {
+                REPLY_READY_DISPATCHED.remove(entry.getKey(), at);
+            }
+        }
+        if (REPLY_READY_DISPATCHED.putIfAbsent(responseId, now) != null) return;
+
+        Context context = currentHostContext();
+        if (context == null) {
+            REPLY_READY_DISPATCHED.remove(responseId);
+            return;
+        }
+        dispatchReplyReady(context, sid, responseId);
+        log("background reply-ready dispatched sid=" + String.valueOf(sid)
+                + " msg=" + String.valueOf(messageId));
     }
 
     // 诊断：hook h83.h(l84) fragment 反序列化选择器
@@ -7003,11 +11372,11 @@ public class Main extends XposedModule {
     private void hookFinalMessageMerge(ClassLoader cl) {
         try {
             final Class<?> tpk = HostCompat.load(cl, "tp");
-            final Field fField = tpk.getDeclaredField("f");
+            final Field fField = tpk.getDeclaredField(HostCompat.sessionMessageMapField());
             fField.setAccessible(true);
             int n = 0;
             for (Method m : tpk.getDeclaredMethods()) {
-                if (!m.getName().equals("u")) continue;
+                if (!m.getName().equals(HostCompat.sessionMergeMethod())) continue;
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts.length != 2 || !List.class.isAssignableFrom(pts[1])) continue;
                 hook(m).intercept(new Hooker() {
@@ -7029,12 +11398,23 @@ public class Main extends XposedModule {
                                     preservePendingFilteredOriginal(cl, tp, msg);
                                     String status = callStr(msg, "D");
                                     String quasi = callStr(msg, "x");
-                                    boolean cf = ResponsePreserver.isFilteredHostMessage(msg);
                                     Integer id = callInt(msg, "u");
+                                    boolean marked = FILTERED_ORIGINAL_MESSAGES.containsKey(msg);
+                                    boolean filterState = containsContentFilterState(status, quasi);
                                     if (isSrvLog()) {
                                         srvLog("[FM] merge idx=" + i + " id=" + id
-                                                + " status=" + status + " quasi=" + quasi + " cf=" + cf);
+                                                + " status=" + status + " quasi=" + quasi
+                                                + " filterState=" + filterState
+                                                + " marked=" + marked);
                                     }
+                                    // The host calls this merge for every normal completion.  P()
+                                    // serialises all fragments, so probing every ordinary message
+                                    // here delays the initial INTERRUPTED -> WIP transition on
+                                    // 2.3.4.  A real replacement is already identified by either
+                                    // its status or the earlier JSON-patch marker.
+                                    if (!nc || (!filterState && !marked)) continue;
+                                    boolean cf = filterState
+                                            || ResponsePreserver.isFilteredHostMessage(msg);
                                     Object existing = id != null && fmap != null ? fmap.get(id) : null;
                                     if (existing != null && existing != msg) {
                                         preservePendingFilteredOriginal(cl, tp, existing);
@@ -7081,13 +11461,15 @@ public class Main extends XposedModule {
     private void hookFinalMessageApply(ClassLoader cl) {
         try {
             final Class<?> tpk = HostCompat.load(cl, "tp");
-            final Field fField = tpk.getDeclaredField("f");
+            final Field fField = tpk.getDeclaredField(HostCompat.sessionMessageMapField());
             fField.setAccessible(true);
             final Class<?> uok = HostCompat.load(cl, "uo");
             int n = 0;
             for (Method m : tpk.getDeclaredMethods()) {
                 final String mn = m.getName();
-                if (!mn.equals("q") && !mn.equals("p") && !mn.equals("a")) continue;
+                if (!mn.equals(HostCompat.sessionReplaceMethod())
+                        && !mn.equals(HostCompat.sessionReplaceWithTextMethod())
+                        && !mn.equals("a")) continue;
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts.length < 1 || !uok.isAssignableFrom(pts[0])) continue;
                 hook(m).intercept(new Hooker() {
@@ -7100,11 +11482,22 @@ public class Main extends XposedModule {
                                 preservePendingFilteredOriginal(cl, tp, msg);
                                 String status = callStr(msg, "D");
                                 String quasi = callStr(msg, "x");
-                                boolean cf = ResponsePreserver.isFilteredHostMessage(msg);
                                 Integer id = callInt(msg, "u");
+                                boolean marked = FILTERED_ORIGINAL_MESSAGES.containsKey(msg);
+                                boolean filterState = containsContentFilterState(status, quasi);
                                 if (isSrvLog())
                                     srvLog("[FA] tp." + mn + " id=" + id + " status=" + status
-                                            + " quasi=" + quasi + " cf=" + cf);
+                                            + " quasi=" + quasi
+                                            + " filterState=" + filterState
+                                            + " marked=" + marked);
+                                // pq.a/t/s are also the hot path for optimistic insertion and
+                                // streaming replacement.  Do not serialise ordinary messages at
+                                // this boundary; only a proven filter event needs preservation.
+                                if (!isNoCensor() || (!filterState && !marked)) {
+                                    return chain.proceed();
+                                }
+                                boolean cf = filterState
+                                        || ResponsePreserver.isFilteredHostMessage(msg);
                                 if (cf && isNoCensor() && id != null) {
                                     Map<?, ?> fmap = (Map<?, ?>) fField.get(tp);
                                     Object existing = fmap != null ? fmap.get(id) : null;
@@ -7154,6 +11547,11 @@ public class Main extends XposedModule {
         } catch (Throwable t) { return null; }
     }
 
+    private static boolean containsContentFilterState(String status, String quasi) {
+        return (status != null && status.contains("CONTENT_FILTER"))
+                || (quasi != null && quasi.contains("CONTENT_FILTER"));
+    }
+
     // 反射调用无参方法返回 int（uo.u()=消息id）
     private static Integer callInt(Object obj, String method) {
         try {
@@ -7193,6 +11591,18 @@ public class Main extends XposedModule {
     }
 
     private static String findNativeSessionContainingMessage(Object message) {
+        try {
+            for (Map.Entry<String, WeakReference<Object>> entry
+                    : ACTIVE_CHAT_SESSIONS.entrySet()) {
+                WeakReference<Object> reference = entry.getValue();
+                Object session = reference == null ? null : reference.get();
+                if (session == null) {
+                    ACTIVE_CHAT_SESSIONS.remove(entry.getKey(), reference);
+                } else if (nativeSessionContainsMessage(session, message)) {
+                    return entry.getKey();
+                }
+            }
+        } catch (Throwable ignored) {}
         Object sessions = NATIVE_SESSION_LIST;
         if (sessions instanceof List) {
             try {
@@ -7227,16 +11637,33 @@ public class Main extends XposedModule {
     }
 
     private String readPrompt() {
+        long now = SystemClock.uptimeMillis();
+        String cached = cachedPromptText;
+        if (now - cachedPromptTextAt < 1000L) return cached;
         try {
             File ef = new File(ENABLED_FILE);
-            if (!ef.exists()) return null;
+            if (!ef.exists()) {
+                cachedPromptText = null;
+                cachedPromptTextAt = now;
+                return null;
+            }
 
             String linked = readSmallText(PROMPT_LINK_FILE);
-            if (linked != null && linked.length() > 0) return linked;
+            if (linked != null && linked.length() > 0) {
+                cachedPromptText = linked;
+                cachedPromptTextAt = now;
+                return linked;
+            }
 
             String copied = readSmallText(PROMPT_FILE);
-            if (copied != null && copied.length() > 0) return copied;
+            if (copied != null && copied.length() > 0) {
+                cachedPromptText = copied;
+                cachedPromptTextAt = now;
+                return copied;
+            }
         } catch (Throwable t) { return null; }
+        cachedPromptText = null;
+        cachedPromptTextAt = now;
         return null;
     }
 
@@ -7908,7 +12335,8 @@ public class Main extends XposedModule {
                 try { deoptimize(method); } catch (Throwable ignored) {}
                 hook(method).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
-                        Object before = readHostField(chain.getThisObject(), "e");
+                        Object before = readHostField(chain.getThisObject(),
+                                HostCompat.editorSessionStateField());
                         HashSet<String> localIds = localOnlySessionIds(cl);
                         if (before instanceof List
                                 && HostCompat.simpleNameIs(before, "uo7")) {
@@ -7917,7 +12345,8 @@ public class Main extends XposedModule {
                         try {
                             return chain.proceed();
                         } finally {
-                            Object after = readHostField(chain.getThisObject(), "e");
+                            Object after = readHostField(chain.getThisObject(),
+                                    HostCompat.editorSessionStateField());
                             if (after instanceof List
                                     && HostCompat.simpleNameIs(after, "uo7")) {
                                 int restored = preserveEditorLocalNativeSessions(
@@ -8099,11 +12528,25 @@ public class Main extends XposedModule {
                                 if (sid != null && FROZEN_SESSION_HEADS.containsKey(sid)) {
                                     boolean localOnly = ChatEditorUi
                                             .localSessionIdsFromAllBackups().contains(sid);
-                                    if (localOnly || isFrozenNativeSessionHydrated(session)) {
-                                        log("skipped remote detail reload for editor-frozen sid="
-                                                + sid + " hydrated="
+                                    if (!HostCompat.isV230()) {
+                                        // 2.2.x: the constructor already loaded the WCDB table, so
+                                        // the reload would only issue the redundant remote detail
+                                        // request that reports the session as server-deleted.
+                                        if (localOnly
+                                                || isFrozenNativeSessionHydrated(session)) {
+                                            log("skipped remote detail reload for editor-frozen"
+                                                    + " sid=" + sid + " hydrated="
+                                                    + isFrozenNativeSessionHydrated(session));
+                                            return null;
+                                        }
+                                    } else {
+                                        // 2.3.0: the reload flow itself drives the local WCDB load
+                                        // (ub1 -> vm9.P) before the detail request, so it must run;
+                                        // the vm9.W hook neutralizes the deletion response for
+                                        // editor-frozen ids.
+                                        log("allowed editor-local detail reload sid=" + sid
+                                                + " localOnly=" + localOnly + " hydrated="
                                                 + isFrozenNativeSessionHydrated(session));
-                                        return null;
                                     }
                                 }
                             }
@@ -8118,6 +12561,58 @@ public class Main extends XposedModule {
             log("installed editor-local remote reload guard za1.E x" + installed);
         } catch (Throwable t) {
             log("hookLocalSessionRemoteReload failed: " + t);
+        }
+    }
+
+    /**
+     * 2.3.0 only: the allowed detail reload runs ub1, which performs the local WCDB load via
+     * vm9.P and then issues the remote detail request via vm9.W.  Editor-frozen sessions have no
+     * server counterpart; short-circuiting W with an empty success result lets the flow finish
+     * without the server-deleted shutdown branch.
+     */
+    private void hookNativeDetailRequest(final ClassLoader cl) {
+        if (!HostCompat.isV230() || HostCompat.isV234()) return;
+        try {
+            Class<?> repository = HostCompat.load(cl, "lj9");
+            Class<?> result = HostCompat.load(cl, "ds5");
+            Constructor<?> okCtor = null;
+            for (Constructor<?> ctor : result.getDeclaredConstructors()) {
+                if (ctor.getParameterTypes().length == 2) {
+                    okCtor = ctor;
+                    break;
+                }
+            }
+            if (okCtor == null) throw new NoSuchMethodException("ds5 ctor");
+            final Constructor<?> okCtorF = okCtor;
+            okCtor.setAccessible(true);
+            int installed = 0;
+            for (Method method : repository.getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if (!"W".equals(method.getName()) || types.length != 4
+                        || !"aq".equals(types[0].getSimpleName())
+                        || !"d22".equals(types[3].getSimpleName())) continue;
+                try { deoptimize(method); } catch (Throwable ignored) {}
+                hook(method).intercept(new Hooker() {
+                    @Override public Object intercept(Chain chain) throws Throwable {
+                        Object session = chain.getArg(0);
+                        Object id = readHostField(session, "a");
+                        String sid = id == null ? null : String.valueOf(id);
+                        if (sid != null && FROZEN_SESSION_HEADS.containsKey(sid)) {
+                            boolean localOnly = ChatEditorUi
+                                    .localSessionIdsFromAllBackups().contains(sid);
+                            if (localOnly) {
+                                log("short-circuited editor-local detail request sid=" + sid);
+                                return okCtorF.newInstance((Object) null, (Object) null);
+                            }
+                        }
+                        return chain.proceed();
+                    }
+                });
+                installed++;
+            }
+            log("installed editor-local detail request guard vm9.W x" + installed);
+        } catch (Throwable t) {
+            log("hookNativeDetailRequest failed: " + t);
         }
     }
 
@@ -8187,6 +12682,10 @@ public class Main extends XposedModule {
      * replace the selected conversation with a new empty session.
      */
     private void hookLocalSessionDeletedFlow(final ClassLoader cl) {
+        if (HostCompat.isV234()) {
+            hookV234LocalSessionDeletedFlow(cl);
+            return;
+        }
         try {
             Class<?> viewModelType = HostCompat.load(cl, "za1");
             Class<?> eventType = HostCompat.load(cl, "bu0");
@@ -8252,6 +12751,70 @@ public class Main extends XposedModule {
         }
     }
 
+    /**
+     * 2.3.4 replaced the old au0(op5) deletion event with a result envelope consumed by
+     * ChatSessionComponent.M. Both store channels keep the same structural path:
+     * result.a -> error.a -> integer code. Hook that stable shape instead of channel-specific
+     * obfuscated names so local editor conversations cannot be mistaken for cloud deletions.
+     */
+    private void hookV234LocalSessionDeletedFlow(final ClassLoader cl) {
+        try {
+            Class<?> viewModelType = HostCompat.load(cl, "za1");
+            int installed = 0;
+            for (Method method : viewModelType.getDeclaredMethods()) {
+                Class<?>[] types = method.getParameterTypes();
+                if (!"M".equals(method.getName()) || types.length != 2
+                        || method.getReturnType() != void.class) continue;
+                try { deoptimize(method); } catch (Throwable ignored) {}
+                hook(method).intercept(new Hooker() {
+                    @Override public Object intercept(Chain chain) throws Throwable {
+                        try {
+                            Integer code = v234CompletionErrorCode(chain.getArg(0));
+                            if (code != null && code.intValue() == 1) {
+                                Object session = invokeNoArg(chain.getThisObject(), "G");
+                                Object id = readHostField(session, "a");
+                                String sid = id == null ? null : String.valueOf(id);
+                                HashSet<String> localIds =
+                                        ChatEditorUi.localSessionIdsFromAllBackups();
+                                String pending = PENDING_LOCAL_OPEN_SID;
+                                boolean pendingFresh = pending != null
+                                        && System.currentTimeMillis() - PENDING_LOCAL_OPEN_AT
+                                        < 30000L && localIds.contains(pending);
+                                boolean directLocal = sid != null && localIds.contains(sid);
+                                log("observed 2.3.4 deletion result currentSid=" + sid
+                                        + " pendingLocal=" + pending + " direct="
+                                        + directLocal + " pendingFresh=" + pendingFresh);
+                                if (directLocal || pendingFresh) {
+                                    log("suppressed 2.3.4 server-deleted result for editor-local sid="
+                                            + (directLocal ? sid : pending));
+                                    return null;
+                                }
+                            }
+                        } catch (Throwable t) {
+                            log("inspect 2.3.4 local deletion result failed: " + t);
+                        }
+                        return chain.proceed();
+                    }
+                });
+                installed++;
+            }
+            log("installed 2.3.4 editor-local deletion guard "
+                    + viewModelType.getSimpleName() + ".M x" + installed);
+        } catch (Throwable t) {
+            log("hookV234LocalSessionDeletedFlow failed: " + t);
+        }
+    }
+
+    private static Integer v234CompletionErrorCode(Object result) {
+        if (result == null) return null;
+        Object envelope = readHostField(result, "a");
+        if (envelope == null) return null;
+        Object error = readHostField(envelope, "a");
+        if (error == null) return null;
+        Object code = readHostField(error, "a");
+        return code instanceof Number ? Integer.valueOf(((Number) code).intValue()) : null;
+    }
+
     /** Removes the gateway's reusable server sessions before DeepSeek persists/renders its page. */
     private void hookLocalApiSessionVisibility(final ClassLoader cl) {
         try {
@@ -8299,19 +12862,22 @@ public class Main extends XposedModule {
             int installed = 0;
             for (Method method : mc.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
+                final int clickIndex = HostCompat.isV234() ? 5 : 4;
+                final int eventIndex = HostCompat.isV234() ? 6 : 5;
+                int expectedLength = HostCompat.isV234() ? 14 : 13;
                 if (!HostCompat.method("mc", "f").equals(method.getName())
-                        || types.length != 13) continue;
+                        || types.length != expectedLength) continue;
                 if (!List.class.isAssignableFrom(types[0])
-                        || !ib3.isAssignableFrom(types[4])
-                        || !ib3.isAssignableFrom(types[5])) continue;
+                        || !ib3.isAssignableFrom(types[clickIndex])
+                        || !ib3.isAssignableFrom(types[eventIndex])) continue;
                 final Class<?> sessionListType = types[0];
                 hook(method).intercept(new Hooker() {
                     @Override public Object intercept(Chain chain) throws Throwable {
                         Object[] replacement = null;
                         try {
                             Object[] args = chain.getArgs().toArray();
-                            if (args[0] instanceof List && args[4] != null) {
-                                hookNativeSessionClickCallback(args[4], cl);
+                            if (args[0] instanceof List && args[clickIndex] != null) {
+                                hookNativeSessionClickCallback(args[clickIndex], cl);
                                 List source = (List) args[0];
                                 List visible = null;
                                 for (Object session : new ArrayList(source)) {
@@ -8369,8 +12935,8 @@ public class Main extends XposedModule {
                                     }
                                 }
                                 NATIVE_SESSION_LIST = args[0];
-                                NATIVE_SESSION_CLICK = args[4];
-                                NATIVE_SESSION_EVENTS = args[5];
+                                NATIVE_SESSION_CLICK = args[clickIndex];
+                                NATIVE_SESSION_EVENTS = args[eventIndex];
                                 if (args[0] != source) replacement = args;
                             }
                         } catch (Throwable t) { log("capture native session navigator failed: " + t); }
@@ -8432,7 +12998,10 @@ public class Main extends XposedModule {
                                 Object id = readHostField(session, "a");
                                 String sid = id == null ? null : String.valueOf(id);
                                 if (sid != null && sid.length() > 0 && !"null".equals(sid)) {
-                                    if (FROZEN_SESSION_HEADS.containsKey(sid)) {
+                                    if (FROZEN_SESSION_HEADS.containsKey(sid)
+                                            && !HostCompat.isV230()) {
+                                        // 2.3.0 abandoned the wg1/pe case-7 mapper used here;
+                                        // the allowed detail reload loads via ub1 -> vm9.P instead.
                                         hydrateFrozenNativeSession(cl, session, sid);
                                     }
                                     HashSet<String> locals =
@@ -8645,9 +13214,15 @@ public class Main extends XposedModule {
                             if (isUsableSessionId(sid)) {
                                 ACTIVE_CHAT_SESSIONS.put(
                                         sid, new WeakReference<Object>(session));
-                                ACTIVE_CHAT_VIEW_MODELS.put(
-                                        sid, new WeakReference<Object>(
-                                                chain.getThisObject()));
+                                Object owner = chain.getThisObject();
+                                WeakReference<Object> previousViewModel =
+                                        ACTIVE_CHAT_VIEW_MODELS.put(
+                                                sid, new WeakReference<Object>(owner));
+                                if (previousViewModel == null
+                                        || previousViewModel.get() != owner) {
+                                    recoverAgentRunsForScope(
+                                            currentHostContext(), sid);
+                                }
                                 NativeHeartbeatHistory pending =
                                         PENDING_NATIVE_HEARTBEAT_HISTORIES.get(sid);
                                 if (pending != null
@@ -8678,9 +13253,11 @@ public class Main extends XposedModule {
     private void hookProactiveVisibleThreadFilter(final ClassLoader cl) {
         try {
             Class<?> sessionType = HostCompat.load(cl, "tp");
+            String visibleThreadMethod = HostCompat.isV234() ? "v" : "s";
+            final boolean mutableSnapshotList = HostCompat.isV234();
             int installed = 0;
             for (Method method : sessionType.getDeclaredMethods()) {
-                if (!"s".equals(method.getName())
+                if (!visibleThreadMethod.equals(method.getName())
                         || method.getParameterTypes().length != 0
                         || !List.class.isAssignableFrom(method.getReturnType())) continue;
                 hook(method).intercept(new Hooker() {
@@ -8691,11 +13268,27 @@ public class Main extends XposedModule {
                         ArrayList<Object> kept = null;
                         for (int index = 0; index < source.size(); index++) {
                             Object message = source.get(index);
-                            if (!isAnonymousHeartbeatUserMessage(message)) continue;
+                            if (!isHiddenAgentTransportUserMessage(message)) continue;
                             if (kept == null) kept = new ArrayList<Object>(source);
                             kept.remove(message);
                         }
                         if (kept == null) return result;
+                        if (mutableSnapshotList) {
+                            int removedCount = source.size() - kept.size();
+                            try {
+                                for (int index = source.size() - 1; index >= 0; index--) {
+                                    if (isHiddenAgentTransportUserMessage(source.get(index))) {
+                                        source.remove(index);
+                                    }
+                                }
+                                log("visible-thread filter removed hidden messages="
+                                        + removedCount);
+                                return result;
+                            } catch (Throwable mutationError) {
+                                log("native visible-thread mutation failed: "
+                                        + safeThrowableMessage(mutationError));
+                            }
+                        }
                         try {
                             Constructor<?> constructor =
                                     result.getClass().getDeclaredConstructor();
@@ -8703,6 +13296,8 @@ public class Main extends XposedModule {
                             Object filtered = constructor.newInstance();
                             if (!(filtered instanceof List)) return result;
                             ((List) filtered).addAll(kept);
+                            log("visible-thread filter removed hidden messages="
+                                    + (source.size() - kept.size()));
                             return filtered;
                         } catch (Throwable copyError) {
                             log("native proactive visible-thread copy failed: "
@@ -8713,9 +13308,173 @@ public class Main extends XposedModule {
                 });
                 installed++;
             }
-            log("installed native proactive visible-thread filter tp.s x" + installed);
+            log("installed native proactive visible-thread filter "
+                    + sessionType.getName() + "." + visibleThreadMethod + " x" + installed);
         } catch (Throwable error) {
             log("hook proactive visible-thread filter failed: " + error);
+        }
+    }
+
+    /**
+     * 2.3.0 Compose reads the message list straight off the tp.a field through the o5 state
+     * lambda (id3.u, case 11), bypassing aq.s(). aq.s() is still filtered for non-Compose
+     * readers; this hook covers the actual render path.
+     */
+    private void hookComposeVisibleThreadState(final ClassLoader cl) {
+        if (!HostCompat.isV230() || HostCompat.isV234()) return;
+        try {
+            Class<?> stateLambda = cl.loadClass("o5");
+            Method u = stateLambda.getDeclaredMethod("u");
+            hook(u).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    Object result = chain.proceed();
+                    if (!(result instanceof List)) return result;
+                    List source = (List) result;
+                    boolean anyHidden = false;
+                    for (int index = 0; index < source.size(); index++) {
+                        if (isHiddenAgentTransportUserMessage(source.get(index))) {
+                            anyHidden = true;
+                            break;
+                        }
+                    }
+                    if (!anyHidden) return result;
+                    ArrayList<Object> kept = new ArrayList<Object>(source.size());
+                    for (Object message : source) {
+                        if (!isHiddenAgentTransportUserMessage(message)) kept.add(message);
+                    }
+                    long now = System.currentTimeMillis();
+                    if (now - lastComposeStateLog > 5000L) {
+                        lastComposeStateLog = now;
+                        log("compose visible state filtered hidden="
+                                + (source.size() - kept.size()));
+                    }
+                    return kept;
+                }
+            });
+            log("installed compose visible-thread state filter o5.u");
+        } catch (Throwable error) {
+            log("hook compose visible-thread state filter failed: " + error);
+        }
+    }
+
+    /**
+     * s11.a is the 2.3.0 message-list composable: it iterates the session sr7 straight off the
+     * field and renders every cp as a bubble, bypassing aq.s(). Hidden transport messages are
+     * removed from the list in place so the UI never shows them; the model context is
+     * server-side (the completion request carries only the current message), so removal here
+     * cannot break the agent loop.
+     */
+    private void hookS11RenderFilter(final ClassLoader cl) {
+        if (!HostCompat.isV230() || HostCompat.isV234()) return;
+        try {
+            Class<?> s11 = cl.loadClass("s11");
+            int installed = 0;
+            for (Method method : s11.getDeclaredMethods()) {
+                if (!"a".equals(method.getName())) continue;
+                Class<?>[] types = method.getParameterTypes();
+                if (types.length != 10) continue;
+                if (!List.class.isAssignableFrom(types[4])) continue;
+                hook(method).intercept(new Hooker() {
+                    @Override public Object intercept(Chain chain) throws Throwable {
+                        Object raw = chain.getArg(4);
+                        if (raw instanceof List) {
+                            List list = (List) raw;
+                            int removed = 0;
+                            for (int i = list.size() - 1; i >= 0; i--) {
+                                if (isHiddenAgentTransportUserMessage(list.get(i))) {
+                                    try {
+                                        list.remove(i);
+                                        removed++;
+                                    } catch (Throwable ignored) {}
+                                }
+                            }
+                            if (removed > 0) {
+                                log("s11 render list=" + Integer.toHexString(
+                                        System.identityHashCode(list))
+                                        + " size=" + list.size()
+                                        + " removedHidden=" + removed);
+                            }
+                        }
+                        return chain.proceed();
+                    }
+                });
+                installed++;
+            }
+            log("installed s11 render filter x" + installed);
+        } catch (Throwable error) {
+            log("hook s11 render filter failed: " + error);
+        }
+    }
+
+    /**
+     * cs1.m renders the composer/attachment rows from an sr7 of mz0 items. The module's own
+     * screenshot uploads appear there before their hidden message is sent; strip those rows so
+     * the capture is never visible on the user side.
+     */
+    private void hookCs1RenderFilter(final ClassLoader cl) {
+        if (!HostCompat.isV230() || HostCompat.isV234()) return;
+        try {
+            Class<?> cs1 = cl.loadClass("cs1");
+            int installed = 0;
+            for (Method method : cs1.getDeclaredMethods()) {
+                if (!"m".equals(method.getName())) continue;
+                Class<?>[] types = method.getParameterTypes();
+                if (types.length != 9) continue;
+                if (!List.class.isAssignableFrom(types[0])) continue;
+                hook(method).intercept(new Hooker() {
+                    @Override public Object intercept(Chain chain) throws Throwable {
+                        Object raw = chain.getArg(0);
+                        if (raw instanceof List) {
+                            List list = (List) raw;
+                            int removed = 0;
+                            for (int i = list.size() - 1; i >= 0; i--) {
+                                if (isModuleHiddenAttachment(list.get(i))) {
+                                    try {
+                                        list.remove(i);
+                                        removed++;
+                                    } catch (Throwable ignored) {}
+                                }
+                            }
+                            if (removed > 0) {
+                                StringBuilder detail = new StringBuilder();
+                                for (int i = 0; i < list.size() && i < 4; i++) {
+                                    Object item = list.get(i);
+                                    String name = "?";
+                                    try {
+                                        Object field = readHostField(item, "a");
+                                        if (field != null) name = String.valueOf(field);
+                                    } catch (Throwable ignored) {}
+                                    detail.append(" [").append(i).append("]")
+                                            .append(item == null ? "null"
+                                            : item.getClass().getSimpleName())
+                                            .append(":").append(name);
+                                }
+                                log("cs1.m list=" + Integer.toHexString(
+                                        System.identityHashCode(list))
+                                        + " size=" + list.size()
+                                        + " removedHidden=" + removed
+                                        + detail);
+                            }
+                        }
+                        return chain.proceed();
+                    }
+                });
+                installed++;
+            }
+            log("installed cs1.m attachment filter x" + installed);
+        } catch (Throwable error) {
+            log("hook cs1.m attachment filter failed: " + error);
+        }
+    }
+
+    private static boolean isModuleHiddenAttachment(Object item) {
+        if (item == null || ACTIVE_HIDDEN_ATTACHMENT_NAMES.isEmpty()) return false;
+        try {
+            Object name = readHostField(item, "a");
+            return name instanceof String
+                    && ACTIVE_HIDDEN_ATTACHMENT_NAMES.contains(name);
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
@@ -8910,14 +13669,26 @@ public class Main extends XposedModule {
         return "";
     }
 
-    private static String visibleAssistantMessageText(Object message) {
-        Object fragmentsValue = readHostField(message, "t");
-        if (!(fragmentsValue instanceof List)) {
-            fragmentsValue = invokeNoArg(message, "l");
+    /**
+     * 2.3.0 moved message fragments from field t / method l() to field n (jw0, a List);
+     * 2.2.x keeps the historical layout. Never translated as a single field by
+     * staticMessageField, so probe the v230 layout first.
+     */
+    private static List messageFragments(Object message) {
+        if (message == null) return null;
+        Object value = readHostField(message, "n");
+        if (!(value instanceof List)) value = readHostField(message, "t");
+        if (!(value instanceof List)) {
+            value = invokeNoArg(message, HostCompat.messageMethod("l"));
         }
-        if (!(fragmentsValue instanceof List)) return "";
+        return value instanceof List ? (List) value : null;
+    }
+
+    private static String visibleAssistantMessageText(Object message) {
+        List fragmentsValue = messageFragments(message);
+        if (fragmentsValue == null) return "";
         StringBuilder text = new StringBuilder();
-        for (Object fragment : (List) fragmentsValue) {
+        for (Object fragment : fragmentsValue) {
             String type = String.valueOf(readHostField(fragment, "a"));
             if (!"RESPONSE".equals(type)
                     && !"TEMPLATE_RESPONSE".equals(type)) continue;
@@ -8931,10 +13702,18 @@ public class Main extends XposedModule {
 
     private static boolean isAnonymousHeartbeatUserMessage(Object message) {
         if (message == null) return false;
-        Object role = invokeNoArg(message, "A");
+        Object role = invokeNoArg(message, HostCompat.messageMethod("A"));
         if (role == null) role = fieldByName(message, "h");
         return "USER".equals(String.valueOf(role))
                 && messageContainsAnonymousHeartbeatEvent(message);
+    }
+
+    private static boolean isHiddenAgentTransportUserMessage(Object message) {
+        if (message == null) return false;
+        Object role = invokeNoArg(message, HostCompat.messageMethod("A"));
+        if (role == null) role = fieldByName(message, "h");
+        return "USER".equals(String.valueOf(role))
+                && messageContainsHiddenAgentTransport(message);
     }
 
     private void scheduleRealSessionProbe() {
@@ -9008,7 +13787,7 @@ public class Main extends XposedModule {
         return out;
     }
 
-    static boolean openNativeSession(String sid) {
+    static boolean openNativeSession(final String sid) {
         if (sid == null || sid.length() == 0) return false;
         if (isSessionRecentlyDeleted(sid)) return false;
         Object sessions = NATIVE_SESSION_LIST;
@@ -9017,20 +13796,83 @@ public class Main extends XposedModule {
             log("native session navigation unavailable: host sidebar state not captured");
             return false;
         }
+        final Object session = findNativeSession(sid);
+        if (session == null) return false;
+        final Handler handler = currentMainHandler();
+        if (handler == null) return invokeHostOneArg(click, session);
+        // 宿主若停在设置路由，侧栏点击只加载会话不切页，设置页仍盖在中间。
+        // 先按宿主返回逻辑退出设置路由（最多 6 层），回到 chat 主路由后再触发点击。
+        handler.post(new Runnable() {
+            public void run() { navigateHomeThenOpen(handler, click, session, sid, 0); }
+        });
+        return true;
+    }
+
+    private static void navigateHomeThenOpen(final Handler handler, final Object click,
+                                             final Object session, final String sid, final int attempt) {
         try {
-            for (Object session : (List) sessions) {
-                Object id = readHostField(session, "a");
-                if (!sid.equals(String.valueOf(id))) continue;
+            Object nav = MODULE == null ? null : MODULE.navController.get();
+            String route = nav == null ? null : currentRoute(nav);
+            if (route == null || !isSettingsRootRouteName(route) || attempt >= 6) {
                 if (invokeHostOneArg(click, session)) {
                     log("native session navigation sid=" + sid);
-                    return true;
+                } else {
+                    log("native session click failed sid=" + sid);
                 }
-                break;
+                return;
+            }
+            if (invokeNavPop(nav)) {
+                handler.postDelayed(new Runnable() {
+                    public void run() { navigateHomeThenOpen(handler, click, session, sid, attempt + 1); }
+                }, 120L);
+            } else {
+                if (invokeHostOneArg(click, session)) {
+                    log("native session navigation sid=" + sid);
+                }
             }
         } catch (Throwable t) {
-            log("native session navigation failed: " + t);
+            log("exit settings route failed: " + t);
+            try {
+                if (invokeHostOneArg(click, session)) log("native session navigation sid=" + sid);
+            } catch (Throwable ignored) {}
         }
-        return false;
+    }
+
+    private static Method findNavPopMethod() {
+        try {
+            ClassLoader cl = Thread.currentThread().getContextClassLoader();
+            if (cl == null) cl = Main.class.getClassLoader();
+            Class<?> gf8 = HostCompat.load(cl, "gf8");
+            for (Method m : gf8.getDeclaredMethods()) {
+                if (m.getName().equals("A0") && m.getParameterTypes().length == 1) {
+                    m.setAccessible(true);
+                    return m;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static boolean invokeNavPop(Object nav) {
+        Method pop = findNavPopMethod();
+        if (pop == null || nav == null) return false;
+        try {
+            if (Modifier.isStatic(pop.getModifiers())) {
+                pop.invoke(null, nav);
+                return true;
+            }
+            // 实例方法：宿主通常以单例持有（如 ii8.a）
+            try {
+                java.lang.reflect.Field singleton = pop.getDeclaringClass().getDeclaredField("a");
+                singleton.setAccessible(true);
+                pop.invoke(singleton.get(null), nav);
+                return true;
+            } catch (Throwable ignored) {
+                return false;
+            }
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static void consumeHeartbeatConversationIntent(
@@ -9298,6 +14140,10 @@ public class Main extends XposedModule {
                 hideButton();
             } else {
                 log("route still settings: " + route);
+                // The settings composable is renamed independently of the navigation route on
+                // recent Play builds.  Once the route itself is identified, add the entry here as
+                // a second stable path instead of waiting for a brittle method-name hook.
+                main.post(new Runnable() { public void run() { showButton(); } });
             }
         } catch (Throwable t) { log("sync route failed: " + t); }
     }
@@ -9398,6 +14244,10 @@ public class Main extends XposedModule {
 
     private void showButton() {
         try {
+            if (nativeSettingsRowHooked && isNativeSettingsEntryEnabled()) {
+                hideButton();
+                return;
+            }
             final Activity act = curAct.get();
             if (act == null || act.isFinishing()) return;
 
@@ -9499,7 +14349,7 @@ public class Main extends XposedModule {
                 Object r = chain.proceed();
                 try {
                     Object reqObj = args != null && args.length > 0 ? args[0] : null;
-                    // 关键：不能把返回值换成 Proxy(会被 libxposed 强转成声明返回类型 b41 而 CCE 闪退)。
+                    // 关键：不能把返回值换成 Proxy（宿主会按声明返回类型强转并闪退）。
                     // 改为：原样返回真实 b41，但把该 b41 实例登记下来；等它被 collect(b41.b) 时再跑中继。
                     registerRelayFlow(reqObj, r, chain.getThisObject());
                 } catch (Throwable t) { extLog("[RELAY] register err " + t + "\n" + stackToString(t)); }
@@ -9598,8 +14448,18 @@ public class Main extends XposedModule {
                                                 + " sid=" + sid);
                                     }
                                 }
-                                int cleaned = HistoryBridge.sanitizeRepositoryRows(args);
-                                if (cleaned > 0) log("history repository prompts cleaned=" + cleaned);
+                                // 2.3.4 reuses these exact row instances for the optimistic
+                                // message currently being rendered. Mutating their fragments in
+                                // place makes Compose briefly classify the just-sent row as a
+                                // failed history load. The online-history bridge and the startup
+                                // database migration already remove our private wrapper before it
+                                // can become visible, so leave live 2.3.4 rows untouched here.
+                                if (!HostCompat.isV234()) {
+                                    int cleaned = HistoryBridge.sanitizeRepositoryRows(args);
+                                    if (cleaned > 0) {
+                                        log("history repository prompts cleaned=" + cleaned);
+                                    }
+                                }
                                 preserveImagesBeforeLocalWrite(cl, chain.getThisObject(), args);
                             } catch (Throwable t) {
                                 extLog("[HISTORY] repository preserve err: " + t + "\n" + stackToString(t));
@@ -9681,7 +14541,7 @@ public class Main extends XposedModule {
         for (Object message : messages) {
             if (message == null
                     || !"USER".equals(String.valueOf(fieldByName(message, "h")))
-                    || !messageContainsAnonymousHeartbeatEvent(message)) continue;
+                    || !messageContainsHiddenAgentTransport(message)) continue;
             Integer id = intField(message, "f");
             if (id != null) {
                 hiddenParents.put(id, intField(message, "g"));
@@ -9723,12 +14583,18 @@ public class Main extends XposedModule {
     }
 
     private static boolean messageContainsAnonymousHeartbeatEvent(Object message) {
-        Object fragmentsValue = fieldByName(message, "t");
-        if (!(fragmentsValue instanceof List)) {
-            fragmentsValue = invokeNoArg(message, "l");
-        }
-        if (!(fragmentsValue instanceof List)) return false;
-        for (Object fragment : (List) fragmentsValue) {
+        return messageContainsPrivateTransport(message, false);
+    }
+
+    private static boolean messageContainsHiddenAgentTransport(Object message) {
+        return messageContainsPrivateTransport(message, true);
+    }
+
+    private static boolean messageContainsPrivateTransport(
+            Object message, boolean includeToolResults) {
+        List fragmentsValue = messageFragments(message);
+        if (fragmentsValue == null) return false;
+        for (Object fragment : fragmentsValue) {
             boolean request = HostCompat.simpleNameIs(fragment, "xs7")
                     || "REQUEST".equals(String.valueOf(fieldByName(fragment, "a")));
             if (!request) continue;
@@ -9739,19 +14605,136 @@ public class Main extends XposedModule {
             // sync. Only the post-system-wrapper body of a transport event may be folded.
             String body = HistoryBridge.stripInjectedSystemPrompts(
                     (String) content).trim();
-            if (body.startsWith(HeartbeatToolProtocol.EVENT_START)
-                    && body.indexOf(HeartbeatToolProtocol.EVENT_END,
-                            HeartbeatToolProtocol.EVENT_START.length()) >= 0) {
+            if (HeartbeatToolProtocol.isCompleteHeartbeatEventBody(body)
+                    || (includeToolResults
+                    && HeartbeatToolProtocol.isCompleteToolResultBody(body))) {
                 return true;
             }
         }
         return false;
     }
 
-    // 3) 发送点捕获完整 List<fp>（图片唯一完整来源）及 tp.f() 当前会话模型。
+    // 3) 发送点捕获完整 List<fp> 及 tp.f() 当前会话模型。
+    // 普通文件必须保留为 DeepSeek 原生附件；只有 is_image=true 的 fp 才进入视觉中继。
     private void installExpertImageFpCapture(final ClassLoader cl) {
+        if (HostCompat.isV234()) {
+            if (HostCompat.isGooglePlay()) {
+                hookSendPointFps234(cl, "xx0");
+                hookSendPointFps234(cl, "ix0");
+                hookSendPointFps234(cl, "ox0");
+            } else {
+                hookSendPointFps234(cl, "ew0");
+                hookSendPointFps234(cl, "pv0");
+                hookSendPointFps234(cl, "vv0");
+            }
+            return;
+        }
         hookSendPointFps(cl, "fu0", true);
         hookSendPointFps(cl, "uu0", false);
+    }
+
+    /** 2.3.4 builds the request inside a suspend lambda named x(Object). Capture the lambda's
+     * native attachment list and pq/lq session model immediately before it enters transport. */
+    private void hookSendPointFps234(final ClassLoader cl, final String className) {
+        try {
+            // These R8 classes live in the default package. "defpackage" is only JADX's
+            // source-directory label and must never be included in ClassLoader lookups.
+            Class<?> type = cl.loadClass(className);
+            Method send = null;
+            for (Method candidate : type.getDeclaredMethods()) {
+                Class<?>[] params = candidate.getParameterTypes();
+                if ("x".equals(candidate.getName()) && params.length == 1
+                        && params[0] == Object.class) {
+                    send = candidate;
+                    break;
+                }
+            }
+            if (send == null) return;
+            hook(send).intercept(new Hooker() {
+                @Override public Object intercept(Chain chain) throws Throwable {
+                    if (!isExpertRelayEnabled()) return chain.proceed();
+                    tlPendingFps.remove();
+                    tlPendingModel.remove();
+                    try {
+                        Object self = chain.getThisObject();
+                        List attachments = findSendPointAttachments234(self);
+                        String model = findSendPointModel234(self);
+                        if (attachments != null && !attachments.isEmpty()) {
+                            tlPendingFps.set(attachments);
+                            if (model != null) tlPendingModel.set(model);
+                            extLog("[RELAY] send-point " + className
+                                    + " attachments=" + attachments.size()
+                                    + " images=" + countImageFpList(attachments)
+                                    + " effectiveModel=" + model);
+                        }
+                        return chain.proceed();
+                    } finally {
+                        tlPendingFps.remove();
+                        tlPendingModel.remove();
+                    }
+                }
+            });
+            log("installed 2.3.4 send-point attachment capture on "
+                    + className + ".x");
+        } catch (Throwable error) {
+            log("2.3.4 send-point capture skipped " + className + ": "
+                    + safeThrowableMessage(error));
+        }
+    }
+
+    private static List findSendPointAttachments234(Object sendPoint) {
+        if (sendPoint == null) return null;
+        for (Field field : sendPoint.getClass().getDeclaredFields()) {
+            try {
+                if (Modifier.isStatic(field.getModifiers())) continue;
+                field.setAccessible(true);
+                Object value = field.get(sendPoint);
+                if (value instanceof List && looksLikeNativeAttachmentList((List) value)) {
+                    return (List) value;
+                }
+                if (value == null) continue;
+                for (Method method : value.getClass().getDeclaredMethods()) {
+                    if (!"n".equals(method.getName())
+                            || method.getParameterTypes().length != 0
+                            || !List.class.isAssignableFrom(method.getReturnType())) continue;
+                    method.setAccessible(true);
+                    Object result = method.invoke(value);
+                    if (result instanceof List && looksLikeNativeAttachmentList((List) result)) {
+                        return (List) result;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static boolean looksLikeNativeAttachmentList(List values) {
+        if (values == null) return false;
+        if (values.isEmpty()) return true;
+        Object first = values.get(0);
+        if (first == null) return false;
+        return HostCompat.simpleNameIs(first, "fp")
+                || fieldByName(first, "k") instanceof Boolean;
+    }
+
+    private static String findSendPointModel234(Object sendPoint) {
+        if (sendPoint == null) return null;
+        for (Field field : sendPoint.getClass().getDeclaredFields()) {
+            try {
+                if (Modifier.isStatic(field.getModifiers())) continue;
+                field.setAccessible(true);
+                Object value = field.get(sendPoint);
+                if (value == null) continue;
+                Method getter = value.getClass().getDeclaredMethod("g");
+                if (getter.getReturnType() != String.class) continue;
+                getter.setAccessible(true);
+                Object result = getter.invoke(value);
+                String model = result == null ? "" : String.valueOf(result).trim();
+                if ("default".equals(model) || "vision".equals(model)
+                        || "expert".equals(model)) return model;
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 
     private void hookSendPointFps(final ClassLoader cl, final String cls, final boolean directList) {
@@ -9774,12 +14757,14 @@ public class Main extends XposedModule {
                                 Object v = kv == null ? null : invokeNoArg(kv, "l");    // kv.l() = List<fp>
                                 if (v instanceof List) fps = (List) v;
                             }
+                            int attachmentCount = fps == null ? 0 : fps.size();
                             int imageCount = countImageFpList(fps);
-                            if (imageCount > 0) {
+                            if (attachmentCount > 0) {
                                 String model = readSendPointModel(chain.getThisObject(), directList);
                                 tlPendingFps.set(fps);
                                 if (model != null) tlPendingModel.set(model);
-                                extLog("[RELAY] send-point " + cls + " images=" + imageCount
+                                extLog("[RELAY] send-point " + cls + " attachments="
+                                        + attachmentCount + " images=" + imageCount
                                         + " effectiveModel=" + model);
                             }
                         } catch (Throwable t) {
@@ -10416,8 +15401,18 @@ public class Main extends XposedModule {
         if (!HostCompat.simpleNameIs(reqObj, "ew0")) return false;
         Object files = fieldByName(reqObj, "d");
         boolean hasFiles = files instanceof java.util.List && !((java.util.List) files).isEmpty();
+        // Do not feed documents, archives or source files to the vision endpoint.  Their remote
+        // file ids stay on the original expert request, preserving byte-for-byte host upload and
+        // the native file parser.  The captured fp list is the host's authoritative MIME flag.
+        List capturedFiles = ew0Fps.get(reqObj);
+        boolean hasImages = countImageFpList(capturedFiles) > 0;
         Object explicitModel = fieldByName(reqObj, "i");
-        boolean matches = ExpertRelayGate.matches(explicitModel, capturedModel, hasFiles);
+        boolean matches = ExpertRelayGate.matches(explicitModel, capturedModel,
+                hasFiles && hasImages);
+        if (hasFiles && !hasImages) {
+            extLog("[RELAY] native document passthrough req="
+                    + System.identityHashCode(reqObj) + " files=" + ((List) files).size());
+        }
         if (matches && explicitModel == null) {
             extLog("[RELAY] 续轮 model_type=null，使用发送点 effectiveModel=" + capturedModel
                     + " req=" + System.identityHashCode(reqObj)
@@ -10431,7 +15426,7 @@ public class Main extends XposedModule {
     private final java.util.Map<Object, Object[]> relayFlowMap =
             new java.util.IdentityHashMap<Object, Object[]>();
 
-    // 命中 expert+图片时：不改返回值(避免 libxposed 把 Proxy 强转 b41 而 CCE)，
+    // 命中 expert+图片时：不改返回值（避免宿主把 Proxy 强转 b41 而 CCE），
     // 只把真实 b41 实例登记下来，交给 b41.b 的 collect hook 处理。
     private void registerRelayFlow(Object reqObj, Object flow, Object r92This) {
         if (!relayGateMatches(reqObj)) return;
@@ -10457,7 +15452,7 @@ public class Main extends XposedModule {
                 Class<?>[] p = m.getParameterTypes();
                 if (m.getName().equals("b") && p.length == 2 && p[0] == q03) { bColl = m; break; }
             }
-            if (bColl == null) { log("expert flow collect hook: b41.b(q03,uz1) 未找到"); return; }
+            if (bColl == null) { log("expert flow collect hook: b41.b(q03,uz1) not found"); return; }
             hook(bColl).intercept(new Hooker() {
                 @Override public Object intercept(Chain chain) throws Throwable {
                     Object self = chain.getThisObject();
@@ -10723,6 +15718,7 @@ public class Main extends XposedModule {
             String sid = boundNativeConversation
                     ? request.nativeConversationId
                     : reusableApiSession(cl, transport, sessionKey);
+            request = prepareOversizedLocalApiPrompt(request, sid);
             long[] retryWaits = {0L, 1500L, 3500L};
             LocalApiGateway.GatewayException last = null;
             for (int attempt = 0; attempt < retryWaits.length; attempt++) {
@@ -11401,12 +16397,183 @@ public class Main extends XposedModule {
             // ew0: sid, parent, prompt, files, thinking, search, audio, preempt,
             // model_type, PoW, Kotlin default mask. 512 keeps action unset; PoW lives in k.
             return selected.newInstance(sid, request.nativeParentMessageId,
-                    request.prompt, new ArrayList(),
+                    request.prompt, new ArrayList<String>(request.nativeFileIds),
                     request.reasoning, request.search, null, false,
                     request.nativeModel, pow, 512);
         } finally {
             tlLocalApiRequest.remove();
         }
+    }
+
+    /**
+     * DeepSeek's native prompt endpoint can reject a very large inline context even though its
+     * file parser accepts the same bytes. Keep a bounded prefix inline and upload the exact
+     * remainder as a native TXT attachment. A caller-provided output limit is also respected as
+     * an input budget when it is smaller; otherwise the conservative default is 9,000 chars.
+     */
+    private LocalApiGateway.CompletionRequest prepareOversizedLocalApiPrompt(
+            LocalApiGateway.CompletionRequest request, String sid) {
+        if (request == null || request.prompt == null) return request;
+        if (!isLocalApiContextRelayEnabled()) return request;
+        int inlineLimit = 9000;
+        if (request.maxOutputTokens > 0) {
+            inlineLimit = Math.max(1024, Math.min(inlineLimit, request.maxOutputTokens));
+        }
+        if (request.prompt.length() <= inlineLimit) return request;
+        Context context = hostApplicationContext;
+        if (context == null || Looper.myLooper() == Looper.getMainLooper()) return request;
+        File relay = null;
+        try {
+            File dir = new File(context.getCacheDir(), "ds_local_api_files");
+            if (!dir.isDirectory() && !dir.mkdirs()) return request;
+            relay = new File(dir, "context_" + request.requestId.replaceAll(
+                    "[^A-Za-z0-9._-]", "_") + ".txt");
+            FileOutputStream output = new FileOutputStream(relay, false);
+            try {
+                output.write(request.prompt.substring(inlineLimit).getBytes("UTF-8"));
+                output.flush();
+            } finally {
+                output.close();
+            }
+            String fileId = uploadLocalApiContextFile(
+                    relay, sid, request.nativeModel);
+            if (fileId == null || fileId.length() == 0) {
+                LocalApiGateway.diagnostic("CONTEXT_RELAY_SKIPPED id=" + request.requestId
+                        + " chars=" + request.prompt.length());
+                return request;
+            }
+            String inline = request.prompt.substring(0, inlineLimit)
+                    + "\n\n[The exact remaining "
+                    + (request.prompt.length() - inlineLimit)
+                    + " characters are attached as " + relay.getName()
+                    + ". Read that file and continue from this text without omitting content.]";
+            LocalApiGateway.diagnostic("CONTEXT_RELAY_OK id=" + request.requestId
+                    + " inline_chars=" + inlineLimit + " attached_chars="
+                    + (request.prompt.length() - inlineLimit));
+            return request.withPromptFiles(inline,
+                    Collections.singletonList(fileId));
+        } catch (Throwable error) {
+            log("local API context relay failed: " + safeThrowableMessage(error));
+            return request;
+        } finally {
+            if (relay != null) try { relay.delete(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** Uploads one private temporary TXT through the host's real composer and removes only the
+     * temporary draft item afterwards. Existing user attachments are never touched. */
+    private static String uploadLocalApiContextFile(
+            final File file, final String sid, final String targetModel) throws Exception {
+        final Object composer = IMAGE_COMPOSER;
+        final ClassLoader classLoader = IMAGE_HOST_CL;
+        if (composer == null || classLoader == null || file == null || !file.isFile()) return null;
+        Object before = callOnMainThread(new java.util.concurrent.Callable<Object>() {
+            @Override public Object call() { return snapshotComposerAttachments(composer); }
+        });
+        if (before instanceof List && !((List) before).isEmpty()) {
+            log("local API context relay deferred: native composer contains a user draft");
+            return null;
+        }
+        final String fileName = file.getName();
+        final Object metadata = createNativeFileMetadata(classLoader, file, fileName);
+        if (metadata == null) return null;
+        final String uploadModel = String.valueOf(callOnMainThread(
+                new java.util.concurrent.Callable<Object>() {
+                    @Override public Object call() { return invokeNoArg(composer, "d"); }
+                }));
+        ACTIVE_HIDDEN_ATTACHMENT_NAMES.add(fileName);
+        Object nativeAttachment = null;
+        try {
+            Object started = callOnMainThread(new java.util.concurrent.Callable<Object>() {
+                @Override public Object call() {
+                    return Boolean.valueOf(invokeNativeScreenshotUploader(composer, metadata,
+                            sid == null ? "" : sid));
+                }
+            });
+            if (!Boolean.TRUE.equals(started)) return null;
+            long deadline = SystemClock.elapsedRealtime() + 60000L;
+            while (SystemClock.elapsedRealtime() < deadline) {
+                final Object attachments = callOnMainThread(
+                        new java.util.concurrent.Callable<Object>() {
+                            @Override public Object call() {
+                                return snapshotComposerAttachments(composer);
+                            }
+                        });
+                nativeAttachment = findNativeAttachment(attachments, fileName);
+                String remote = nativeAttachmentRemoteId(nativeAttachment, uploadModel);
+                if (remote.length() > 0) {
+                    String target = targetModel == null ? "" : targetModel.trim();
+                    if (target.length() > 0 && !target.equals(uploadModel)) {
+                        try {
+                            Object forked = forkUploadedImageOnce(
+                                    classLoader, IMAGE_FILE_API, remote, uploadModel, target);
+                            forked = waitForUploadedImageReady(
+                                    classLoader, IMAGE_FILE_API, forked);
+                            Object forkedId = readHostField(forked, "a");
+                            if (forkedId != null && String.valueOf(forkedId).length() > 0) {
+                                remote = String.valueOf(forkedId);
+                            } else {
+                                return null;
+                            }
+                        } catch (Throwable error) {
+                            log("local API context file fork failed: "
+                                    + safeThrowableMessage(error));
+                            return null;
+                        }
+                    }
+                    return remote;
+                }
+                Thread.sleep(200L);
+            }
+            return null;
+        } finally {
+            ACTIVE_HIDDEN_ATTACHMENT_NAMES.remove(fileName);
+            final Object removable = nativeAttachment;
+            if (removable != null) {
+                callOnMainThread(new java.util.concurrent.Callable<Object>() {
+                    @Override public Object call() {
+                        String localId = String.valueOf(readHostField(removable, "h"));
+                        if (localId.length() == 0 || "null".equals(localId)) return null;
+                        for (Method method : composer.getClass().getDeclaredMethods()) {
+                            Class<?>[] types = method.getParameterTypes();
+                            if ("r".equals(method.getName()) && types.length == 1
+                                    && types[0] == String.class) {
+                                try {
+                                    method.setAccessible(true);
+                                    method.invoke(composer, localId);
+                                } catch (Throwable ignored) {}
+                                break;
+                            }
+                        }
+                        return null;
+                    }
+                });
+            }
+        }
+    }
+
+    private static Object callOnMainThread(
+            final java.util.concurrent.Callable<Object> callable) throws Exception {
+        if (Looper.myLooper() == Looper.getMainLooper()) return callable.call();
+        Handler handler = currentMainHandler();
+        if (handler == null) return null;
+        final java.util.concurrent.atomic.AtomicReference<Object> value =
+                new java.util.concurrent.atomic.AtomicReference<Object>();
+        final java.util.concurrent.atomic.AtomicReference<Throwable> failure =
+                new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        final CountDownLatch latch = new CountDownLatch(1);
+        handler.post(new Runnable() {
+            @Override public void run() {
+                try { value.set(callable.call()); }
+                catch (Throwable error) { failure.set(error); }
+                finally { latch.countDown(); }
+            }
+        });
+        if (!latch.await(3L, TimeUnit.SECONDS)) return null;
+        Throwable error = failure.get();
+        if (error instanceof Exception) throw (Exception) error;
+        if (error != null) throw new RuntimeException(error);
+        return value.get();
     }
 
     private static Method findNativeCompletionMethod(Object transport, Object request) {
@@ -11739,13 +16906,30 @@ public class Main extends XposedModule {
                 || value.contains("消息正在生成");
     }
 
-    private static String safeThrowableMessage(Throwable throwable) {
+    static String safeThrowableMessage(Throwable throwable) {
         if (throwable == null) return "unknown error";
         Throwable value = deepestCause(throwable);
         String message = value.getMessage();
         String result = value.getClass().getSimpleName()
                 + (message == null || message.length() == 0 ? "" : ": " + message);
         return result.length() > 500 ? result.substring(0, 500) : result;
+    }
+
+    private static boolean isAgentHostStructureFailure(Throwable throwable) {
+        Throwable current = throwable;
+        int depth = 0;
+        while (current != null && depth++ < 16) {
+            if (current instanceof ClassNotFoundException
+                    || current instanceof NoSuchFieldException
+                    || current instanceof NoSuchMethodException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        String message = safeThrowableMessage(throwable);
+        return message.contains("ClassNotFoundException")
+                || message.contains("NoSuchFieldException")
+                || message.contains("NoSuchMethodException");
     }
 
     private static Throwable deepestCause(Throwable throwable) {

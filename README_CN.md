@@ -7,32 +7,50 @@
 [![最新版本](https://img.shields.io/github/v/release/lllucccian/Deekseep?display_name=tag&sort=semver)](https://github.com/lllucccian/Deekseep/releases/latest)
 [![GitHub 下载量](https://img.shields.io/github/downloads/lllucccian/Deekseep/total?label=Downloads)](https://github.com/lllucccian/Deekseep/releases)
 [![Android 7.0+](https://img.shields.io/badge/Android-7.0%2B-3ddc84)](#环境要求)
-[![Xposed API 82–102](https://img.shields.io/badge/Xposed_API-82%20%7C%20100%20%7C%20101%20%7C%20102-2f6feb)](#环境要求)
+[![Universal Xposed](https://img.shields.io/badge/Xposed-universal-2f6feb)](#环境要求)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 > [!NOTE]
 > Deekseep 是独立增强模块。请先确认安装包与 DeepSeek 版本匹配；使用聊天、账号或实验性工具前，建议备份重要数据。
 
+## 1.7.4 发布说明
+
+1.7.4 重构模块与设置界面，支持搜索，并将功能分为“聊天”“账号与隐私”“界面美化”“调试”和“工程”；同时优化开关 UI、对齐执行按钮，并优化设置入口（功能名右侧的小齿轮按钮）。
+
+主要功能：
+
+• 基础 Agent 工具（具体工具请在应用内查看/下载）。
+• 服务器暂停长思考时自动继续生成。
+• “回复完成通知”开关，位于“自动继续生成”下方。
+• 本地禁言和自定义主页欢迎语。
+• 自定义 DeepSeek 头像（需先在“灰度功能管理器”开启“显示助手头像”）。
+• 鲸鱼旋转和深海文字波纹。
+• 屏幕 Hook 日志、崩溃记录与测试。
+• 自定义请求、禁用热更新、自动清理缓存和进程管理器。
+• 本地 API 前台心跳保活及长上下文自动转文件上传。
+• 仍建议在电池优化中不要限制 DeepSeek。
+
+播放音乐的 Agent 工具要求安装最新 **20.7 或更高版本 QQ 音乐**；授予 Root 后可在后台自动播放音乐。原生设置注入属于实验性功能，可能导致宿主闪退。“禁用数据用于优化体验”会主动关闭并阻止宿主再次开启该选项。
+
+本版将国内版与 Google Play 版融合为一个运行时通用 APK，强烈建议搭配 DeepSeek **2.3.4**（versionCode 245/246）。2.2.0 和 2.3.0 仍可使用但部分功能可能缺失；**不支持 2.3.1～2.3.3**。旧版本或个别环境可能仍有功能异常，欢迎提交可复现问题以便后续统一修复。
+
+支持开发：[爱发电](https://www.afdian.com/a/lllucccian)。
+
 ## 兼容情况速览
 
 > [!TIP]
-> Deekseep LSPosed 1.7.3 只有两个 APK：国内版和 Google Play 版各一个，二者均为多 API 通用版。
+> Deekseep LSPosed 1.7.4 只发布一个通用安装包，运行时会在支持的宿主符号表之间自动选择。
 
-- 中国大陆官方版：支持 DeepSeek 2.2.2（`versionCode 233`）和 2.3.0（`versionCode 237`）。
-- Google Play 版：只支持 DeepSeek 2.2.2（`versionCode 236`），暂不兼容最新版 Google Play DeepSeek。
+- 国内版或 Google Play：DeepSeek 2.2.0、2.3.0（`versionCode 237`）或 2.3.4（`versionCode 245/246`），支持融合通用安装包。
 - Android：7.0 及以上（API 24+）。
-- Xposed 接口：同一个通用 APK 兼容 API 82 / 100 / 101 / 102。
+- 框架要求：能加载传统 Xposed 入口的 LSPosed/Xposed 环境；API 82～102 已纳入逐版本回归。
 - 模块作用域：只勾选 `com.deepseek.chat`。
 
 ## 推荐下载
 
-### [中国大陆版——下载 Deekseep 1.7.3 多 API 通用版](https://github.com/lllucccian/Deekseep/releases/download/v1.7.3/deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk)
+### [下载 Deekseep LSPosed 1.7.4](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Deekseep.apk)
 
-适用于中国大陆 DeepSeek 2.2.2（`233`）和 2.3.0（`237`）。
-
-### [Google Play 版——下载 Deekseep 1.7.3 多 API 通用版](https://github.com/lllucccian/Deekseep/releases/download/v1.7.3/deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk)
-
-只适用于 Google Play DeepSeek 2.2.2（`236`）。两个渠道的 APK 不能互换；专用 API 102、Legacy、测试版和诊断版均不再是当前发布选项。
+这是唯一维护中的模块安装包，运行时会自动识别国内版或 Google Play 宿主并选择对应映射。
 
 ## 项目截图
 
@@ -63,7 +81,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 - 导入系统提示词，并在不改动可见输入框的情况下写入发送请求。
 - 编辑本地会话标题、用户消息、模型回复、思考内容、思考时间和消息图片；支持新建本地会话，并搜索问题、回复和思考文本。
-- 支持导入图片作为聊天背景或贴纸；背景可连续缩放或输入精确倍率，并支持横向/纵向取景、旋转、不透明度、显示范围、裁剪/完整显示/拉伸，以及聊天、侧栏和设置页绑定。贴纸可拖动并调整大小、旋转、层级和不透明度；一键离线抠图可以保存透明贴纸，效果不理想时还可手动擦除。
+- 当前受支持的源码构建均可导入图片作为聊天背景或贴纸；背景支持裁剪取景、旋转、不透明度、可选景深，以及统一或分界面位移。动态效果采用先快后慢的缓出曲线：打开侧栏时随主界面向右、进入设置时向左，并在关闭或返回时平滑复位；高级选项可绑定聊天、侧栏或设置界面。贴纸会保留在聊天与设置页，并可拖动及调整大小、旋转、层级和不透明度。
 - 将聊天导出为 Markdown，查看本地统计，手动或按保留数量自动备份数据库，并可选启用聊天批量选择与删除。
 - 在已知的客户端 `CONTENT_FILTER` 替换事件发生时保留设备已经收到的文本；无法恢复服务器从未下发的内容。
 
@@ -80,14 +98,12 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 ### 开发者与 API 工具
 
 - 可选启动带独立 Gateway Key 的本机/可信局域网服务，通过 DeepSeek 原生传输提供 OpenAI Chat Completions/Responses 或 Anthropic Messages 兼容接口。
-- 支持流式输出、工具结果续写、Codex 和 Claude Code 工具循环、深度思考参数、原生联网搜索与实时请求诊断；高级设置可申请 Pinggy 临时公网网址、固定监听端口，或用自有 Cloudflare Tunnel 令牌连接已配置域名。本地 API 位于可选的“实验性功能”页中，默认关闭。
+- 支持流式输出、工具结果续写、Codex 和 Claude Code 工具循环、深度思考参数、原生联网搜索与实时请求诊断；高级设置可固定监听端口，并用自有 Cloudflare Tunnel 令牌连接一个或多个已配置域名。本地 API 位于可选的“实验性功能”页中，默认关闭。
 
 ### 界面与兼容增强
 
 - 在 DeepSeek 设置中显示 Deekseep LSPosed 入口，支持中英文自动检测和手动选择。
-- 为匹配的国内版或 Google Play 宿主使用同一个 API 82 / 100 / 101 / 102 通用接口包。
-- 改进目标进程激活校验，解决模块已启用却长期显示“待验证”的问题。
-- 更新了一些彩蛋。
+- 使用通用 Xposed 兼容版，运行时自动选择已支持的宿主版本映射。
 
 详细行为与限制见[功能说明](docs/FEATURES.md)和[实验性功能说明](docs/EXPERIMENTAL_FEATURES.md)。
 
@@ -96,7 +112,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 - Android 7.0 / API 24 或更高版本。
 - 安装上方兼容列表中精确匹配渠道和版本的官方 DeepSeek Android App。
 - 能加载模块的 LSPosed/Xposed 环境，以及该环境本身所要求的 Root 或框架配置。
-- 使用 API 82、100、101 或 102 的兼容 Xposed 环境。
+- 需要能够加载传统 Xposed 入口的兼容版 LSPosed/Xposed 环境；已验证 API 82～102。
 - LSPosed/Xposed 作用域设置为 `com.deepseek.chat`。
 - 使用数据库、账号、删除或实验性工具前，先备份重要聊天记录。
 
@@ -104,40 +120,32 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 ## 安装步骤
 
-1. 在 Android 应用信息中确认 DeepSeek 渠道和 `versionCode`：国内版 `233`/`237`，或 Google Play `236`。
+1. 在 Android 应用信息中确认 DeepSeek 渠道和版本号（2.2.0、2.3.0 的 `versionCode 237`，或 2.3.4 的 `versionCode 245/246`）。
 2. 备份重要的 DeepSeek 聊天记录和本地文件。
-3. 只下载一个匹配渠道的 1.7.3 多 API 通用 APK：国内版用于 `233`/`237`，Google Play 版用于 `236`。
+3. 下载通用版 Deekseep APK，并在兼容的 Xposed 框架中启用。
 4. 安装模块 APK，并在 LSPosed/Xposed 管理器中启用。
-5. 作用域只勾选 `com.deepseek.chat`，不要勾选模块自身应用。
+5. 作用域只勾选 `com.deepseek.chat`；现代版不需要勾选模块自身应用。
 6. 强制停止 DeepSeek 后重新打开。通常不需要重启整台设备；只有框架在目标 App 重启后仍未重新加载模块时再重启设备。
 7. 阅读简短的首次使用说明并点击“我知道了”，然后进入 DeepSeek 设置，打开 Deekseep LSPosed 注入的 Deekseep 入口。
 
-如果 Android 因旧版或不同签名而拒绝覆盖安装，请先停用并只卸载旧模块 APK，再安装 1.7.3；这不会卸载 DeepSeek。更多细节见[安装指南](docs/INSTALLATION.md)。
-
-## 发布内容
-
-上方两个按钮就是仅有的两个可安装 APK。[1.7.3 Release](https://github.com/lllucccian/Deekseep/releases/tag/v1.7.3)
-中的另外两个文件是源码快照，`SHA256SUMS.txt` 是校验文件，它们都不是额外的 APK
-版本。当前版本已经舍弃专用 API 102 和旧式单接口 APK；不要为同一个 DeepSeek
-进程同时启用多个 Deekseep 版本。
+通用版包名为 `com.dsmod.probe`。更多细节见[安装指南](docs/INSTALLATION.md)。
 
 ## 兼容性表格
 
 | App 渠道 | App 版本 | versionCode | 状态 | 说明 |
 |---|---:|---:|---|---|
-| 中国大陆官方版 | 2.2.2 | 233 | ✅ 支持 | 使用国内版多 API 通用 APK。 |
-| 中国大陆官方版 | 2.3.0 | 237 | ✅ 支持 | 使用国内版多 API 通用 APK。 |
-| Google Play 版 | 2.2.2 | 236 | ✅ 支持 | 使用 Google Play 多 API 通用 APK。 |
-| 更新的 Google Play 版 | 最新版 | 其他 | ❌ 不支持 | 等待明确完成映射的 GP 版本。 |
-| 更旧或其他 DeepSeek 构建 | 待确认 | Unknown | 🧪 未测试 | Hook 依赖具体构建的混淆符号，不能假定兼容。 |
+| 国内版或 Google Play | 2.2.0 | 不固定 | ✅ 支持但可能缺少功能 | 使用融合运行时的 2.2.x 映射。 |
+| 国内版或 Google Play | 2.3.0 | 237 | ✅ 支持但可能缺少功能 | 运行时选择 2.3.0 映射。 |
+| 国内版或 Google Play | 2.3.4 | 245/246 | ✅ 强烈推荐 | 一个 APK 在运行时选择渠道映射。 |
+| 任意渠道 | 2.3.1～2.3.3 | 不固定 | ❌ 不支持 | 请升级到 2.3.4。 |
 
 ## 常见问题
 
 - Deekseep LSPosed 入口不显示：核对 App 渠道与版本，安装对应 APK，只启用一个模块版本，作用域勾选 `com.deepseek.chat`，强制停止 DeepSeek 后重新进入设置首页。
-- 模块已启用但 Hook 不生效：确认渠道 APK 和 DeepSeek 版本匹配，再检查启动页激活状态与作用域；不要把模块自身加入作用域，同时停用可能修改同一界面或请求路径的其他模块。
+- 模块已启用但 Hook 不生效：检查启动状态，只启用一个模块版本，不要把模块自身加入作用域；同时停用可能修改同一界面或请求路径的其他模块。
 - DeepSeek 版本不兼容：先停用 Deekseep LSPosed，确认原 App 能正常运行。只使用文档明确支持的 versionCode；App 更新后可能需要重新映射。
-- Xposed API 不兼容：安装 1.7.3 多 API 通用包，不要继续使用已经舍弃的专用 API 102 或 Legacy 包。
-- Google Play 版无法使用：确认 DeepSeek 恰好是 2.2.2（`236`），并使用文件名包含 `google-play-universal` 的 APK；不能用国内版 APK 替代。
+- 框架入口不兼容：使用能够加载传统 Xposed 通用入口的兼容版 LSPosed/Xposed 环境；支持矩阵为 API 82～102。
+- 宿主版本不支持：请升级到 DeepSeek 2.3.4；2.3.1～2.3.3 明确不支持。
 - DeepSeek 更新后功能失效：停用模块并重启 DeepSeek，然后报告新的渠道、`versionName` 和 `versionCode`。本项目不自动保证未来版本兼容。
 - 多账号功能异常：先备份当前账号数据，每次只测试一次添加或导入，并在验证成功前保留原活动账号。不要公开上传导出的账号 JSON。
 - 图片功能异常：确认系统图片选择器能读取文件，并先测试单张图片。专家图片中继属于实验功能，可能受服务器权限、模型路由、PoW 或宿主内部变化影响。
@@ -158,7 +166,7 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 仓库中的本地 API 实现计划目前记录了以下状态：
 
-- 已完成：OpenAI 与 Anthropic 双格式、多 API 通用发布、国内版 2.2.2/2.3.0 兼容、Google Play 2.2.2 精确映射，以及带门槛的实验性功能页。
+- 已完成：OpenAI 与 Anthropic 双格式、国内版两个稳定接口、Google Play 2.2.2 精确映射，以及带门槛的实验性功能页。
 - 计划中：socket 到宿主 Flow 的明确取消确认、API 图片输入、Responses 状态持久化和幂等键、脱敏诊断包，以及更广的 Anthropic/Claude Code 回归测试。
 - 未排期：其他 DeepSeek 版本适配。每次 App 更新都需要重新确认兼容性，并可能需要新的符号映射。
 
@@ -174,8 +182,14 @@ Deekseep LSPosed 通过兼容的 LSPosed/Xposed 环境运行在官方 DeepSeek A
 
 Deekseep LSPosed 是独立第三方项目，不属于 DeepSeek 官方。产品名称及相关商标归其合法权利人所有。兼容性、数据和隐私说明见简明的[项目说明](DISCLAIMER.md)。
 
+## 致谢
+
+设置页的信息层级和交互思路参考了 WeKit，仅作为 UI 参考；没有复制
+WeKit 的源码或资源。第三方库及许可证见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 许可证
 
 项目自有源码和文档采用 [GNU GPL-3.0-only](LICENSE)。第三方组件及声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-如果 Deekseep LSPosed 对你有帮助，可以给仓库点一个 ⭐，让更多 DeepSeek 和 LSPosed 用户发现它。
+如果 Deekseep LSPosed 对你有帮助，可以给仓库点一个 ⭐，或在[爱发电赞助开发](https://www.afdian.com/a/lllucccian)，让项目更快迭代。

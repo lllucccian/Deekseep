@@ -36,7 +36,7 @@ public final class UiLanguagePolicyRegressionTest {
         assertEnglish("editor status", UiLanguageCatalog.toEnglish(
                 "这是一个空白对话\n请用底部按钮添加用户消息或 AI 回复"));
         assertEnglish("API status", UiLanguageCatalog.toEnglish(
-                "后台运行校验未通过，监听未启动"));
+                "后台运行建议"));
 
         System.out.println("UiLanguage policy regression tests passed");
     }

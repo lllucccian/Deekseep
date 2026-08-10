@@ -11,7 +11,7 @@ GitHub 1.7.1、适配新版 DeepSeek APK 或同步其他构建变体时使用。
 
 - DeepSeek Android 2.2.2，versionCode 233；
 - Deekseep 推荐构建：<code>module/</code>，包名
-  <code>com.dsmod.probe</code>，libxposed API 102；传统接口使用
+  <code>com.dsmod.probe</code>；旧版现代入口已弃用，当前使用传统通用接口
   <code>module-legacy/</code>；
 - 验收日期：2026-07-19；
 - <code>module/src/com/dsmod/probe</code> 是两个稳定包共用的 canonical
@@ -75,7 +75,7 @@ GitHub 1.7.1、适配新版 DeepSeek APK 或同步其他构建变体时使用。
 
 | 构建 | 主源码包 |
 |---|---|
-| 稳定 API 102 | <code>module/src/com/dsmod/probe/</code> |
+| 通用核心 | <code>module/src/com/dsmod/probe/</code> |
 | 稳定传统 Xposed | 同一 canonical 源码 + <code>module-legacy/compat/</code> |
 
 原测试版已经停止发布，历史源码不再作为 1.7.1 能力声明依据。涉及聊天编辑器的
@@ -608,7 +608,7 @@ px4.a -> z40 -> gy4.g(sx4.g) -> kg3.c(Credential Manager)
 [libxposed service](https://github.com/libxposed/service) 的官方实现使用
 <code>&lt;applicationId&gt;.XposedService</code> ContentProvider 接收 <code>SendBinder</code>。
 
-稳定 API 102 构建现在使用两层证据：
+旧版现代构建曾使用两层证据；当前通用版只保留目标进程心跳：
 
 1. Manifest 导出 <code>com.dsmod.probe.XposedService</code>，接收到描述符为
    <code>io.github.libxposed.service.IXposedService</code> 的活 Binder 后显示“已启用”；
@@ -773,7 +773,7 @@ Kotlin suspend 状态机和 Compose synthetic 方法很容易改名或增加默�
 先在 <code>module/</code> 的 canonical 源码完成和验证。稳定实现确认后：
 
 1. 运行 canonical JVM 回归；
-2. 构建 modern API 102 包；
+2. 构建通用版包；
 3. 由 <code>module-legacy/build.sh</code> 生成传统入口并通过兼容适配器构建；
 4. 对两个接口重新检查方法是否会被内联，以及是否需要 deoptimize；
 5. 更新 [Variant matrix](VARIANTS.md)，不再为已停止发布的测试版声明能力。
@@ -943,7 +943,7 @@ bash module/test-expert-relay-regression.sh
 
 ### 5.19 DeepSeek 本地 API：后台门控、Anthropic 与 CLI Agent
 
-稳定 API 102 从 1.7-r12 起不再把功能名限定为“本地 OpenAI API”；1.7-r16 完成真实增量
+通用版从 1.7-r12 起不再把功能名限定为“本地 OpenAI API”；1.7-r16 完成真实增量
 Anthropic 工具流和只读复验，1.7-r19 又把原生生成收敛到单一公平 permit，并加入 Claude 客户端
 会话隔离与活动事件。HTTP 与原生 transport 仍位于
 目标进程内并以独立 Gateway Key 保护本机/可信局域网监听，但控制面增加两个必须一起保留的约束：

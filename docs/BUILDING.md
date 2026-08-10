@@ -1,9 +1,9 @@
 # Building from Source
 
-The repository uses small shell-based Android builds instead of Gradle. Each
-variant compiles Java, converts project classes with D8, links resources with
-AAPT2, packages the appropriate Xposed metadata, aligns the APK, and signs it
-with a local development key.
+The repository uses small shell-based Android builds instead of Gradle. The
+universal target compiles Java, converts project classes with D8, packages
+traditional Xposed metadata, aligns the APK, and signs it with a local
+development key. Domestic and Google Play host maps are selected at runtime.
 
 ## Requirements
 
@@ -33,39 +33,38 @@ cd Deekseep
 bash scripts/build-all.sh
 ```
 
-The final `dist/` directory contains the Mainland 1.7.3 universal release:
+The final `dist/` directory contains channel build outputs and checksums. The
+GitHub release is intentionally repackaged with only these two assets:
 
 ```text
-deekseep-mainland-universal-api82-100-101-102-v1.7.3.apk
-SHA256SUMS.txt
+Deekseep.apk
+SOURCE-SHA256.txt
 ```
 
 The release build runs the stable protocol, account, editor and expert-relay
-regressions, verifies the manifests are version 1.7.3, validates the internal
-API 102 compile target and universal package, and refuses test/probe or
-dedicated API 102 APKs in `dist/`.
+regressions, verifies the universal manifest is version 1.7.4, checks both
+channel APKs use the traditional Xposed metadata layout, and refuses test/probe
+APKs in `dist/`.
 
 The old test and load-probe projects are intentionally not release targets.
 See [Build Variants](VARIANTS.md).
 
-The Google Play APK is built from `google-play:module-universal/` and added to
-the same GitHub release as
-`deekseep-google-play-universal-api82-100-101-102-v1.7.3.apk`. It cannot be
-generated from the Mainland branch because the obfuscated host symbols differ.
+`GOOGLE_PLAY_BUILD=true` remains available for local channel parity testing;
+it is not published as a second release APK.
 
-## Build One Variant
+## Build One Channel
 
 ```bash
-(cd module && bash build.sh)
 (cd module-universal && bash build.sh)
+(cd module-universal && GOOGLE_PLAY_BUILD=true bash build.sh)
 ```
 
 The unrenamed outputs remain in their project directories:
 
 | Project | Output |
 |---|---|
-| `module/` | `ds-probe-api102.apk` (internal compile/regression artifact) |
-| `module-universal/` | `ds-probe-universal.apk` (public packaging source) |
+| `module-universal/` | `ds-probe-universal.apk` |
+| `module-universal/` with `GOOGLE_PLAY_BUILD=true` | `ds-probe-universal-google-play.apk` |
 
 ## Termux
 
@@ -85,29 +84,23 @@ When shared storage is available, individual build scripts make a best-effort
 copy of their APK to `/storage/emulated/0/`. A failed optional copy does not fail
 the build.
 
-## Modern API Dependency
+## Shared Core and Universal Adapter
 
-The modern project includes `libs/api.jar`, extracted from the official
-libxposed API 102 AAR. It is a compile-only dependency:
+`module/src/com/dsmod/probe` is the canonical 1.7.4 feature core. Both channel
+builds compile the same `Main.java` and feature classes through
+`module-legacy/compat/LegacyXposedModule.java`, so the domestic and Google Play
+packages do not drift.
 
-- `javac` uses it to resolve `io.github.libxposed.api` symbols;
-- D8 receives only classes under `com/dsmod`;
-- the final APK must not package libxposed API classes;
-- the framework supplies those classes at runtime.
-
-## Shared Stable Core and Universal Adapter
-
-`module/src/com/dsmod/probe` is the canonical 1.7.3 Mainland feature core. The
-universal build generates its entry from the same `Main.java` and compiles the
-same feature classes through `module-legacy/compat/LegacyXposedModule.java`.
-This keeps one feature implementation while supporting API 82 / 100 / 101 /
-102 environments.
-
-The compatibility project includes small declarations under
+The adapter includes small declarations under
 `module-legacy/src/de/robv/android/xposed/`. They expose only compile-time
 signatures. D8 packages only `com/dsmod`, so these stubs do not shadow framework
-classes at runtime. `module-legacy/src/com/dsmod/probe` is retained historical
-source and is deliberately excluded by the build script.
+classes at runtime.
+
+The traditional entry declares API 82 as its minimum and no maximum. The adapter
+regression executes the complete hook/proceed/fail-open contract once for every
+framework API value from 82 through 102. The release build also verifies that
+every canonical feature class is present in both the mainland and Google Play
+APKs, preventing a channel build from silently omitting a newer feature.
 
 ## Generated Files and Signing
 
@@ -123,18 +116,18 @@ uninstall before installing a build signed elsewhere.
 ## Regression Tests
 
 The stable build includes JVM regressions for chat editing, account credentials,
-regional login policy, chat-appearance configuration, image cutout, and
-chat/settings route recognition, expert
+regional login policy, chat-appearance motion configuration and chat/settings
+route recognition, expert
 relay, response preservation, native-session
 refresh/delete behavior, and the local API protocol/tool bridge:
 
 ```bash
-cd module
+cd module-universal
 bash build.sh
+GOOGLE_PLAY_BUILD=true bash build.sh
 bash test-thinking-regression.sh
 bash test-expert-relay-regression.sh
 (cd ../module-legacy && bash test-adapter-regression.sh)
-(cd ../module-universal && bash build.sh)
 ```
 
 `test-thinking-regression.sh` runs the Java regression classes, including
@@ -167,18 +160,16 @@ checks that the modern and legacy relay gate implementations are identical.
 ```bash
 apksigner verify --verbose module-universal/ds-probe-universal.apk
 unzip -l module-universal/ds-probe-universal.apk | grep 'assets/xposed_init'
+unzip -l module-universal/ds-probe-universal-google-play.apk | grep 'assets/xposed_init'
 sha256sum dist/*.apk
 ```
 
-The universal APK must contain `assets/xposed_init`, declare minimum Xposed API
-82 metadata, and must not contain compile-only API stub classes. The internal
-API 102 artifact is verified during the root build but is not copied to
-`dist/`.
+Both universal APKs must contain `assets/xposed_init` and neither should contain
+compiled framework stub classes.
 
 ## Continuous Integration
 
 `.github/workflows/build.yml` installs Android Platform and Build Tools 35,
-builds and tests the canonical and universal Mainland targets, and uploads the
-1.7.3 universal-only `dist/` contents as a workflow artifact on pushes, pull
-requests, and manual dispatches. Dedicated API 102, Legacy, test, and diagnostic
-APKs are not release artifacts.
+builds and tests the domestic and Google Play universal interfaces, and uploads the exact 1.7.4 `dist/`
+contents as a workflow artifact on pushes, pull requests, and manual dispatches.
+Test editions are not built or uploaded.
