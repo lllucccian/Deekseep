@@ -1,0 +1,51 @@
+name: Build 1.7.4 source edition
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android platform and build tools
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Prepare local debug signing key
+        run: |
+          keytool -genkeypair -v \
+            -keystore module/debug.keystore \
+            -storepass android -keypass android \
+            -alias androiddebugkey \
+            -dname 'CN=Android Debug,O=Android,C=US' \
+            -keyalg RSA -keysize 2048 -validity 10000
+
+      - name: Build and test source edition
+        run: bash scripts/build-all.sh
+
+      - name: Upload APKs and checksums
+        uses: actions/upload-artifact@v7
+        with:
+          name: deekseep-source-edition-v1.7.4
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
