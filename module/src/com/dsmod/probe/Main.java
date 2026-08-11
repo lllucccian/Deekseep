@@ -1011,6 +1011,11 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
         // 2.3.4 会把具体 us2.e/i 流式写入内联掉；在通用 JSON Patch
         // 分发器处拦截 RESPONSE/content，才能在 Markdown 缓存生成前隐藏控制块。
         hookHeartbeatPatchDispatcher(cl);
+        // Install every private-transport boundary. These helpers used to be present but dead,
+        // leaving inlined StateFlow/Markdown paths able to render the raw tool envelope.
+        hookTrackedHeartbeatStateWrites(cl);
+        hookHeartbeatFragmentRenderBoundary(cl);
+        hookHeartbeatMarkdownInputBoundary(cl);
         // 仅在最终 Compose 文本边界为模块生成的心跳状态设置灰色小字。
         hookHeartbeatToolStatusStyle(
                 cl, HostCompat.name("i68"), HostCompat.name("h78"));
@@ -15323,14 +15328,16 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
      * RESPONSE State and its Markdown cache are updated.
      */
     private void hookHeartbeatPatchDispatcher(ClassLoader cl) {
-        if (!HostCompat.isV234() || HostCompat.isGooglePlay()) return;
+        if (!HostCompat.isV234()) return;
+        final String dispatcherName = HostCompat.isGooglePlay() ? "pi0" : "cj0";
+        final String dispatcherMethod = HostCompat.isGooglePlay() ? "f" : "g";
         try {
-            Class<?> dispatcher = cl.loadClass("cj0");
+            Class<?> dispatcher = cl.loadClass(dispatcherName);
             final String responseClassName = HostCompat.name("fo2");
             int installed = 0;
             for (Method method : dispatcher.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
-                if (!"g".equals(method.getName())
+                if (!dispatcherMethod.equals(method.getName())
                         || !Modifier.isStatic(method.getModifiers())
                         || method.getReturnType() != void.class
                         || types.length != 5
@@ -15397,7 +15404,7 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                 installed++;
             }
             log("heartbeat JSON Patch dispatcher hooks=" + installed
-                    + " owner=cj0.g");
+                    + " owner=" + dispatcherName + "." + dispatcherMethod);
         } catch (Throwable error) {
             log("heartbeat JSON Patch dispatcher hook unavailable: " + error);
         }
@@ -15416,13 +15423,15 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
 
 
     /**
-     * Hooks the actual 2.3.4 mutable RESPONSE State write. R8 can inline the us2 patch method, but
-     * the c38 emission remains the single point before ct/pa5 builds and caches the Markdown AST.
+     * Hooks the actual 2.3.4 mutable RESPONSE State write. R8 can inline the concrete fragment
+     * patch method, but the channel-specific StateFlow emission remains the single point before
+     * Markdown is cached (c38 on mainland, b78 on Google Play).
      */
     private void hookTrackedHeartbeatStateWrites(ClassLoader cl) {
-        if (!HostCompat.isV234() || HostCompat.isGooglePlay()) return;
+        if (!HostCompat.isV234()) return;
+        final String stateOwner = HostCompat.isGooglePlay() ? "b78" : "c38";
         try {
-            Class<?> mutableState = cl.loadClass("c38");
+            Class<?> mutableState = cl.loadClass(stateOwner);
             int installed = 0;
             for (Method method : mutableState.getDeclaredMethods()) {
                 Class<?>[] types = method.getParameterTypes();
@@ -15481,7 +15490,7 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                 installed++;
             }
             log("heartbeat tracked RESPONSE state hooks=" + installed
-                    + " owner=c38");
+                    + " owner=" + stateOwner);
         } catch (Throwable error) {
             log("heartbeat tracked RESPONSE state hook unavailable: " + error);
         }
