@@ -9,11 +9,12 @@ DeepSeek.
 
 ## Stable release
 
-[Download Deekseep 1.7.4](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Deekseep.apk)
+- [Download Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Open.apk) — free, open-source edition without the Local API.
+- [Download Closed.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Closed.apk) — free, closed-source edition with the Local API.
 
-The release contains one universal APK for the supported domestic and Google
-Play hosts. DeepSeek 2.3.4 is recommended. DeepSeek 2.2.0 and 2.3.0 remain
-usable with possible limitations; 2.3.1–2.3.3 are not supported.
+Both editions are universal APKs for the supported domestic and Google Play
+hosts. DeepSeek 2.3.4 is recommended. DeepSeek 2.2.0 and 2.3.0 remain usable
+with possible limitations; 2.3.1–2.3.3 are not supported.
 
 ## Requirements
 
@@ -32,7 +33,7 @@ usable with possible limitations; 2.3.1–2.3.3 are not supported.
 
 ## Installation
 
-1. Download the APK above and install it.
+1. Download one of the APKs above and install it. Do not install both editions at the same time.
 2. Enable **Deekseep** in LSPosed/Xposed.
 3. Scope it only to `com.deepseek.chat`; do not add unrelated apps.
 4. Force-stop and reopen DeepSeek. Reboot only if your framework does not reload the target process.
@@ -47,9 +48,10 @@ backup and disable the module if the host becomes unstable.
 - [Release notes](https://github.com/lllucccian/Deekseep/releases)
 - [Report a reproducible problem](https://github.com/lllucccian/Deekseep/issues)
 
-This repository contains the 1.7.4 open-source edition. It intentionally omits
-the closed Local API implementation, its tunnel components, and protected-build
-payloads. All other module features are built from the same 1.7.4 feature core.
+This repository contains the complete source for the 1.7.4 Open edition. For
+certain reasons, the Local API is no longer open source and has moved to the
+Closed edition; source code for the Closed edition is not published. All other
+module features are kept in sync between the two free editions.
 
 Licensed under [GPL-3.0-only](LICENSE).
 

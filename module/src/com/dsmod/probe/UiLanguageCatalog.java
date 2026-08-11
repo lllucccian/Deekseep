@@ -89,8 +89,6 @@ final class UiLanguageCatalog {
         add("运行信息", "Runtime");
         add("模块运行状态", "Module status");
         add("构建渠道", "Build channel");
-        add("闭源保护版", "Protected build");
-        add("开源版", "Open-source build");
         add("打开 DeepSeek", "Open DeepSeek");
         add("模块设置位于 DeepSeek 设置页", "Module settings are in DeepSeek settings");
         add("配置", "Configuration");
@@ -109,10 +107,6 @@ final class UiLanguageCatalog {
         add("支持更快地维护和适配", "Help speed up maintenance and compatibility work");
         add("感谢支持持续维护与适配。", "Thank you for supporting ongoing maintenance.");
         add("GitHub 仓库", "GitHub repository");
-        add("开源许可", "Open-source license");
-        add("开源声明", "Open-source notice");
-        add("GNU GPL-3.0-only · 查看源码与许可",
-                "GNU GPL-3.0-only · View source and license");
         add("赞助开发者", "Sponsor the developer");
         add("支持持续开发和新版本适配",
                 "Support continued development and new-version compatibility");

@@ -40,7 +40,6 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Home as HomeOutlined
 import androidx.compose.material.icons.outlined.Info as InfoOutlined
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -173,7 +172,6 @@ class SettingsActivity : ComponentActivity() {
         var menuOpen by remember { mutableStateOf(false) }
         var sponsorOpen by remember { mutableStateOf(false) }
         var aboutOpen by remember { mutableStateOf(false) }
-        var licenseOpen by remember { mutableStateOf(false) }
         val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
         Scaffold(
@@ -260,16 +258,11 @@ class SettingsActivity : ComponentActivity() {
                 SettingsPage(
                     padding = padding,
                     onSponsor = { sponsorOpen = true },
-                    onLicense = { licenseOpen = true },
                 )
             }
         }
 
         if (sponsorOpen) SponsorDialog { sponsorOpen = false }
-        if (licenseOpen) TextDialog(
-            title = "GNU GPL-3.0-only",
-            body = licenseText(),
-        ) { licenseOpen = false }
         if (aboutOpen) TextDialog(
             title = tr("关于", "About"),
             body = tr(
@@ -332,7 +325,6 @@ class SettingsActivity : ComponentActivity() {
     private fun SettingsPage(
         padding: PaddingValues,
         onSponsor: () -> Unit,
-        onLicense: () -> Unit,
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -369,14 +361,6 @@ class SettingsActivity : ComponentActivity() {
                 ) {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(REPOSITORY)))
                 }
-            }
-            item {
-                ActionCard(
-                    Icons.Outlined.Gavel,
-                    tr("开源声明", "Open-source notice"),
-                    "GNU GPL-3.0-only",
-                    onLicense,
-                )
             }
         }
     }
@@ -606,8 +590,4 @@ class SettingsActivity : ComponentActivity() {
 
     private fun toast(value: String) = Toast.makeText(this, value, Toast.LENGTH_LONG).show()
 
-    private fun licenseText(): String = runCatching {
-        val id = resources.getIdentifier("gpl_3_0", "raw", packageName)
-        resources.openRawResource(id).bufferedReader().use { it.readText() }
-    }.getOrDefault("GNU General Public License version 3")
 }

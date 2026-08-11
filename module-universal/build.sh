@@ -40,7 +40,7 @@ cat > "$OUT/generated-src/com/dsmod/probe/BuildInfo.java" <<EOF
 package com.dsmod.probe;
 public final class BuildInfo {
     public static final String API_VERSION = "universal (Xposed API 82-102 verified)";
-    public static final String MODULE_VERSION = "${MODULE_VER:-unknown}";
+    public static final String MODULE_VERSION = "${MODULE_VER:-unknown} Open";
     public static final String BUILD_DATE = "$(date '+%Y-%m-%d %H:%M')";
     public static final boolean GOOGLE_PLAY = ${GOOGLE_PLAY_VALUE};
     public static final boolean PROTECTED_BUILD = false;

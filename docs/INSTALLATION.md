@@ -1,7 +1,7 @@
 # Installation
 
 1. Install a compatible LSPosed/Xposed framework.
-2. Install `Deekseep.apk` from the current GitHub release.
+2. Install either `Open.apk` or `Closed.apk` from the current GitHub release.
 3. Enable Deekseep and scope it only to `com.deepseek.chat`.
 4. Force-stop and reopen DeepSeek.
 

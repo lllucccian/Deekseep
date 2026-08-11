@@ -308,12 +308,6 @@ public final class DeekseepUi {
                     @Override public void onClick(View view) { showHelpPage(act); }
                 }));
         card.addView(makeDivider(act, divColor));
-        card.addView(toolActionRow(act, "ds_project_license", "开源许可",
-                "", textColor, subColor,
-                new View.OnClickListener() {
-                    @Override public void onClick(View view) { showOpenSourceDialog(act); }
-                }));
-        card.addView(makeDivider(act, divColor));
         card.addView(toolActionRow(act, "ds_project_sponsor", "赞助开发者",
                 "", textColor, subColor,
                 new View.OnClickListener() {
@@ -2688,7 +2682,6 @@ public final class DeekseepUi {
         if ("ds_category_debug".equals(name)) return "ic_warning_outline_20";
         if ("ds_category_engineering".equals(name)) return "ic_branch_outline_20";
         if ("ds_category_help".equals(name)) return "ic_help_outline";
-        if ("ds_project_license".equals(name)) return "ic_info_outline";
         return null;
     }
 
@@ -2724,34 +2717,6 @@ public final class DeekseepUi {
         } finally {
             if (input != null) try { input.close(); } catch (Throwable ignored) {}
         }
-    }
-
-    private static void showOpenSourceDialog(final Activity act) {
-        String license = readBundledText(
-                "META-INF/com.dsmod.probe.project/gpl_3_0.txt", 96 * 1024);
-        if (license.length() == 0) license = "GNU General Public License version 3";
-        final TextView body = new TextView(act);
-        body.setText(license);
-        body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        body.setTextColor(isDark(act) ? 0xFFECECEC : 0xFF1A1A1A);
-        body.setPadding(dp(act, 20), dp(act, 8), dp(act, 20), dp(act, 8));
-        android.widget.ScrollView scroll = new android.widget.ScrollView(act);
-        scroll.addView(body, new android.widget.ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        new android.app.AlertDialog.Builder(act)
-                .setTitle("GNU GPL-3.0-only")
-                .setView(scroll)
-                .setNeutralButton("GitHub", new android.content.DialogInterface.OnClickListener() {
-                    @Override public void onClick(android.content.DialogInterface dialog, int which) {
-                        try {
-                            act.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(REPOSITORY)));
-                        } catch (Throwable error) {
-                            Toast.makeText(act, REPOSITORY, Toast.LENGTH_LONG).show();
-                        }
-                    }
-                })
-                .setPositiveButton("关闭", null)
-                .show();
     }
 
     private static void showSponsorDialog(final Activity act) {
@@ -2791,28 +2756,6 @@ public final class DeekseepUi {
                         })
                 .setNegativeButton(UiLanguage.text(act, "取消", "Cancel"), null)
                 .show();
-    }
-
-    private static String readBundledText(String path, int limit) {
-        java.io.InputStream input = null;
-        try {
-            ClassLoader loader = DeekseepUi.class.getClassLoader();
-            input = loader == null ? null : loader.getResourceAsStream(path);
-            if (input == null) return "";
-            java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
-            byte[] buffer = new byte[4096];
-            int count;
-            while ((count = input.read(buffer)) >= 0) {
-                if (count == 0) continue;
-                if (output.size() + count > limit) break;
-                output.write(buffer, 0, count);
-            }
-            return new String(output.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
-        } catch (Throwable ignored) {
-            return "";
-        } finally {
-            if (input != null) try { input.close(); } catch (Throwable ignored) {}
-        }
     }
 
     private static void showExperimentalHelpPage(final Activity act) {

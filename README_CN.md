@@ -7,9 +7,10 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 
 ## 当前稳定版
 
-[下载 Deekseep 1.7.4](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Deekseep.apk)
+- [下载 Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Open.apk) — 免费开源版，不含本地 API。
+- [下载 Closed.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Closed.apk) — 免费闭源版，包含本地 API。
 
-当前发布的是一个通用 APK，同时适配支持的国内版和 Google Play 版。强烈建议使用
+两个版本都是通用 APK，同时适配支持的国内版和 Google Play 版。强烈建议使用
 DeepSeek 2.3.4；2.2.0 和 2.3.0 仍可使用但部分功能可能受限；不支持 2.3.1～2.3.3。
 
 ## 环境要求
@@ -29,7 +30,7 @@ DeepSeek 2.3.4；2.2.0 和 2.3.0 仍可使用但部分功能可能受限；不�
 
 ## 安装步骤
 
-1. 下载上方 APK 并安装。
+1. 从上方选择一个 APK 下载并安装，不要同时安装两个版本。
 2. 在 LSPosed/Xposed 中启用 **Deekseep**。
 3. 作用域只勾选 `com.deepseek.chat`，不要添加无关应用。
 4. 强制停止后重新打开 DeepSeek；只有框架没有重新加载目标进程时才需要重启设备。
@@ -43,8 +44,9 @@ DeepSeek 2.3.4；2.2.0 和 2.3.0 仍可使用但部分功能可能受限；不�
 - [版本发布说明](https://github.com/lllucccian/Deekseep/releases)
 - [提交可复现问题](https://github.com/lllucccian/Deekseep/issues)
 
-本仓库公开的是 1.7.4 开源版源码，明确不包含闭源的本地 API 实现、公网隧道组件和
-保护版载荷；其余模块功能与 1.7.4 功能主线保持同步。
+本仓库公开 1.7.4 Open 版的完整源码。由于某些原因，本地 API 不再开源，已转移到
+Closed 版，Closed 版源码不公开；除本地 API 及闭源保护组件外，两个免费版本的其他
+模块功能保持同步。
 
 许可证：[GPL-3.0-only](LICENSE)。
 

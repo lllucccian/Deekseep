@@ -181,9 +181,7 @@ public class SettingsActivity extends Activity {
         info.addView(infoRow(UiLanguage.text(this, "模块版本", "Module version"), BuildInfo.MODULE_VERSION));
         info.addView(divider());
         info.addView(infoRow(UiLanguage.text(this, "构建渠道", "Build channel"),
-                BuildInfo.PROTECTED_BUILD
-                        ? UiLanguage.text(this, "闭源保护版", "Protected build")
-                        : UiLanguage.text(this, "开源版", "Open-source build")));
+                BuildInfo.PROTECTED_BUILD ? "Closed" : "Open"));
         info.addView(divider());
         info.addView(infoRow(UiLanguage.text(this, "编译时间", "Built"), BuildInfo.BUILD_DATE));
         content.addView(info, cardLp());
@@ -232,17 +230,10 @@ public class SettingsActivity extends Activity {
                 UiLanguage.text(this, "赞助开发", "Sponsor development"),
                 UiLanguage.text(this, "支持更快地维护和适配", "Help speed up maintenance and compatibility work"),
                 new View.OnClickListener() { @Override public void onClick(View v) { showSponsor(); } }));
-        if (!BuildInfo.PROTECTED_BUILD) {
-            project.addView(divider());
-            project.addView(actionRow(ModuleGlyphView.REPOSITORY,
-                    UiLanguage.text(this, "GitHub 仓库", "GitHub repository"), REPOSITORY,
-                    new View.OnClickListener() { @Override public void onClick(View v) { openUrl(REPOSITORY); } }));
-            project.addView(divider());
-            project.addView(actionRow(ModuleGlyphView.LICENSE,
-                    UiLanguage.text(this, "开源许可", "Open-source license"),
-                    "GNU GPL-3.0-only",
-                    new View.OnClickListener() { @Override public void onClick(View v) { showLicense(); } }));
-        }
+        project.addView(divider());
+        project.addView(actionRow(ModuleGlyphView.REPOSITORY,
+                UiLanguage.text(this, "GitHub 仓库", "GitHub repository"), REPOSITORY,
+                new View.OnClickListener() { @Override public void onClick(View v) { openUrl(REPOSITORY); } }));
         content.addView(project, cardLp());
     }
 
@@ -353,22 +344,6 @@ public class SettingsActivity extends Activity {
                 .setPositiveButton(UiLanguage.text(this, "完成", "Done"), null)
                 .create();
         dialog.setCanceledOnTouchOutside(true);
-        dialog.show();
-    }
-
-    private void showLicense() {
-        String body = readRaw("gpl_3_0");
-        if (body.length() == 0) body = "GNU General Public License version 3";
-        TextView view = text(body, 12, text, Typeface.create("monospace", 0));
-        view.setTextIsSelectable(true);
-        view.setPadding(dp(20), dp(10), dp(20), dp(16));
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(view);
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("GNU GPL-3.0-only")
-                .setView(scroll)
-                .setPositiveButton(UiLanguage.text(this, "关闭", "Close"), null)
-                .create();
         dialog.show();
     }
 
@@ -542,21 +517,6 @@ public class SettingsActivity extends Activity {
         view.setTypeface(typeface);
         view.setLineSpacing(0, 1.08f);
         return view;
-    }
-
-    private String readRaw(String name) {
-        InputStream input = null;
-        try {
-            int id = getResources().getIdentifier(name, "raw", getPackageName());
-            if (id == 0) return "";
-            input = getResources().openRawResource(id);
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buffer = new byte[4096];
-            int count;
-            while ((count = input.read(buffer)) >= 0) out.write(buffer, 0, count);
-            return new String(out.toByteArray(), StandardCharsets.UTF_8);
-        } catch (Throwable ignored) { return ""; }
-        finally { if (input != null) try { input.close(); } catch (Throwable ignored) {} }
     }
 
     private void openUrl(String url) {

@@ -9,6 +9,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val signingKeyFile = providers.gradleProperty("signingKeyFile")
+    .orElse("../../module/debug.keystore")
+    .get()
+
 // The official Material extended-icons AAR contains more than eleven thousand generated icon
 // classes. This launcher uses exactly six of them. Keep the original Google-compiled bytecode for
 // those six icons (so their paths and rendering remain byte-for-byte identical), but do not ship
@@ -29,7 +33,6 @@ val trimMaterialIcons = tasks.register("trimMaterialIcons") {
             "androidx/compose/material/icons/outlined/ArrowUpwardKt.class",
             "androidx/compose/material/icons/outlined/CodeKt.class",
             "androidx/compose/material/icons/outlined/DevicesKt.class",
-            "androidx/compose/material/icons/outlined/GavelKt.class",
             "androidx/compose/material/icons/outlined/OpenInNewKt.class",
             "META-INF/material-icons-extended_release.kotlin_module",
             "META-INF/androidx.compose.material_material-icons-extended.version",
@@ -74,7 +77,9 @@ val stageModuleSources = tasks.register<Sync>("stageModuleSources") {
 }
 val stagedModuleResources = layout.buildDirectory.dir("generated/moduleResources")
 val stageModuleResources = tasks.register<Sync>("stageModuleResources") {
-    from("../../module-universal/res")
+    from("../../module-universal/res") {
+        exclude("raw/gpl_3_0.txt")
+    }
     into(stagedModuleResources)
 }
 val stagedRuntimeResources = layout.buildDirectory.dir("generated/runtimeResources")
@@ -84,9 +89,6 @@ val stageRuntimeResources = tasks.register<Sync>("stageRuntimeResources") {
         into("META-INF/com.dsmod.probe.icons")
     }
     from("../../module-universal/res/drawable-nodpi/sponsor_qr.png") {
-        into("META-INF/com.dsmod.probe.project")
-    }
-    from("../../module-universal/res/raw/gpl_3_0.txt") {
         into("META-INF/com.dsmod.probe.project")
     }
     from("../../third_party/shizuku/rish_shizuku.dex") {
@@ -143,7 +145,7 @@ android {
 
     signingConfigs {
         create("module") {
-            storeFile = file("../../module/debug.keystore")
+            storeFile = file(signingKeyFile)
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
