@@ -158,13 +158,9 @@ android {
         }
         getByName("release") {
             signingConfig = signingConfigs.getByName("module")
-            // Preserve every module/reflection entry while removing unreachable dependency code.
-            isMinifyEnabled = true
+            // The open-source edition intentionally ships unobfuscated for inspection/debugging.
+            isMinifyEnabled = false
             isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
         }
     }
 }

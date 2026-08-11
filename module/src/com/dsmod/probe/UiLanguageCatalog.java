@@ -1199,6 +1199,13 @@ final class UiLanguageCatalog {
         add("已选择 ", "Selected ");
         add("选择对话", "Select chats");
         add("先选择要删除的对话", "Select chats to delete first");
+        add("全选", "Select all");
+        add("没有匹配到可删除的对话", "No matching chats can be deleted");
+        add("正在删除 ", "Deleting ");
+        add("DeepSeek 已删除 ", "DeepSeek deleted ");
+        add(" 个，本地已清理 ", "; cleaned locally: ");
+        add("原生失败 ", "Native failures: ");
+        add("本地失败 ", "Local failures: ");
         add("删除 ", "Delete ");
         add(" 个对话", " chats");
         add(" 个", " items");

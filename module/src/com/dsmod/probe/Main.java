@@ -3205,6 +3205,36 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         final TextView delete = new TextView(act);
+        final TextView selectAll = new TextView(act);
+        selectAll.setText(UiLanguage.text(act, "全选", "Select all"));
+        selectAll.setTextColor(brand);
+        selectAll.setTypeface(Typeface.DEFAULT_BOLD);
+        selectAll.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        selectAll.setGravity(Gravity.CENTER);
+        selectAll.setPadding(DeekseepUi.dp(act, 8), 0, DeekseepUi.dp(act, 8), 0);
+        selectAll.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                boolean allSelected = !sessions.isEmpty();
+                for (int i = 0; i < sessions.size(); i++) {
+                    String sid = sessions.get(i).id;
+                    if (sid != null && !SIDEBAR_SELECTED.contains(sid)) {
+                        allSelected = false;
+                        break;
+                    }
+                }
+                SIDEBAR_SELECTED.clear();
+                if (!allSelected) {
+                    for (int i = 0; i < sessions.size(); i++) {
+                        String sid = sessions.get(i).id;
+                        if (sid != null && sid.length() > 0) SIDEBAR_SELECTED.add(sid);
+                    }
+                }
+                updateSidebarSelectTitle(title, delete);
+            }
+        });
+        top.addView(selectAll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
         delete.setTextColor(danger);
         delete.setTypeface(Typeface.DEFAULT_BOLD);
         delete.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
@@ -3673,20 +3703,21 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
     }
 
     private static void deleteSidebarSelected(final Activity act, List<ChatEditorUi.Session> sessions) {
-        int nativeRequested = 0;
-        int localOk = 0;
-        int fail = 0;
+        final ArrayList<NativeDeleteRequest> nativeQueue = new ArrayList<>();
         int matched = 0;
-        Map<String, List<String>> local = new HashMap<>();
+        final Map<String, List<String>> local = new HashMap<>();
         HashSet<String> selected = new HashSet<>(SIDEBAR_SELECTED);
+        final Object eventSink = NATIVE_SESSION_EVENTS;
         for (int i = 0; i < sessions.size(); i++) {
             ChatEditorUi.Session s = sessions.get(i);
             if (s.id == null || !selected.contains(s.id)) continue;
             matched++;
-            // Always use DeepSeek's authenticated h61(tp) route when it is available. Local
-            // cleanup still runs afterwards: the host success path does not know about Deekseep
-            // sidecars, and leaving one behind resurrects the conversation on cold start.
-            if (requestNativeSessionDelete(s.id)) nativeRequested++;
+            Object action;
+            synchronized (SIDEBAR_DELETE_ACTIONS) {
+                action = SIDEBAR_DELETE_ACTIONS.get(s.id);
+            }
+            nativeQueue.add(new NativeDeleteRequest(
+                    s.id, findNativeSession(s.id), eventSink, action));
             List<String> ids = local.get(s.dbPath);
             if (ids == null) {
                 ids = new ArrayList<>();
@@ -3695,35 +3726,14 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
             ids.add(s.id);
         }
 
-        for (Map.Entry<String, List<String>> e : local.entrySet()) {
-            SQLiteDatabase d = null;
-            try {
-                d = SQLiteDatabase.openDatabase(e.getKey(), null, SQLiteDatabase.OPEN_READWRITE);
-                for (String sid : e.getValue()) {
-                    if (ChatEditorUi.deleteSessionLocal(d, sid)) localOk++;
-                    else fail++;
-                }
-            } catch (Throwable ignored) {
-                fail += e.getValue().size();
-            } finally {
-                if (d != null) try { d.close(); } catch (Throwable ignored) {}
-            }
-        }
-        fail += Math.max(0, selected.size() - matched);
-
-        String msg;
-        msg = "已请求 DeepSeek 删除 " + nativeRequested + " 个，本地已移除 "
-                + localOk + " 个";
-        int nativeUnavailable = Math.max(0, matched - nativeRequested);
-        if (nativeUnavailable > 0) msg += "，未取得原生链路 " + nativeUnavailable + " 个";
-        if (fail > 0) msg += "，本地失败 " + fail + " 个";
         exitSidebarSelectMode();
-        UiLanguage.toast(act, msg, Toast.LENGTH_SHORT).show();
-        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-            public void run() {
-                try { act.recreate(); } catch (Throwable ignored) {}
-            }
-        }, 700);
+        if (matched <= 0) {
+            UiLanguage.toast(act, "没有匹配到可删除的对话", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        UiLanguage.toast(act, "正在删除 " + matched + " 个对话", Toast.LENGTH_SHORT).show();
+        runNativeDeleteQueue(act, nativeQueue, local,
+                Math.max(0, selected.size() - matched));
     }
 
     private static boolean invokeXa3(Object action) {
@@ -11042,8 +11052,33 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
      */
     static boolean requestNativeSessionDelete(String sid) {
         if (sid == null || sid.length() == 0) return false;
-        Object session = findNativeSession(sid);
-        Object events = NATIVE_SESSION_EVENTS;
+        Object action;
+        synchronized (SIDEBAR_DELETE_ACTIONS) {
+            action = SIDEBAR_DELETE_ACTIONS.get(sid);
+        }
+        return executeNativeDelete(new NativeDeleteRequest(
+                sid, findNativeSession(sid), NATIVE_SESSION_EVENTS, action));
+    }
+
+    private static final class NativeDeleteRequest {
+        final String sid;
+        final Object session;
+        final Object events;
+        final Object fallbackAction;
+
+        NativeDeleteRequest(String sid, Object session, Object events, Object fallbackAction) {
+            this.sid = sid;
+            this.session = session;
+            this.events = events;
+            this.fallbackAction = fallbackAction;
+        }
+    }
+
+    private static boolean executeNativeDelete(NativeDeleteRequest request) {
+        if (request == null || request.sid == null || request.sid.length() == 0) return false;
+        String sid = request.sid;
+        Object session = request.session;
+        Object events = request.events;
         if (session != null && events != null) {
             try {
                 ClassLoader cl = session.getClass().getClassLoader();
@@ -11069,17 +11104,89 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
             }
         }
 
-        Object action;
-        synchronized (SIDEBAR_DELETE_ACTIONS) {
-            action = SIDEBAR_DELETE_ACTIONS.get(sid);
-        }
-        if (invokeXa3(action)) {
+        if (invokeXa3(request.fallbackAction)) {
             markSessionDeletedLocally(sid);
             log("requested native sidebar delete fallback sid=" + sid);
             return true;
         }
         log("native DeepSeek delete unavailable sid=" + sid);
         return false;
+    }
+
+    private static void runNativeDeleteQueue(final Activity act,
+                                             final ArrayList<NativeDeleteRequest> queue,
+                                             final Map<String, List<String>> local,
+                                             final int unmatched) {
+        final Handler handler = new Handler(Looper.getMainLooper());
+        final AtomicInteger index = new AtomicInteger();
+        final AtomicInteger nativeOk = new AtomicInteger();
+        final AtomicInteger nativeFail = new AtomicInteger();
+        final Runnable worker = new Runnable() {
+            @Override public void run() {
+                int i = index.getAndIncrement();
+                if (i < queue.size()) {
+                    NativeDeleteRequest request = queue.get(i);
+                    if (executeNativeDelete(request)) nativeOk.incrementAndGet();
+                    else nativeFail.incrementAndGet();
+                    synchronized (SIDEBAR_DELETE_ACTIONS) {
+                        SIDEBAR_DELETE_ACTIONS.remove(request.sid);
+                        SIDEBAR_CLICK_ACTIONS.remove(request.sid);
+                    }
+                    SIDEBAR_ROW_BOUNDS.remove(request.sid);
+                    synchronized (SIDEBAR_BOUNDS_CB) {
+                        SIDEBAR_BOUNDS_CB.remove(request.sid);
+                    }
+                    handler.postDelayed(this, 160L);
+                    return;
+                }
+                runLocalDeleteCleanup(act, local, nativeOk.get(),
+                        nativeFail.get() + unmatched);
+            }
+        };
+        handler.post(worker);
+    }
+
+    private static void runLocalDeleteCleanup(final Activity act,
+                                              final Map<String, List<String>> local,
+                                              final int nativeOk,
+                                              final int nativeFail) {
+        Thread cleanup = new Thread(new Runnable() {
+            @Override public void run() {
+                int localOk = 0;
+                int localFail = 0;
+                for (Map.Entry<String, List<String>> entry : local.entrySet()) {
+                    SQLiteDatabase db = null;
+                    try {
+                        db = SQLiteDatabase.openDatabase(entry.getKey(), null,
+                                SQLiteDatabase.OPEN_READWRITE);
+                        for (String sid : entry.getValue()) {
+                            if (ChatEditorUi.deleteSessionLocal(db, sid)) localOk++;
+                            else localFail++;
+                        }
+                    } catch (Throwable failure) {
+                        localFail += entry.getValue().size();
+                        log("batch local session cleanup failed: " + failure);
+                    } finally {
+                        if (db != null) try { db.close(); } catch (Throwable ignored) {}
+                    }
+                }
+                final StringBuilder result = new StringBuilder()
+                        .append("DeepSeek 已删除 ").append(nativeOk)
+                        .append(" 个，本地已清理 ").append(localOk).append(" 个");
+                if (nativeFail > 0) result.append("，原生失败 ").append(nativeFail).append(" 个");
+                if (localFail > 0) result.append("，本地失败 ").append(localFail).append(" 个");
+                final Activity current = act;
+                if (current != null && !current.isFinishing()) {
+                    current.runOnUiThread(new Runnable() {
+                        @Override public void run() {
+                            UiLanguage.toast(current, result.toString(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                }
+            }
+        }, "Deekseep-batch-delete-cleanup");
+        cleanup.setDaemon(true);
+        cleanup.start();
     }
 
     private static Object findNativeSession(String sid) {
@@ -11114,21 +11221,8 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
         synchronized (LOCAL_NATIVE_SESSIONS) {
             LOCAL_NATIVE_SESSIONS.remove(sid);
         }
-        Object sessions = NATIVE_SESSION_LIST;
-        if (sessions instanceof List) {
-            try {
-                Object match = null;
-                for (Object session : new ArrayList<Object>((List) sessions)) {
-                    if (sid.equals(String.valueOf(readHostField(session, "a")))) {
-                        match = session;
-                        break;
-                    }
-                }
-                if (match != null) ((List) sessions).remove(match);
-            } catch (Throwable t) {
-                log("remove deleted native session failed sid=" + sid + ": " + t);
-            }
-        }
+        // The native h61 reducer exclusively owns DeepSeek's SnapshotStateList. The tombstone
+        // above prevents stale local sessions from being re-merged without racing Compose.
     }
 
     private static boolean isSessionRecentlyDeleted(String sid) {

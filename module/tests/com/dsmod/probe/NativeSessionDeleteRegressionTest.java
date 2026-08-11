@@ -43,9 +43,10 @@ public final class NativeSessionDeleteRegressionTest {
         Field wrapped = sink.last.getClass().getDeclaredField("a");
         wrapped.setAccessible(true);
         require(wrapped.get(sink.last) == session, "h61 did not wrap the selected tp");
-        require(sessions.isEmpty(), "stale native session was not removed optimistically");
+        require(sessions.size() == 1 && sessions.get(0) == session,
+                "module mutated the host-owned native session list");
         require(Main.nativeSessionDirectory().isEmpty(),
-                "deleted session was re-exposed by the editor directory");
+                "deleted session tombstone did not hide the stale directory row");
 
         System.out.println("PASS: native h61 deletion bridge and stale-row suppression");
     }
