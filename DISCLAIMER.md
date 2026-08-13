@@ -9,10 +9,11 @@ property of their respective owners.
 
 ## Compatibility and local data
 
-Deekseep 1.7.4 ships one merged runtime APK for DeepSeek 2.2.0, 2.3.0, and
-domestic/Google Play 2.3.4 (version codes 245/246). DeepSeek 2.3.1–2.3.3 are
-unsupported. An app update may require a new adaptation, and older hosts may
-have feature gaps.
+Deekseep 1.7.4 Fix uses one merged runtime for DeepSeek 2.2.x, 2.3.0,
+domestic/Google Play 2.3.4 (version codes 245/246), and mainland 2.3.6
+(version code 249). Compatibility paths are selected at runtime. DeepSeek
+2.3.1–2.3.3 and 2.3.5 are unsupported. An app update may require a new
+adaptation, and older hosts may have feature gaps.
 
 Some optional tools edit local conversations or account data. Make a current
 backup before an important edit, deletion, migration, or account change. If a

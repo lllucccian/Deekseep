@@ -9,18 +9,20 @@ DeepSeek.
 
 ## Stable release
 
-- [Download Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Open.apk) — free, open-source edition without the Local API.
-- [Download Closed.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Closed.apk) — free, closed-source edition with the Local API.
+- [Download Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4-fix/Open.apk) — free, open-source edition without the Local API.
+- [Download Closed.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4-fix/Closed.apk) — free, closed-source edition with the Local API.
 
 Both editions are universal APKs for the supported domestic and Google Play
-hosts. DeepSeek 2.3.4 is recommended. DeepSeek 2.2.0 and 2.3.0 remain usable
-with possible limitations; 2.3.1–2.3.3 are not supported.
+hosts. Mainland DeepSeek 2.3.6 and domestic/Google Play DeepSeek 2.3.4 are
+supported. DeepSeek 2.2.0 and 2.3.0 remain usable with possible limitations;
+2.3.1–2.3.3 and 2.3.5 are not supported.
 
 ## Requirements
 
 - Android 7.0 or newer (API 24+).
 - Official DeepSeek package `com.deepseek.chat`.
-- DeepSeek 2.3.4 (version code 245/246), 2.3.0 (237), or 2.2.0.
+- Mainland DeepSeek 2.3.6 (version code 249), DeepSeek 2.3.4 (245/246),
+  DeepSeek 2.3.0 (237), or DeepSeek 2.2.x.
 - LSPosed/Xposed that can load the traditional Xposed entry, covering API 82–102.
 - Root or the permissions required by your LSPosed/Xposed setup.
 
@@ -48,7 +50,7 @@ backup and disable the module if the host becomes unstable.
 - [Release notes](https://github.com/lllucccian/Deekseep/releases)
 - [Report a reproducible problem](https://github.com/lllucccian/Deekseep/issues)
 
-This repository contains the complete source for the 1.7.4 Open edition. For
+This repository contains the complete source for the 1.7.4 Fix Open edition. For
 certain reasons, the Local API is no longer open source and has moved to the
 Closed edition; source code for the Closed edition is not published. All other
 module features are kept in sync between the two free editions.

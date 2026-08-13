@@ -1,6 +1,6 @@
 # Source edition scope
 
-The 1.7.4 source edition contains the chat, account/privacy, appearance,
+The 1.7.4 Fix source edition contains the chat, account/privacy, appearance,
 debugging, engineering, Agent, backup, notification, process-management,
 feature-flag, custom greeting, custom assistant avatar, whale animation, and
 compatibility implementations present in the public feature core.

@@ -7,17 +7,19 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 
 ## 当前稳定版
 
-- [下载 Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Open.apk) — 免费开源版，不含本地 API。
-- [下载 Closed.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4/Closed.apk) — 免费闭源版，包含本地 API。
+- [下载 Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4-fix/Open.apk) — 免费开源版，不含本地 API。
+- [下载 Closed.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4-fix/Closed.apk) — 免费闭源版，包含本地 API。
 
-两个版本都是通用 APK，同时适配支持的国内版和 Google Play 版。强烈建议使用
-DeepSeek 2.3.4；2.2.0 和 2.3.0 仍可使用但部分功能可能受限；不支持 2.3.1～2.3.3。
+两个版本都是通用 APK，同时适配国内版与 Google Play 版。已适配国内版 DeepSeek
+2.3.6 及国内版/Google Play 版 2.3.4；2.2.x 和 2.3.0 仍可使用但部分功能可能受限；
+不支持 2.3.1～2.3.3 和 2.3.5。
 
 ## 环境要求
 
 - Android 7.0 或更高版本（API 24+）。
 - 官方 DeepSeek 包名 `com.deepseek.chat`。
-- DeepSeek 2.3.4（versionCode 245/246）、2.3.0（237）或 2.2.0。
+- 国内版 DeepSeek 2.3.6（versionCode 249）、DeepSeek 2.3.4（245/246）、
+  DeepSeek 2.3.0（237）或 DeepSeek 2.2.x。
 - 能加载传统 Xposed 入口的 LSPosed/Xposed，已覆盖 API 82～102。
 - Root，或你的 LSPosed/Xposed 环境所要求的权限。
 
@@ -44,7 +46,7 @@ DeepSeek 2.3.4；2.2.0 和 2.3.0 仍可使用但部分功能可能受限；不�
 - [版本发布说明](https://github.com/lllucccian/Deekseep/releases)
 - [提交可复现问题](https://github.com/lllucccian/Deekseep/issues)
 
-本仓库公开 1.7.4 Open 版的完整源码。由于某些原因，本地 API 不再开源，已转移到
+本仓库公开 1.7.4 Fix Open 版的完整源码。由于某些原因，本地 API 不再开源，已转移到
 Closed 版，Closed 版源码不公开；除本地 API 及闭源保护组件外，两个免费版本的其他
 模块功能保持同步。
 

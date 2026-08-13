@@ -1,4 +1,4 @@
-name: Build 1.7.4 source edition
+name: Build 1.7.4 Fix source edition
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
       - name: Upload APKs and checksums
         uses: actions/upload-artifact@v7
         with:
-          name: deekseep-source-edition-v1.7.4
+          name: deekseep-source-edition-v1.7.4-fix
           path: dist/
           if-no-files-found: error
           retention-days: 14

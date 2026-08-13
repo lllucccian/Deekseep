@@ -13,7 +13,7 @@ cat > "$OUT/generated-src/com/dsmod/probe/BuildInfo.java" <<EOF
 package com.dsmod.probe;
 public final class BuildInfo {
     public static final String API_VERSION = "82+ (legacy adapter)";
-    public static final String MODULE_VERSION = "1.7.4 Open";
+    public static final String MODULE_VERSION = "1.7.4-fix Open";
     public static final String BUILD_DATE = "$(date '+%Y-%m-%d %H:%M')";
     public static final boolean GOOGLE_PLAY = false;
     public static final boolean PROTECTED_BUILD = false;

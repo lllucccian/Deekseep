@@ -40,6 +40,7 @@ import android.view.MotionEvent;
 import android.view.PixelCopy;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.Window;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
@@ -181,6 +182,17 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
     private static volatile boolean sidebarConfirmedOpen = false;
     // 会话行真实 Compose 坐标（decor/window 空间：left,top,right,bottom），由 onGloballyPositioned 回调写入
     private static final Map<String, int[]> SIDEBAR_ROW_BOUNDS = new ConcurrentHashMap<>();
+    private static final Map<String, Long> SIDEBAR_ROW_BOUNDS_AT = new ConcurrentHashMap<>();
+    // Keep one overlay view per selected SID. Recreating every marker on a timer caused stale
+    // screen positions during LazyColumn movement and occasional ViewGroup mutation crashes.
+    private static final Map<String, TextView> SIDEBAR_MARK_VIEWS =
+            new ConcurrentHashMap<>();
+    private static final Map<String, Rect> SIDEBAR_FALLBACK_BOUNDS = new HashMap<>();
+    private static volatile long sidebarFallbackBoundsAt;
+    private static volatile WeakReference<TextView> sidebarSelectionTitle =
+            new WeakReference<>(null);
+    private static volatile WeakReference<TextView> sidebarSelectionDelete =
+            new WeakReference<>(null);
     // 每个 sid 复用同一个 ib3 回调，保证 lw5 元素 equals 稳定，避免 Compose 节点抖动
     private static final Map<String, Object> SIDEBAR_BOUNDS_CB = new HashMap<>();
     // bm4(LayoutCoordinates) 方法：i()=isAttached, k()=size(packed long), w(long)=localToWindow
@@ -2811,11 +2823,18 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                                 }
                                 boolean multiSelect = isChatMultiSelect();
                                 boolean changed = false;
+                                if (multiSelect && a[3] != null) {
+                                    a[3] = buildSidebarRowClickProxy(cl, sid, a[3]);
+                                    changed = true;
+                                }
                                 if (multiSelect) {
                                     a[4] = buildSidebarLongPressProxy(cl, sid);
                                     changed = true;
                                 }
-                                if (multiSelect && a.length > 9 && a[9] != null) {
+                                // Always capture placement while the LazyColumn row is composed.
+                                // Enabling selection mode later must not leave existing rows without
+                                // a placement callback or produce checks beside unrelated rows.
+                                if (a.length > 9 && a[9] != null) {
                                     Object wrapped = wrapModifierWithBoundsCapture(cl, sid, a[9]);
                                     if (wrapped != null) {
                                         a[9] = wrapped;
@@ -2858,9 +2877,50 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
         });
     }
 
+    /** Uses the native row tap target during selection mode, preserving normal list scrolling. */
+    private Object buildSidebarRowClickProxy(final ClassLoader cl, final String sid,
+                                              final Object original) throws Exception {
+        final Class<?> xa3 = HostCompat.load(cl, "xa3");
+        return Proxy.newProxyInstance(cl, new Class[]{xa3}, new InvocationHandler() {
+            public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                String name = method.getName();
+                if ("toString".equals(name)) return "DeekseepSidebarRowTap";
+                if ("hashCode".equals(name)) return System.identityHashCode(proxy);
+                if ("equals".equals(name)) return proxy == (args == null ? null : args[0]);
+                if ("u".equals(name) && method.getParameterTypes().length == 0
+                        && sidebarSelectMode) {
+                    toggleSidebarSelection(sid);
+                    refreshSidebarSelectionUi();
+                    return ui8Unit(cl);
+                }
+                return invokeXa3Returning(original, cl);
+            }
+        });
+    }
+
     // 把 onGloballyPositioned(callback) 追加到会话行的 Modifier(qg5) 上：modifier.then(new lw5(cb))
     private Object wrapModifierWithBoundsCapture(ClassLoader cl, String sid, Object modifier) {
         try {
+            if (HostCompat.isV236()) {
+                Class<?> modifierType = cl.loadClass("sp5");
+                Class<?> callbackType = cl.loadClass("ch3");
+                if (!modifierType.isInstance(modifier)) return null;
+                Object callback;
+                synchronized (SIDEBAR_BOUNDS_CB) {
+                    callback = SIDEBAR_BOUNDS_CB.get(sid);
+                    if (callback == null) {
+                        callback = buildBoundsCallback(cl, sid);
+                        SIDEBAR_BOUNDS_CB.put(sid, callback);
+                    }
+                }
+                // code249: z66.Y is Modifier.onGloballyPositioned. od2.B has the same
+                // apparent signature but is graphicsLayer and never receives row coordinates.
+                Class<?> layoutKt = cl.loadClass("z66");
+                Method positioned = layoutKt.getDeclaredMethod(
+                        "Y", modifierType, callbackType);
+                positioned.setAccessible(true);
+                return positioned.invoke(null, modifier, callback);
+            }
             Class<?> qg5 = HostCompat.load(cl, "qg5");
             if (!qg5.isInstance(modifier)) return null;
             Class<?> ib3 = HostCompat.load(cl, "ib3");
@@ -2883,9 +2943,12 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
         final Class<?> ib3 = HostCompat.load(cl, "ib3");
         final Class<?> bm4 = HostCompat.load(cl, "bm4");
         if (BM4_I == null) {
-            BM4_I = bm4.getMethod(HostCompat.method("bm4", "i"));
-            BM4_K = bm4.getMethod(HostCompat.method("bm4", "k"));
-            BM4_W = bm4.getMethod(HostCompat.method("bm4", "w"), long.class);
+            BM4_I = bm4.getMethod(HostCompat.isV236()
+                    ? "h" : HostCompat.method("bm4", "i"));
+            BM4_K = bm4.getMethod(HostCompat.isV236()
+                    ? "j" : HostCompat.method("bm4", "k"));
+            BM4_W = bm4.getMethod(HostCompat.isV236()
+                    ? "r" : HostCompat.method("bm4", "w"), long.class);
         }
         return Proxy.newProxyInstance(cl, new Class[]{ib3}, new InvocationHandler() {
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -2900,12 +2963,19 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                             long size = (Long) BM4_K.invoke(coords);
                             int wpx = (int) (size >> 32);
                             int hpx = (int) (size & 0xFFFFFFFFL);
-                            // 本 build 的 bm4.w(long) 实为 windowToLocal：w(0,0) 返回行窗口坐标的负值，取负还原。
+                            // code249 exposes localToWindow; older hosts expose the historical
+                            // inverse windowToLocal shape and therefore keep the negation.
                             long pos = (Long) BM4_W.invoke(coords, 0L);
-                            int x = -(int) Float.intBitsToFloat((int) (pos >> 32));
-                            int y = -(int) Float.intBitsToFloat((int) (pos & 0xFFFFFFFFL));
+                            int x = (int) Float.intBitsToFloat((int) (pos >> 32));
+                            int y = (int) Float.intBitsToFloat((int) (pos & 0xFFFFFFFFL));
+                            if (!HostCompat.isV236()) {
+                                x = -x;
+                                y = -y;
+                            }
                             if (wpx > 0 && hpx > 0) SIDEBAR_ROW_BOUNDS.put(
                                     sid, new int[]{x, y, x + wpx, y + hpx});
+                            if (wpx > 0 && hpx > 0) SIDEBAR_ROW_BOUNDS_AT.put(
+                                    sid, Long.valueOf(SystemClock.uptimeMillis()));
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -3167,6 +3237,9 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
         root.addView(marks, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        SIDEBAR_MARK_VIEWS.clear();
+        SIDEBAR_FALLBACK_BOUNDS.clear();
+        sidebarFallbackBoundsAt = 0L;
 
         LinearLayout top = new LinearLayout(act);
         top.setOrientation(LinearLayout.HORIZONTAL);
@@ -3205,6 +3278,8 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         final TextView delete = new TextView(act);
+        sidebarSelectionTitle = new WeakReference<>(title);
+        sidebarSelectionDelete = new WeakReference<>(delete);
         final TextView selectAll = new TextView(act);
         selectAll.setText(UiLanguage.text(act, "全选", "Select all"));
         selectAll.setTextColor(brand);
@@ -3230,6 +3305,7 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                     }
                 }
                 updateSidebarSelectTitle(title, delete);
+                refreshSidebarSelectionUi();
             }
         });
         top.addView(selectAll, new LinearLayout.LayoutParams(
@@ -3268,7 +3344,7 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
             public void run() {
                 if (!sidebarSelectMode || sidebarSelectOverlay != root || root.getParent() == null) return;
                 refreshSidebarMarkLayer(act, marks, sessions, title, delete, sidebarW, checkColor);
-                root.postDelayed(this, 300);
+                root.postOnAnimation(this);
             }
         };
         root.post(refresh[0]);
@@ -3285,12 +3361,26 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                 : UiLanguage.text(context, "删除", "Delete"));
     }
 
+    private static void refreshSidebarSelectionUi() {
+        TextView title = sidebarSelectionTitle.get();
+        TextView delete = sidebarSelectionDelete.get();
+        if (title != null && delete != null) updateSidebarSelectTitle(title, delete);
+        for (Map.Entry<String, TextView> entry : SIDEBAR_MARK_VIEWS.entrySet()) {
+            TextView mark = entry.getValue();
+            if (!SIDEBAR_SELECTED.contains(entry.getKey())) {
+                removeSidebarMark(entry.getKey(), mark);
+            } else if (mark != null) {
+                updateSidebarMarkState(mark, entry.getKey(),
+                        DeekseepUi.isDark(mark.getContext()) ? 0xFFECECEC : 0xFF1A1A1A);
+            }
+        }
+    }
+
     private static void refreshSidebarMarkLayer(final Activity act, final FrameLayout marks,
                                                 final List<ChatEditorUi.Session> sessions,
                                                 final TextView title, final TextView delete,
                                                 final int sidebarW, final int checkColor) {
         if (marks == null || marks.getParent() == null) return;
-        marks.removeAllViews();
         Map<String, Rect> bounds = captureBoundsFor(sessions);
         if (sidebarRowsOnScreen(bounds, sidebarW)) sidebarConfirmedOpen = true;
         else if (sidebarConfirmedOpen && isSidebarCollapsed(bounds, sidebarW)) {
@@ -3298,10 +3388,32 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
             slideOutSidebarOverlayAndExit();
             return;
         }
-        if (bounds.isEmpty()) bounds = resolveSidebarSessionBounds(act, sessions, sidebarW);
+        boolean selectedBoundMissing = false;
+        for (String selectedSid : SIDEBAR_SELECTED) {
+            if (!bounds.containsKey(selectedSid)) {
+                selectedBoundMissing = true;
+                break;
+            }
+        }
+        // Accessibility traversal is only a bounded fallback for a selected row whose Compose
+        // placement has not arrived. Scanning the complete semantics tree every frame causes
+        // visible stalls on long histories.
+        long now = SystemClock.uptimeMillis();
+        if (selectedBoundMissing
+                && (SIDEBAR_FALLBACK_BOUNDS.isEmpty()
+                || now - sidebarFallbackBoundsAt >= 500L)) {
+            SIDEBAR_FALLBACK_BOUNDS.clear();
+            SIDEBAR_FALLBACK_BOUNDS.putAll(
+                    resolveSidebarSessionBounds(act, sessions, sidebarW));
+            sidebarFallbackBoundsAt = now;
+        }
+        if (selectedBoundMissing) {
+            for (Map.Entry<String, Rect> entry : SIDEBAR_FALLBACK_BOUNDS.entrySet()) {
+                if (!bounds.containsKey(entry.getKey())) bounds.put(entry.getKey(), entry.getValue());
+            }
+        }
         if (bounds.isEmpty()) {
-            logSidebarBoundsState("sidebar marks fallback: no bounds (capture+a11y empty)");
-            addFallbackSidebarMarks(act, marks, sessions, title, delete, sidebarW, checkColor);
+            logSidebarBoundsState("sidebar marks waiting for native row coordinates");
             return;
         }
         StringBuilder dbg = new StringBuilder("sidebar marks: matched=" + bounds.size() + " raw=");
@@ -3311,15 +3423,55 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                     .append(",").append(rr.width()).append("x").append(rr.height()).append("]");
         }
         logSidebarBoundsState(dbg.toString());
+        HashSet<String> shown = new HashSet<>();
         for (int i = 0; i < sessions.size(); i++) {
             ChatEditorUi.Session s = sessions.get(i);
+            if (s == null || s.id == null || !SIDEBAR_SELECTED.contains(s.id)) continue;
             Rect r = bounds.get(s.id);
             if (r == null) continue;
+            if (r.bottom <= 0 || r.top >= act.getResources()
+                    .getDisplayMetrics().heightPixels) continue;
+            if (isSidebarBoundSuperseded(s.id, r, bounds)) continue;
             int markH = Math.max(DeekseepUi.dp(act, 18), r.height());
             int top = Math.max(0, r.top + (r.height() - markH) / 2);
-            // 手机端适配：勾选热区对齐到该行真实右边缘 r.right，而非全局 sidebarW。
-            addSidebarCheckMark(act, marks, s, title, delete, sidebarW, checkColor, top, markH, r.right);
+            addSidebarCheckMark(act, marks, s, title, delete, sidebarW, checkColor,
+                    top, markH, sidebarW);
+            shown.add(s.id);
         }
+        for (Map.Entry<String, TextView> entry : SIDEBAR_MARK_VIEWS.entrySet()) {
+            TextView mark = entry.getValue();
+            if (mark != null && !shown.contains(entry.getKey())) {
+                removeSidebarMark(entry.getKey(), mark);
+            }
+        }
+    }
+
+    private static void removeSidebarMark(String sid, TextView expected) {
+        if (sid == null) return;
+        TextView mark = SIDEBAR_MARK_VIEWS.get(sid);
+        if (mark == null || (expected != null && mark != expected)) return;
+        if (!SIDEBAR_MARK_VIEWS.remove(sid, mark)) return;
+        try {
+            ViewParent parent = mark.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(mark);
+        } catch (Throwable ignored) {}
+    }
+
+    /** Discard a disposed LazyColumn item's stale coordinate when a newer SID owns the slot. */
+    private static boolean isSidebarBoundSuperseded(
+            String sid, Rect row, Map<String, Rect> bounds) {
+        Long ownAt = SIDEBAR_ROW_BOUNDS_AT.get(sid);
+        long own = ownAt == null ? 0L : ownAt.longValue();
+        for (Map.Entry<String, Rect> entry : bounds.entrySet()) {
+            if (sid.equals(entry.getKey())) continue;
+            Rect other = entry.getValue();
+            if (other == null) continue;
+            int tolerance = Math.max(4, Math.min(row.height(), other.height()) / 2);
+            if (Math.abs(row.centerY() - other.centerY()) > tolerance) continue;
+            Long otherAt = SIDEBAR_ROW_BOUNDS_AT.get(entry.getKey());
+            if (otherAt != null && otherAt.longValue() > own) return true;
+        }
+        return false;
     }
 
     // 侧栏收起检测：收起抽屉不走 mq5.i.u 回调，但 onGloballyPositioned 会把行左坐标从 0 平移到 -sidebarW。
@@ -3369,31 +3521,32 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                                             final TextView title, final TextView delete,
                                             final int sidebarW, final int checkColor,
                                             int top, int rowH, int rowRight) {
-        final TextView mark = new TextView(act);
-        // 行右侧透明可点击热区：对勾靠右显示，触摸区向左延伸约 40% 行宽；左侧仍可点标题切换会话。
-        mark.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        mark.setIncludeFontPadding(false);
-        mark.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-        mark.setTypeface(Typeface.DEFAULT_BOLD);
-        mark.setPadding(0, 0, DeekseepUi.dp(act, 19), 0);
-        mark.setClickable(true);
-        mark.setFocusable(false);
+        TextView existing = SIDEBAR_MARK_VIEWS.get(s.id);
+        final TextView mark;
+        if (existing == null) {
+            mark = new TextView(act);
+            mark.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            mark.setIncludeFontPadding(false);
+            mark.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+            mark.setTypeface(Typeface.DEFAULT_BOLD);
+            mark.setPadding(0, 0, DeekseepUi.dp(act, 19), 0);
+            // The native row owns DOWN/MOVE so vertical dragging remains a normal list scroll.
+            // Its wrapped completed-click callback performs selection.
+            mark.setClickable(false);
+            mark.setFocusable(false);
+            SIDEBAR_MARK_VIEWS.put(s.id, mark);
+            marks.addView(mark);
+        } else {
+            mark = existing;
+        }
         updateSidebarMarkState(mark, s.id, checkColor);
-        // 手机端适配：热区右缘对齐真实行右边缘（有坐标时），钳到 sidebarW；无坐标时退回全宽右缘。
+        mark.setVisibility(View.VISIBLE);
         int rightEdge = rowRight > 0 ? Math.min(rowRight, sidebarW) : sidebarW;
-        int touchW = Math.max(DeekseepUi.dp(act, 96), sidebarW * 2 / 5);
-        if (touchW > rightEdge) touchW = rightEdge;
+        int touchW = Math.max(0, rightEdge);
         FrameLayout.LayoutParams markLp = new FrameLayout.LayoutParams(touchW, rowH);
-        markLp.leftMargin = Math.max(0, rightEdge - touchW);
+        markLp.leftMargin = 0;
         markLp.topMargin = top;
-        marks.addView(mark, markLp);
-        mark.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                toggleSidebarSelection(s.id);
-                updateSidebarSelectTitle(title, delete);
-                updateSidebarMarkState(mark, s.id, checkColor);
-            }
-        });
+        mark.setLayoutParams(markLp);
     }
 
     private static Map<String, Rect> resolveSidebarSessionBounds(Activity act,
@@ -3528,6 +3681,11 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
         SIDEBAR_SELECTED.clear();
         final View v = sidebarSelectOverlay;
         sidebarSelectOverlay = null;
+        SIDEBAR_MARK_VIEWS.clear();
+        SIDEBAR_FALLBACK_BOUNDS.clear();
+        sidebarFallbackBoundsAt = 0L;
+        sidebarSelectionTitle = new WeakReference<>(null);
+        sidebarSelectionDelete = new WeakReference<>(null);
         if (v == null) return;
         final Runnable anim = new Runnable() {
             public void run() {
@@ -3559,6 +3717,11 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
     private static void removeSidebarSelectOverlay() {
         View v = sidebarSelectOverlay;
         sidebarSelectOverlay = null;
+        SIDEBAR_MARK_VIEWS.clear();
+        SIDEBAR_FALLBACK_BOUNDS.clear();
+        sidebarFallbackBoundsAt = 0L;
+        sidebarSelectionTitle = new WeakReference<>(null);
+        sidebarSelectionDelete = new WeakReference<>(null);
         if (v == null) return;
         try {
             ViewGroup p = (ViewGroup) v.getParent();
