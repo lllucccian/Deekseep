@@ -129,6 +129,26 @@ final class ResponsePreserver {
         return originalContentScore(asString(field(row, "l"))) > 0 ? restored : null;
     }
 
+    /**
+     * Persist ordinary assistant responses while their real content is still present.
+     *
+     * DeepSeek 2.3.6 can later replace a completed message with a distinct static
+     * CONTENT_FILTER object during a cold history sync.  At that point the original
+     * object is no longer available to save, so history responses must be checkpointed
+     * before applying the deliberately narrow restore rule below.
+     */
+    static int snapshotHistoryResponse(ClassLoader cl, Object response) {
+        Object session = field(response, "a");
+        String sid = asString(field(session, "a"));
+        Object value = field(response, "b");
+        if (!validSid(sid) || !(value instanceof List)) return 0;
+        int saved = 0;
+        for (Object message : (List<?>) value) {
+            if (saveHostMessage(cl, sid, message)) saved++;
+        }
+        return saved;
+    }
+
     /** Replace filtered kv entries before pw0 leaves its constructor hook. */
     static int restoreHistoryResponse(ClassLoader cl, Object response) {
         Object session = field(response, "a");

@@ -105,6 +105,10 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:$UNIVERSAL_CLASSES:build/c
     tests/h61.java \
     tests/sl8.java \
     tests/kv.java \
+    tests/lq.java \
+    tests/kv0.java \
+    tests/iu0.java \
+    tests/td1.java \
     tests/hv.java \
     tests/x94.java \
     tests/n02.java \

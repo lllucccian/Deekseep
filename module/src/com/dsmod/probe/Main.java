@@ -8743,6 +8743,10 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                                     Integer id = callInt(msg, "u");
                                     boolean marked = FILTERED_ORIGINAL_MESSAGES.containsKey(msg);
                                     boolean filterState = containsContentFilterState(status, quasi);
+                                    if (nc && !filterState && !marked
+                                            && !ResponsePreserver.isFilteredHostMessage(msg)) {
+                                        ResponsePreserver.saveHostMessage(cl, sid, msg);
+                                    }
                                     if (isSrvLog()) {
                                         srvLog("[FM] merge idx=" + i + " id=" + id
                                                 + " status=" + status + " quasi=" + quasi
@@ -11867,6 +11871,12 @@ public class Main extends LegacyXposedModule implements IXposedHookLoadPackage {
                         Object r = chain.proceed();
                         try {
                             if (isNoCensor()) {
+                                int snapshotted = ResponsePreserver.snapshotHistoryResponse(
+                                        cl, chain.getThisObject());
+                                if (snapshotted > 0) {
+                                    log("snapshotted normal responses before cold-sync restore="
+                                            + snapshotted);
+                                }
                                 int restored = ResponsePreserver.restoreHistoryResponse(
                                         cl, chain.getThisObject());
                                 if (restored > 0) {

@@ -65,6 +65,13 @@ public final class ResponsePreserverRegressionTest {
         Object original = message(2, "FINISHED", null, originalFragments);
         Object filtered = message(2, "CONTENT_FILTER", "CONTENT_FILTER", filteredFragments);
 
+        // 2.3.6 can replace a completed response with a different static object only after the
+        // next process start. The ordinary history pass must therefore checkpoint it early.
+        Response initialHistory = new Response(new Session(sid), original);
+        require(ResponsePreserver.snapshotHistoryResponse(
+                        ResponsePreserverRegressionTest.class.getClassLoader(), initialHistory) == 1,
+                "normal 2.3.6 history response was not proactively snapshotted");
+
         require(ResponsePreserver.saveHostMessage(
                 ResponsePreserverRegressionTest.class.getClassLoader(), sid, streamingOriginal),
                 "streaming live original was not saved");
