@@ -62,3 +62,5 @@ Licensed under [GPL-3.0-only](LICENSE).
 ---
 
 **Sponsor the author to accelerate development:** [爱发电](https://www.afdian.com/a/lllucccian)
+
+**User discussion:** 💬 QQ Group 1106465300
