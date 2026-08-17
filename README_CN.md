@@ -57,3 +57,5 @@ Closed 版，Closed 版源码不公开；除本地 API 及闭源保护组件外�
 ---
 
 **赞助作者以加速开发：** [爱发电](https://www.afdian.com/a/lllucccian)
+
+**用户交流：** 💬 QQ 群 1106465300
