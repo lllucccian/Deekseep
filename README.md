@@ -7,6 +7,8 @@ DeepSeek.
 
 [简体中文](README_CN.md)
 
+> 💬 **QQ Group: 1106465300** — Feedback and discussion welcome!
+
 ## Stable release
 
 - [Download Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4-fix/Open.apk) — free, open-source edition without the Local API.

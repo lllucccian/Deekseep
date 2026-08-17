@@ -5,6 +5,8 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 
 [English](README.md)
 
+> 💬 **QQ 交流群：1106465300** — 欢迎进群反馈问题、交流使用心得！
+
 ## 当前稳定版
 
 - [下载 Open.apk](https://github.com/lllucccian/Deekseep/releases/download/v1.7.4-fix/Open.apk) — 免费开源版，不含本地 API。
