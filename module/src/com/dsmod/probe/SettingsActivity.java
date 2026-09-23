@@ -256,6 +256,9 @@ public class SettingsActivity extends Activity {
         ModuleGlyphView glyph = new ModuleGlyphView(this, icon, target == page ? accent : muted);
         item.addView(glyph, new LinearLayout.LayoutParams(dp(25), dp(25)));
         TextView name = text(label, 11, target == page ? accent : muted, Typeface.DEFAULT);
+        // A vertical LinearLayout gives a bare child MATCH_PARENT width, so the label would hug the
+        // cell's left edge while the glyph sits at the centre; the text needs its own centring.
+        name.setGravity(Gravity.CENTER);
         item.addView(name);
         item.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) { showPage(target); renderShell(); }

@@ -314,15 +314,15 @@ class SettingsActivity : ComponentActivity() {
 
     @Composable
     private fun HomePage(padding: PaddingValues) {
-        val activation = if (BuildInfo.PROTECTED_BUILD) activationState() else null
-        val device = if (BuildInfo.PROTECTED_BUILD) remember { deviceSnapshot() } else null
+        val activation = activationState()
+        val device = remember { deviceSnapshot() }
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (BuildInfo.PROTECTED_BUILD) item { ActivationCard(activation!!) }
-            if (BuildInfo.PROTECTED_BUILD) item {
+            item { ActivationCard(activation) }
+            item {
                 InfoPanel(
                     icon = Icons.Filled.Info,
                     title = tr("构建信息", "Build information"),
@@ -339,7 +339,7 @@ class SettingsActivity : ComponentActivity() {
                     icon = Icons.Outlined.Devices,
                     title = tr("设备信息", "Device information"),
                     rows = listOf(
-                        tr("设备", "Device") to device!!.product,
+                        tr("设备", "Device") to device.product,
                         tr("系统", "System") to device.android,
                         tr("处理器架构", "ABI") to device.abi,
                         tr("内核版本", "Kernel") to device.kernel,

@@ -317,18 +317,30 @@ final class AccountManager {
         return writeFileAtomic(SLOTS_FILE, out.toString());
     }
 
-    static boolean removeSlot(String id) {
-        if (id == null) return false;
+    static int removeSlots(java.util.Collection<String> ids) {
+        if (ids == null || ids.isEmpty()) return 0;
+        deleteUserRows(ids);
         String raw = readFile(SLOTS_FILE);
-        if (raw == null) return false;
+        if (raw == null) return 0;
         List<JSONObject> items = parseSlotsJson(raw);
         JSONArray out = new JSONArray();
+        int count = 0;
         for (JSONObject w : items) {
             JSONObject cred = extractCredObject(w);
             String wid = cred == null ? null : cred.optString("id", null);
-            if (!id.equals(wid)) out.put(w);
+            if (wid != null && ids.contains(wid)) {
+                count++;
+            } else {
+                out.put(w);
+            }
         }
-        return writeFileAtomic(SLOTS_FILE, out.toString());
+        writeFileAtomic(SLOTS_FILE, out.toString());
+        return count;
+    }
+
+    static boolean removeSlot(String id) {
+        if (id == null) return false;
+        return removeSlots(java.util.Collections.singleton(id)) > 0;
     }
 
     static void syncAllAccounts() {
@@ -807,6 +819,36 @@ final class AccountManager {
         } catch (Throwable ignored) {
         } finally {
             if (d != null) try { d.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    static void deleteUserRows(java.util.Collection<String> ids) {
+        if (ids == null || ids.isEmpty()) return;
+        File f = new File(USER_DB);
+        if (!f.exists()) return;
+        SQLiteDatabase d = null;
+        try {
+            d = SQLiteDatabase.openDatabase(f.getPath(), null, SQLiteDatabase.OPEN_READWRITE);
+            d.beginTransaction();
+            try {
+                for (String id : ids) {
+                    if (id != null && !id.isEmpty()) {
+                        d.delete("app_user_info", "id = ?", new String[]{id});
+                    }
+                }
+                d.setTransactionSuccessful();
+            } finally {
+                d.endTransaction();
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (d != null) try { d.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    static void deleteUserRow(String id) {
+        if (id != null && !id.isEmpty()) {
+            deleteUserRows(java.util.Collections.singleton(id));
         }
     }
 

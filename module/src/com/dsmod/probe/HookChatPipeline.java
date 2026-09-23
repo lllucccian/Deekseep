@@ -686,6 +686,16 @@ final class HookChatPipeline {
                                     forcedNativeReasoning = true;
                                 }
                             }
+                            // 上下文压缩：只做投递。压缩由聊天页的按钮手动触发并落盘成一条摘要记录，
+                            // 这里只负责把该对话欠着的那条摘要随本次请求发出去，且只发一次。
+                            // 只在真正的交互式用户发送时投递——心跳/Agent 私有传输和 Local API
+                            // 各自带着完整上下文，改写它们的提示词会破坏调用方的语义。
+                            String compactionPrompt = "";
+                            if (!nativeProactiveEvent && !privateAgentTransport
+                                    && !isSynthetic && conversationId.length() > 0) {
+                                compactionPrompt =
+                                        ChatCompactionBridge.claimCapsule(conversationId);
+                            }
                             long injectStarted = SystemClock.uptimeMillis();
                             String sysPrompt = readPrompt();
                             // code257 keeps Agent/MCP injection independent from the optional
@@ -757,6 +767,8 @@ final class HookChatPipeline {
                                     dualWorkspacePrompt);
                             combinedPrompt = combineSystemPrompts(
                                     combinedPrompt, retainedRecallContext);
+                            combinedPrompt = combineSystemPrompts(
+                                    combinedPrompt, compactionPrompt);
                             combinedPrompt = combineSystemPrompts(
                                     combinedPrompt, pluginPrompt);
                             if (combinedPrompt.length() > 0) {

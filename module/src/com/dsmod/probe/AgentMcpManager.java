@@ -336,7 +336,7 @@ final class AgentMcpManager {
             created.start();
             legacySse = created;
         }
-        JSONObject client = new JSONObject().put("name", "Deekseep").put("version", "1.7.5");
+        JSONObject client = new JSONObject().put("name", "Deekseep").put("version", "1.8");
         JSONObject params = new JSONObject().put("protocolVersion", "2025-03-26")
                 .put("capabilities", new JSONObject()).put("clientInfo", client);
         JSONObject initialized = rpc(config, "initialize", params, false);

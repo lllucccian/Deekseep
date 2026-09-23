@@ -11,7 +11,7 @@ cat > "$OUT/src/com/dsmod/probe/BuildInfo.java" <<EOF
 package com.dsmod.probe;
 public final class BuildInfo {
     public static final String API_VERSION = "universal (Xposed API 82-102 verified)";
-    public static final String MODULE_VERSION = "1.7.5";
+    public static final String MODULE_VERSION = "1.8";
     public static final String BUILD_EDITION = "Open";
     public static final String DISPLAY_VERSION = MODULE_VERSION + " " + BUILD_EDITION;
     public static final String BUILD_DATE = "$(date '+%Y-%m-%d %H:%M')";

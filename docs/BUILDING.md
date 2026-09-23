@@ -1,7 +1,7 @@
-# Building 1.7.5 Open from source
+# Building 1.8 Open from source
 
 The public source edition intentionally excludes the Local API, tunnel
-connectors, and protected-build payloads. It otherwise uses the same 1.7.5 Open
+connectors, and protected-build payloads. It otherwise uses the same 1.8 Open
 feature core for the supported domestic and Google Play DeepSeek packages.
 
 Requirements: JDK 17, Bash, Android SDK Platform 35 or newer, Android Build

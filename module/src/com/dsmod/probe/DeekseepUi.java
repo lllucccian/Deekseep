@@ -72,6 +72,8 @@ public final class DeekseepUi {
             new FeatureSearchEntry("编辑聊天记录", "修改 新建对话", CATEGORY_CHAT),
             new FeatureSearchEntry("消息时间与详情", "时间戳 message details", CATEGORY_CHAT),
             new FeatureSearchEntry("自动继续生成", "继续生成 长思考 后台 续写", CATEGORY_CHAT),
+            new FeatureSearchEntry("上下文压缩", "压缩 摘要 压缩记录 摘要记录 上下文 compact summary",
+                    CATEGORY_CHAT),
             new FeatureSearchEntry("解除本地聊天次数修改",
                     "编辑 修改 重新生成 次数 限制", CATEGORY_CHAT),
             new FeatureSearchEntry("思考链代码块复制",
@@ -370,9 +372,14 @@ public final class DeekseepUi {
 
     /** 右上角的文字入口 "Deekseep"。 */
     static TextView createEntryButton(Context ctx, View.OnClickListener onClick) {
+        return createEntryButton(ctx, "Deekseep", onClick);
+    }
+
+    /** 同一套样式的文字入口，标题可换；供聊天页的「压缩」按钮复用。 */
+    static TextView createEntryButton(Context ctx, String label, View.OnClickListener onClick) {
         TextView b = new TextView(ctx);
         b.setTag(ENTRY_BUTTON_TAG);
-        b.setText("Deekseep");
+        b.setText(label);
         b.setTextColor(isDark(ctx) ? 0xFFECECEC : 0xFF1A1A1A);
         b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         b.setTypeface(Typeface.DEFAULT);
@@ -1592,6 +1599,66 @@ public final class DeekseepUi {
                     @Override public void onCheckedChanged(CompoundButton button,
                                                            boolean checked) {
                         if (reverting || Main.setAutoContinueEnabled(checked)) return;
+                        reverting = true;
+                        button.setChecked(!checked);
+                        reverting = false;
+                    }
+                }));
+
+        card.addView(makeDivider(act, divColor));
+        // Manual compaction: no switch to arm, so this row only navigates. It kept the title
+        // "上下文压缩" because the feature search matches rows by title.
+        LinearLayout compactionRow = new LinearLayout(act);
+        compactionRow.setOrientation(LinearLayout.HORIZONTAL);
+        compactionRow.setGravity(Gravity.CENTER_VERTICAL);
+        compactionRow.setPadding(dp(act, 16), dp(act, 16), dp(act, 16), dp(act, 16));
+        compactionRow.setClickable(true);
+        compactionRow.setFocusable(true);
+
+        LinearLayout compactionLabels = new LinearLayout(act);
+        compactionLabels.setOrientation(LinearLayout.VERTICAL);
+        TextView compactionTitle = new TextView(act);
+        compactionTitle.setText(UiLanguage.dynamic(act, "上下文压缩"));
+        compactionTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        compactionTitle.setTextColor(textColor);
+        compactionLabels.addView(compactionTitle, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView compactionDesc = new TextView(act);
+        compactionDesc.setText(UiLanguage.dynamic(act,
+                "把当前对话折叠成摘要并在新对话里继续；摘要可编辑、可放入任意对话。"));
+        compactionDesc.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        compactionDesc.setTextColor(subColor);
+        LinearLayout.LayoutParams compactionDescLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        compactionDescLp.topMargin = dp(act, 4);
+        compactionLabels.addView(compactionDesc, compactionDescLp);
+        compactionRow.addView(compactionLabels, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView compactionArrow = new TextView(act);
+        compactionArrow.setText("\u203A");
+        compactionArrow.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        compactionArrow.setTextColor(subColor);
+        compactionRow.addView(compactionArrow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        compactionRow.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { ContextCompactionUi.show(act); }
+        });
+        flashSearchHighlight(compactionRow, "上下文压缩");
+        card.addView(compactionRow);
+
+        // Escape hatch: whether the route predicate recognises a given build's chat route can only
+        // be judged on the device, so the user gets a way out if the chip shows up in the wrong place.
+        card.addView(makeDivider(act, divColor));
+        card.addView(simpleSwitchRow(act, "在聊天页显示压缩按钮",
+                "关闭后聊天页不再显示悬浮的「压缩对话」按钮，设置页里的入口仍然可用。按住按钮可以拖到任意位置，位置会被记住。",
+                Main.isChatCompactionButtonEnabled(), textColor, subColor, dark,
+                new CompoundButton.OnCheckedChangeListener() {
+                    private boolean reverting;
+                    @Override public void onCheckedChanged(CompoundButton button,
+                                                           boolean checked) {
+                        if (reverting || Main.setChatCompactionButtonEnabled(checked)) return;
                         reverting = true;
                         button.setChecked(!checked);
                         reverting = false;
@@ -5018,6 +5085,7 @@ public final class DeekseepUi {
                 || text.contains("系统提示词") || text.contains("聊天记录多选")
                 || text.contains("编辑聊天记录") || text.contains("消息时间与详情")
                 || text.contains("自动继续生成")
+                || text.contains("上下文压缩")
                 || text.contains("导出会话")
                 || text.contains("导入聊天记录")
                 || text.contains("全局搜索") || text.contains("会话数据统计")

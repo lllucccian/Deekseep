@@ -101,6 +101,26 @@ final class HostNavigationUi {
         summary.setLineSpacing(dp(activity, 2), 1f);
         body.addView(summary);
 
+        // Module actions, not host pages: they sit above the index so they are reachable without a
+        // search. Each owns its whole flow, so this page steps aside first.
+        LinearLayout compactCard = actionCard(activity, surface, border, ink, secondary,
+                "压缩对话",
+                "把当前对话折叠成摘要并在新对话里继续；摘要可编辑、可放入任意对话。",
+                () -> {
+                    DeekseepUi.slideOutAndDismiss(dialog, root);
+                    ChatCompactionEntryUi.showCompactConfirm(activity);
+                });
+        body.addView(compactCard, actionCardParams(activity));
+
+        LinearLayout recordsCard = actionCard(activity, surface, border, ink, secondary,
+                "压缩记录",
+                "查看、编辑、放入当前对话或删除已保存的摘要。",
+                () -> {
+                    DeekseepUi.slideOutAndDismiss(dialog, root);
+                    ChatCompactionEntryUi.showRecords(activity);
+                });
+        body.addView(recordsCard, actionCardParams(activity));
+
         final EditText search = new EditText(activity);
         search.setSingleLine(true);
         search.setHint("搜索页面、Route 或 Activity");
@@ -460,6 +480,32 @@ final class HostNavigationUi {
         if (HostNavigationCatalog.PARAMETERS.equals(policy)) return "需要 Intent/预览状态，仅收录不启动";
         if (HostNavigationCatalog.BLOCKED.equals(policy)) return "第三方或系统辅助 Activity，禁止启动";
         return "宿主内部辅助 Activity，仅收录不启动";
+    }
+
+    private static LinearLayout actionCard(Activity activity, int surface, int border,
+            int ink, int secondary, String titleValue, String descValue, final Runnable action) {
+        LinearLayout card = new LinearLayout(activity);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(activity, 14), dp(activity, 12), dp(activity, 14), dp(activity, 12));
+        card.setBackground(outline(surface, border, dp(activity, 12), dp(activity, 1)));
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.addView(text(activity, titleValue, 15, ink, true));
+        TextView desc = text(activity, descValue, 12, secondary, false);
+        desc.setLineSpacing(dp(activity, 2), 1f);
+        LinearLayout.LayoutParams descParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        descParams.topMargin = dp(activity, 4);
+        card.addView(desc, descParams);
+        card.setOnClickListener(v -> action.run());
+        return card;
+    }
+
+    private static LinearLayout.LayoutParams actionCardParams(Activity activity) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(activity, 12);
+        return params;
     }
 
     private static TextView text(Activity activity, String value, float size,

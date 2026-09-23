@@ -97,6 +97,7 @@ ui_sources = [
     "DeekseepUi.java", "ChatAppearance.java", "ChatAppearanceUi.java",
     "SpatialMotionUi.java",
     "ImageCutoutUi.java",
+    "ContextCompactionUi.java",
     "AccountUi.java", "AccountManager.java",
     "AccountCredentialCodec.java", "ChatEditorUi.java", "ChatSearchUi.java",
     "DeekseepTools.java", "SettingsActivity.java",

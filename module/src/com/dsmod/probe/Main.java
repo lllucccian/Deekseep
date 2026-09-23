@@ -254,6 +254,21 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
     private static final String DUAL_CHAT_ENABLED_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_dual_chat";
 
+    /** Escape hatch for the chat-page compaction chip; see {@link #isChatCompactionButtonEnabled()}. */
+    private static final String CHAT_COMPACTION_BUTTON_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_chat_compaction_button";
+
+    /**
+     * Where the user last dragged the compaction chip, stored as two fractions of the chip's travel
+     * range rather than as pixels so the position survives a density or window-size change.
+     */
+    private static final String CHAT_COMPACTION_CHIP_POS_FILE =
+            "/data/data/com.deepseek.chat/files/deekseep_chat_compaction_button_pos";
+
+    /** Default resting place: hard right, a third of the way down, clear of the host's top bar. */
+    private static final float CHIP_DEFAULT_FRACTION_X = 1f;
+    private static final float CHIP_DEFAULT_FRACTION_Y = 0.34f;
+
     private static final String DATA_OPT_OUT_ENFORCED_FILE =
             "/data/data/com.deepseek.chat/files/deekseep_force_training_disabled";
 
@@ -623,6 +638,19 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
             Collections.synchronizedMap(new WeakHashMap<View, ViewTreeObserver.OnGlobalLayoutListener>());
 
     private WeakReference<TextView> btn = new WeakReference<>(null);
+
+    /**
+     * The chat page's compaction chip. It overlaps the settings entry's resting area, so the two are
+     * kept mutually exclusive by route: the settings entry owns the settings root route and this one
+     * owns everything else. The host keeps its own controls along the top bar — the new-conversation
+     * button among them — so the chip starts at the right edge about a third of the way down rather
+     * than in the corner, and the user can drag it anywhere; where it was left is remembered in
+     * {@link #CHAT_COMPACTION_CHIP_POS_FILE}.
+     */
+    private WeakReference<TextView> compactBtn = new WeakReference<>(null);
+
+    /** Last route observed by {@link #syncButtonWithRoute}, so the chip can be re-evaluated later. */
+    private volatile String lastRoute;
 
     WeakReference<Object> navController = new WeakReference<>(null);
 
@@ -1205,7 +1233,10 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
                         @Override public void onActivitySaveInstanceState(Activity act, android.os.Bundle b) {}
                         @Override public void onActivityDestroyed(Activity act) {
                             DeekseepUi.onActivityDestroyed(act);
-                            if (curAct.get() == act) hideButton();
+                            if (curAct.get() == act) {
+                                hideButton();
+                                hideCompactionButton();
+                            }
                         }
                         @Override public void onActivityResumed(Activity act) {
                             onActivityResumedInternal(act, cl);
@@ -1321,7 +1352,10 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
                         DualChatUi.forget(act);
                         SystemBarCompat.forget(act);
                         HookLogOverlay.onActivityDestroyed(act);
-                        if (curAct.get() == act) hideButton();
+                        if (curAct.get() == act) {
+                            hideButton();
+                            hideCompactionButton();
+                        }
                     } catch (Throwable ignored) {}
                     return chain.proceed();
                 }
@@ -2437,6 +2471,39 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
             return saved;
         } catch (Throwable error) {
             log("dual chat update failed: " + safeThrowableMessage(error));
+            return false;
+        }
+    }
+
+    /**
+     * Whether the chat page shows the compaction chip. On by default — the marker file records an
+     * opt-<em>out</em>, because whether the route predicate recognises a build's chat route can only
+     * be judged on the device.
+     */
+    static boolean isChatCompactionButtonEnabled() {
+        return !new File(CHAT_COMPACTION_BUTTON_FILE).isFile();
+    }
+
+    static boolean setChatCompactionButtonEnabled(boolean enabled) {
+        try {
+            File marker = new File(CHAT_COMPACTION_BUTTON_FILE);
+            if (enabled) {
+                if (marker.exists() && !marker.delete()) return false;
+            } else {
+                overwriteTextFile(marker.getPath(), "1");
+            }
+            boolean saved = isChatCompactionButtonEnabled() == enabled;
+            if (saved) {
+                final Main module = MODULE;
+                if (module != null && module.main != null) {
+                    module.main.post(new Runnable() {
+                        @Override public void run() { module.syncCompactionButtonWithRoute(); }
+                    });
+                }
+            }
+            return saved;
+        } catch (Throwable error) {
+            log("chat compaction button update failed: " + safeThrowableMessage(error));
             return false;
         }
     }
@@ -8565,7 +8632,9 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
     private void syncButtonWithRoute(Object nav) {
         try {
             String route = currentRoute(nav != null ? nav : navController.get());
+            lastRoute = route;
             ChatAppearance.onRouteChanged(curAct.get(), route);
+            syncCompactionButtonWithRoute();
             if (route == null || route.length() == 0) return;
             if (btn.get() == null) return;
             if (!isSettingsRootRouteName(route)) {
@@ -8579,6 +8648,26 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
                 main.post(new Runnable() { public void run() { showButton(); } });
             }
         } catch (Throwable t) { log("sync route failed: " + t); }
+    }
+
+    /**
+     * Chat-page compaction chip visibility. Only the settings root route hides it, because that is
+     * where the settings entry chip lives; every other route is either the chat destination or a
+     * page where tapping the chip says there is no conversation open yet. Whether each build's route
+     * string really distinguishes those cases can only be checked on a device, which is what
+     * {@link #isChatCompactionButtonEnabled()} is the escape hatch for.
+     */
+    void syncCompactionButtonWithRoute() {
+        try {
+            String route = lastRoute;
+            boolean settings = route != null && route.length() > 0
+                    && isSettingsRootRouteName(route);
+            if (!isChatCompactionButtonEnabled() || settings) {
+                hideCompactionButton();
+                return;
+            }
+            showCompactionButton();
+        } catch (Throwable t) { log("sync compaction button failed: " + t); }
     }
 
     private static boolean isSettingsRootRouteName(String route) {
@@ -8810,6 +8899,251 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
             btn = new WeakReference<>(null);
             log("button removed");
         } catch (Throwable t) { log("hideButton failed: " + t); }
+    }
+
+    /**
+     * The chat page's compaction chip. Unlike the settings entry it is not tied to a composable
+     * hook: it is added to whatever activity is current and taken away again when the route says so.
+     */
+    void showCompactionButton() {
+        try {
+            if (!isChatCompactionButtonEnabled()) {
+                hideCompactionButton();
+                return;
+            }
+            final Activity act = curAct.get();
+            if (act == null || act.isFinishing()) return;
+            if (BuildInfo.PROTECTED_BUILD && !CloudPromptClient.hasValidLicense(act)) {
+                hideCompactionButton();
+                return;
+            }
+
+            TextView existing = compactBtn.get();
+            if (existing != null && existing.getContext() == act && existing.getParent() != null) {
+                existing.setTextColor(DeekseepUi.isDark(act) ? 0xFFECECEC : 0xFF1A1A1A);
+                existing.setVisibility(View.VISIBLE);
+                existing.bringToFront();
+                return;
+            }
+
+            ViewGroup content = act.findViewById(android.R.id.content);
+            if (content == null) return;
+
+            TextView b = DeekseepUi.createEntryButton(act,
+                    UiLanguage.dynamic(act, "压缩对话"), new View.OnClickListener() {
+                public void onClick(View v) {
+                    try { ChatCompactionEntryUi.showCompactConfirm(act); }
+                    catch (Throwable t) { log("compaction confirm failed: " + t); }
+                }
+            });
+
+            // Measured up front because the placement needs the chip's own size to compute the travel
+            // range, and a WRAP_CONTENT child has none until it has been through a layout pass. The
+            // host's content may also have no size yet on a cold start; the placement listener below
+            // redoes this placement as soon as a real size exists.
+            b.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int[] resting = compactionChipMargins(
+                    act, content, b.getMeasuredWidth(), b.getMeasuredHeight());
+
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            // Left rather than end: the drag maths needs a margin that grows towards the right.
+            lp.gravity = Gravity.TOP | Gravity.LEFT;
+            lp.leftMargin = resting[0];
+            lp.topMargin = resting[1];
+            content.addView(b, lp);
+            b.bringToFront();
+            installCompactionChipDrag(b, act, content);
+            installCompactionChipPlacement(b, act, content);
+            compactBtn = new WeakReference<>(b);
+            log("compaction button added on " + act.getClass().getName());
+        } catch (Throwable t) { log("showCompactionButton failed: " + t); }
+    }
+
+    private static int compactionChipMargin(Context ctx) {
+        return DeekseepUi.dp(ctx, 12);
+    }
+
+    /** Top of the chip's travel: below the status bar, where the entry chip also rests. */
+    private static int compactionChipTopBase(Context ctx) {
+        return DeekseepUi.statusBarHeight(ctx) + DeekseepUi.dp(ctx, 8);
+    }
+
+    private static int clampChip(int value, int low, int high) {
+        return value < low ? low : (value > high ? high : value);
+    }
+
+    private static float clampChipFraction(float value) {
+        return value < 0f ? 0f : (value > 1f ? 1f : value);
+    }
+
+    /** The remembered chip fraction, or the default resting place when nothing is stored. */
+    private static float[] compactionChipFraction() {
+        float x = CHIP_DEFAULT_FRACTION_X;
+        float y = CHIP_DEFAULT_FRACTION_Y;
+        try {
+            String value = readSmallText(CHAT_COMPACTION_CHIP_POS_FILE);
+            if (value != null && value.length() > 0) {
+                String[] parts = value.trim().split("\\s+");
+                if (parts.length >= 2) {
+                    x = clampChipFraction(Float.parseFloat(parts[0]));
+                    y = clampChipFraction(Float.parseFloat(parts[1]));
+                }
+            }
+        } catch (Throwable ignored) { }
+        return new float[] { x, y };
+    }
+
+    /** Turns the remembered fraction into margins for a chip of the given measured size. */
+    private static int[] compactionChipMargins(Context ctx, ViewGroup content,
+                                               int width, int height) {
+        int margin = compactionChipMargin(ctx);
+        int topBase = compactionChipTopBase(ctx);
+        float[] fraction = compactionChipFraction();
+        int travelX = Math.max(0, content.getWidth() - width - 2 * margin);
+        int travelY = Math.max(0, content.getHeight() - height - topBase - margin);
+        return new int[] {
+                margin + Math.round(fraction[0] * travelX),
+                topBase + Math.round(fraction[1] * travelY) };
+    }
+
+    /**
+     * Re-places the chip once — and every time — the host's content reports a size the placement can
+     * be computed against. Two cases need this. A cold start can add the chip before the host has
+     * measured anything, and {@link #compactionChipMargins} would then multiply the remembered
+     * fraction into a travel range of zero, pinning the chip to the top-left corner where nothing
+     * would ever move it again. And after a rotation or a split-screen resize the fraction has to be
+     * turned into margins again, which is the whole reason the position is stored as a fraction. The
+     * listener ignores callbacks for a content size it has already placed against, so a window that
+     * keeps relaying out the same size cannot spin here.
+     */
+    private void installCompactionChipPlacement(final TextView chip, final Activity act,
+                                                final ViewGroup content) {
+        chip.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            private int placedWidth;
+            private int placedHeight;
+
+            @Override public void onLayoutChange(View v, int left, int top, int right, int bottom,
+                                                 int oldLeft, int oldTop, int oldRight,
+                                                 int oldBottom) {
+                int w = content.getWidth();
+                int h = content.getHeight();
+                if (w <= 0 || h <= 0) return;
+                if (w == placedWidth && h == placedHeight) return;
+                if (v.getParent() != content) return;
+                ViewGroup.LayoutParams raw = v.getLayoutParams();
+                if (!(raw instanceof ViewGroup.MarginLayoutParams)) return;
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) raw;
+                // Recorded before the write: setLayoutParams asks for another traversal, and the
+                // re-entry must fall out at the size check above rather than re-place the chip.
+                placedWidth = w;
+                placedHeight = h;
+                int[] wanted = compactionChipMargins(act, content,
+                        v.getMeasuredWidth(), v.getMeasuredHeight());
+                if (wanted[0] == lp.leftMargin && wanted[1] == lp.topMargin) return;
+                lp.leftMargin = wanted[0];
+                lp.topMargin = wanted[1];
+                v.setLayoutParams(lp);
+            }
+        });
+    }
+
+    /**
+     * Makes the chip draggable. The chip is a sibling of the host's content, so the gesture arrives
+     * here whole and the host never scrolls underneath it. A gesture shorter than the touch slop is
+     * replayed as a click, so tapping still opens the confirmation.
+     */
+    private void installCompactionChipDrag(final TextView chip, final Activity act,
+                                           final ViewGroup content) {
+        final int margin = compactionChipMargin(act);
+        final int topBase = compactionChipTopBase(act);
+        final int slop = Math.max(1, DeekseepUi.dp(act, 8));
+        chip.setOnTouchListener(new View.OnTouchListener() {
+            private float downX;
+            private float downY;
+            private int startLeft;
+            private int startTop;
+            private boolean dragging;
+
+            @Override public boolean onTouch(View v, MotionEvent event) {
+                ViewGroup.LayoutParams raw = v.getLayoutParams();
+                if (!(raw instanceof ViewGroup.MarginLayoutParams)) return false;
+                ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) raw;
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downX = event.getRawX();
+                        downY = event.getRawY();
+                        startLeft = lp.leftMargin;
+                        startTop = lp.topMargin;
+                        dragging = false;
+                        return true;
+                    case MotionEvent.ACTION_MOVE: {
+                        int dx = Math.round(event.getRawX() - downX);
+                        int dy = Math.round(event.getRawY() - downY);
+                        if (!dragging && Math.abs(dx) + Math.abs(dy) < slop) return true;
+                        dragging = true;
+                        lp.leftMargin = clampChip(startLeft + dx, margin,
+                                Math.max(margin, content.getWidth() - v.getWidth() - margin));
+                        lp.topMargin = clampChip(startTop + dy, topBase,
+                                Math.max(topBase, content.getHeight() - v.getHeight() - margin));
+                        v.setLayoutParams(lp);
+                        return true;
+                    }
+                    case MotionEvent.ACTION_UP:
+                        if (!dragging) {
+                            v.performClick();
+                            return true;
+                        }
+                        dragging = false;
+                        rememberCompactionChipPosition(v, content);
+                        return true;
+                    case MotionEvent.ACTION_CANCEL:
+                        // A revoked gesture is not a tap. The host can cancel the stream at any
+                        // moment — window focus loss, or the chip being removed by a route change —
+                        // and a click synthesised here would open the dialog for a touch the user
+                        // never completed. Keep a move that did happen; never invent a click.
+                        if (dragging) {
+                            dragging = false;
+                            rememberCompactionChipPosition(v, content);
+                        }
+                        return true;
+                    default:
+                        // We own the whole gesture once ACTION_DOWN has been consumed, so the extra
+                        // pointer actions are swallowed here rather than leaking to onTouchEvent.
+                        return true;
+                }
+            }
+        });
+    }
+
+    /** Stores the dragged position as a fraction of the travel range. */
+    private static void rememberCompactionChipPosition(View chip, ViewGroup content) {
+        try {
+            ViewGroup.LayoutParams raw = chip.getLayoutParams();
+            if (!(raw instanceof ViewGroup.MarginLayoutParams)) return;
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) raw;
+            Context ctx = chip.getContext();
+            int margin = compactionChipMargin(ctx);
+            int topBase = compactionChipTopBase(ctx);
+            int travelX = Math.max(1, content.getWidth() - chip.getWidth() - 2 * margin);
+            int travelY = Math.max(1, content.getHeight() - chip.getHeight() - topBase - margin);
+            overwriteTextFile(CHAT_COMPACTION_CHIP_POS_FILE, String.format(Locale.US, "%.4f %.4f",
+                    clampChipFraction((lp.leftMargin - margin) / (float) travelX),
+                    clampChipFraction((lp.topMargin - topBase) / (float) travelY)));
+        } catch (Throwable t) {
+            log("compaction chip position save failed: " + safeThrowableMessage(t));
+        }
+    }
+
+    void hideCompactionButton() {
+        try {
+            TextView existing = compactBtn.get();
+            compactBtn = new WeakReference<>(null);
+            if (existing == null) return;
+            ViewGroup parent = (ViewGroup) existing.getParent();
+            if (parent != null) parent.removeView(existing);
+        } catch (Throwable t) { log("hideCompactionButton failed: " + t); }
     }
 
     // ══════════════════════════════════════════════════════════════════════

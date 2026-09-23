@@ -71,6 +71,8 @@ javac -source 8 -target 8 -cp "$JSON_JAR:$ANDROID_JAR:$UNIVERSAL_CLASSES:build/c
     tests/com/dsmod/probe/ProcessManagerRegressionTest.java \
     tests/com/dsmod/probe/ReplyReadyPolicyRegressionTest.java \
     tests/com/dsmod/probe/AutoContinuePolicyRegressionTest.java \
+    tests/com/dsmod/probe/ChatContextCompactorRegressionTest.java \
+    src/com/dsmod/probe/ChatContextCompactor.java \
     src/com/dsmod/probe/NativeApiPatchDecoder.java \
     src/com/dsmod/probe/SpatialMotionController.java \
     src/com/dsmod/probe/SpatialLayerCache.java \
@@ -188,5 +190,8 @@ java -cp "$TEST_CP" \
 
 java -cp "$TEST_CP" \
     com.dsmod.probe.AutoContinuePolicyRegressionTest
+
+java -cp "$TEST_CP" \
+    com.dsmod.probe.ChatContextCompactorRegressionTest
 
 ./test-language-catalog.sh

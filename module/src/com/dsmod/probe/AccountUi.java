@@ -717,10 +717,11 @@ final class AccountUi {
         DeekseepUi.showCustomConfirm(act, "删除账号", message,
                 "取消", "删除", true, null, new Runnable() {
                     public void run() {
-                        int removed = 0;
+                        List<String> ids = new ArrayList<>();
                         for (AccountManager.Account account : removable) {
-                            if (AccountManager.removeSlot(account.id)) removed++;
+                            ids.add(account.id);
                         }
+                        int removed = AccountManager.removeSlots(ids);
                         exitMultiSelect(act);
                         UiLanguage.toast(act, "已删除 " + removed + " 个账号",
                                 Toast.LENGTH_SHORT).show();
