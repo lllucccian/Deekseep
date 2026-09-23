@@ -63,6 +63,7 @@ final class ModuleConfigBridge {
             "deekseep_proactive_binding.json",
             "deekseep_agent/settings.json",
             "deekseep_appearance/config.json",
+            "deekseep_context_compaction.json",
             "deekseep_hook_overlay"
     };
 

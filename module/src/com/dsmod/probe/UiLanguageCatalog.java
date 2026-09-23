@@ -1843,6 +1843,71 @@ final class UiLanguageCatalog {
         add("导入图片并调整取景、缩放、透明度和界面。", "Import an image and adjust framing, zoom, opacity, and screen.");
         add("功能说明与必要排查。点一下条目展开。", "Feature notes and essential troubleshooting. Tap an item to expand.");
 
+        add("上下文压缩", "Context compaction");
+        add("把当前对话折叠成摘要并在新对话里继续；摘要可编辑、可放入任意对话。",
+                "Fold the current conversation into a summary and continue in a new one; the summary can be edited and attached to any conversation.");
+        add("在聊天页显示压缩按钮", "Show the compact button on the chat page");
+        add("关闭后聊天页不再显示悬浮的「压缩对话」按钮，设置页里的入口仍然可用。按住按钮可以拖到任意位置，位置会被记住。",
+                "When off, the floating compact button is hidden on the chat page; the entry inside settings keeps working. Hold the button to drag it anywhere, and the position is remembered.");
+        add("建议压缩线", "Suggested compaction line");
+        add("当前对话超过这个字数时，聊天页的「压缩对话」按钮会提示已超过建议值；不会自动压缩",
+                "Once the conversation passes this many characters the chat-page compact button reports it as past the suggested line; nothing compacts on its own.");
+        add("保留最近轮数", "Recent turns kept verbatim");
+        add("最近这些轮对话按原文保留，更早的折叠为摘要",
+                "Keep this many recent turns verbatim; fold anything older into the summary.");
+        add("摘要字数上限", "Summary character limit");
+        add("压缩后摘要的最大长度，也是注入时的上下文开销",
+                "Maximum length of the compacted summary, which is also the context cost it adds.");
+        add("当前对话用量", "Current conversation usage");
+        add("暂时读不到当前对话", "The current conversation cannot be read yet");
+        add("压缩记录", "Compaction records");
+        add("查看、编辑、放入当前对话或删除已保存的摘要",
+                "Review, edit, attach to the current conversation, or delete a stored summary.");
+        add("压缩对话（新建并继续）", "Compact (start a new conversation)");
+        add("保存并应用", "Save and apply");
+        add("压缩对话", "Compact");
+        add("压缩并新建对话", "Compact and start a new conversation");
+        add("压缩当前对话", "Compact the current conversation");
+        add("还没有打开任何对话", "No conversation is open yet");
+        add("当前对话不足两条，暂时无需压缩",
+                "This conversation has fewer than two messages; nothing to compact yet.");
+        // The two dead-end notices on the compaction chip carry a second sentence pointing at the
+        // stored summaries. They are whole sentences rather than the shorter forms above because
+        // the fallback replacement is longest-first, so a full entry keeps the English readable
+        // instead of leaving the tail in Chinese.
+        add("还没有打开任何对话。已压缩的摘要都能在这里查看、编辑或放入其他对话。",
+                "No conversation is open yet. Stored summaries can still be reviewed, edited, or attached to another conversation.");
+        add("当前对话不足两条，暂时无需压缩。已保存的摘要仍可查看和放入其他对话。",
+                "This conversation has fewer than two messages, so there is nothing to compact yet. Stored summaries can still be reviewed and attached to another conversation.");
+        add("压缩失败：读不到宿主数据库或无法新建对话",
+                "Compaction failed: the host database could not be read or a new conversation could not be started.");
+        add("还没有压缩记录。在聊天页按「压缩」按钮，或在本页下方手动压缩当前对话。",
+                "No compaction records yet. Use the compact button on the chat page, or compact the current conversation below.");
+        add("已超过建议压缩线", "Past the suggested compaction line");
+        add("摘要将在新对话的第一条消息里注入，共 ",
+                "Injected with the new conversation's first message, ");
+        add("已注入", "Injected");
+        add("待注入：下一条消息发出时", "Pending: sent with your next message");
+        add("未使用", "Unused");
+        add("编辑摘要", "Edit summary");
+        add("编辑", "Edit");
+        add("放入当前对话", "Attach to the current conversation");
+        add("保存后，这条摘要会在目标对话的下一条消息里按新的内容注入。",
+                "Once saved, this summary is injected as edited with the target conversation's next message.");
+        add("摘要不能为空，可以直接删除这条记录",
+                "The summary cannot be empty; delete this record instead.");
+        add("已保存", "Saved");
+        add("这条记录已经不在了", "That record is gone");
+        add("已压缩，已开启新对话", "Compacted; a new conversation was started");
+        add("已放入当前对话，发送下一条消息时注入",
+                "Attached; it is injected by your next message");
+        add("上下文压缩设置已保存", "Context compaction settings saved");
+        add("上下文压缩设置保存失败", "Could not save the context compaction settings");
+        add(" 轮", " turns");
+        add("请输入 ", "Enter ");
+        add("压缩 摘要 压缩记录 摘要记录 上下文 compact summary",
+                "compact summary records context fold");
+
         Collections.sort(FRAGMENTS, new Comparator<Entry>() {
             @Override public int compare(Entry left, Entry right) {
                 return right.zh.length() - left.zh.length();
