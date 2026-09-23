@@ -30,7 +30,7 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 
 ---
 
-## 当前版本 (v1.7.5)
+## 当前版本 (v1.8)
 
 - [源码构建说明](docs/BUILDING.md)
 - [完整英文更新日志 (Changelog)](CHANGELOG.md)
@@ -59,7 +59,7 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 - [源码构建说明](docs/BUILDING.md)
 - [提交可复现问题](https://github.com/lllucccian/Deekseep/issues)
 
-本仓库包含 1.7.5 Open 版的完整开源源码。除本地 API 及闭源保护组件外，各项主要功能均保持同步。
+本仓库包含 1.8 Open 版的完整开源源码。除本地 API 及闭源保护组件外，各项主要功能均保持同步。
 
 许可证：[GPL-3.0-only](LICENSE)。
 

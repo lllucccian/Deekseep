@@ -384,7 +384,7 @@ final class AgentDeviceBridge {
                     // workspace terminal indefinitely.
                     connection.setReadTimeout(30000);
                     connection.setInstanceFollowRedirects(true);
-                    connection.setRequestProperty("User-Agent", "Deekseep-Workspace/1.7.5");
+                    connection.setRequestProperty("User-Agent", "Deekseep-Workspace/1.8");
                     if (total > 0L) connection.setRequestProperty("Range", "bytes=" + total + "-");
                     int status = connection.getResponseCode();
                     if (total > 0L && status == HttpURLConnection.HTTP_OK) {

@@ -32,7 +32,7 @@ Thank you to everyone who supported this project with sincerity and kindness alo
 
 ---
 
-## Current Version (v1.7.5)
+## Current Version (v1.8)
 
 - [Build from source](docs/BUILDING.md)
 - [Full English Changelog](CHANGELOG.md)
@@ -63,7 +63,7 @@ Adapted for Mainland China DeepSeek **2.4.1** (versionCode 257), 2.3.6, and 2.3.
 
 > **About Downloads**: Pre-compiled Open edition Release APK (`Open.apk`), Debug APK (`Open-debug.apk`), SHA-256 checksums (`SHA256.txt`), and source archive are available under GitHub Releases. Closed edition is distributed only via the official Telegram group.
 
-This repository contains the complete source for the 1.7.5 Open edition. Except for the Local API and closed-source protection components, core module features remain aligned.
+This repository contains the complete source for the 1.8 Open edition. Except for the Local API and closed-source protection components, core module features remain aligned.
 
 Licensed under [GPL-3.0-only](LICENSE).
 

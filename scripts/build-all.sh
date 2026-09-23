@@ -44,23 +44,23 @@ if grep -q '^import io\.github\.libxposed' \
 fi
 "$APKSIGNER" verify "$ROOT/module-universal/ds-probe-universal.apk"
 cp "$ROOT/module-universal/ds-probe-universal.apk" \
-    "$DIST/deekseep-universal-v1.7.5.apk"
+    "$DIST/deekseep-universal-v1.8.apk"
 cp "$ROOT/module-universal/ds-probe-universal-google-play.apk" \
-    "$DIST/deekseep-google-play-universal-v1.7.5.apk"
+    "$DIST/deekseep-google-play-universal-v1.8.apk"
 
 if find "$DIST" -maxdepth 1 -type f \( -name '*test*' -o -name '*probe*' \) | grep -q .; then
-    echo "Refusing to publish retired test/diagnostic APKs in the 1.7.5 release" >&2
+    echo "Refusing to publish retired test/diagnostic APKs in the 1.8 release" >&2
     exit 1
 fi
 
 MANIFEST="$ROOT/module-universal/AndroidManifest.xml"
-if ! grep -q 'android:versionName="1.7.5"' "$MANIFEST"; then
-    echo "Release manifest is not version 1.7.5: $MANIFEST" >&2
+if ! grep -q 'android:versionName="1.8"' "$MANIFEST"; then
+    echo "Release manifest is not version 1.8: $MANIFEST" >&2
     exit 1
 fi
 
-UNIVERSAL_APK="$DIST/deekseep-universal-v1.7.5.apk"
-GOOGLE_PLAY_APK="$DIST/deekseep-google-play-universal-v1.7.5.apk"
+UNIVERSAL_APK="$DIST/deekseep-universal-v1.8.apk"
+GOOGLE_PLAY_APK="$DIST/deekseep-google-play-universal-v1.8.apk"
 
 for apk in "$UNIVERSAL_APK" "$GOOGLE_PLAY_APK"; do
     unzip -l "$apk" | grep -q 'assets/xposed_init'
