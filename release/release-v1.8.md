@@ -23,10 +23,13 @@ Xposed entry covering API 82–102.
 - **Manual fold, never automatic**: the chat page's `压缩对话` action folds the older
   turns of the conversation in front of you into a summary, persists that summary, and
   continues in a new conversation.
-- **Three shaping numbers** in module settings — `建议压缩线` (threshold, default 10000
-  characters), `保留最近轮数` (turns kept verbatim, default 6) and `摘要字数上限`
-  (summary cap, default 8000 characters). Nothing fires on its own: the threshold is
-  only the line the chat-page button reports the current conversation against.
+- **Three shaping numbers** in module settings — `建议压缩线` (threshold, default 30000
+  characters, range 1000–400000), `保留最近轮数` (turns kept verbatim, default 6, range
+  1–40) and `摘要字数上限` (summary cap, default 2000 characters, range 400–8000). Nothing
+  fires on its own: the threshold is only the line the chat-page button reports the
+  current conversation against.
+- **The chip is optional and movable**: `在聊天页显示压缩按钮` decides whether the
+  `压缩对话` chip appears in the chat page, and a dragged chip position is remembered.
 - **Scoped, one-shot delivery**: a stored summary rides the next genuine interactive
   send for that conversation exactly once. Heartbeat, Agent private transports, Local
   API calls and synthetic sends keep their own prompts untouched, because rewriting
