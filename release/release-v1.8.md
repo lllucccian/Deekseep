@@ -6,9 +6,14 @@ fixes on top of 1.7.5.
 
 ## Downloads
 
-- No prebuilt APK is carried in this repository. Build both channels with
-  `bash scripts/build-all.sh`; the script writes `dist/deekseep-universal-v1.8.apk`
-  and `dist/deekseep-google-play-universal-v1.8.apk` plus `SHA256SUMS.txt`.
+- No prebuilt APK is carried in this repository. `bash scripts/build-all.sh` builds both
+  channels, leaving `module-universal/ds-probe-universal.apk` and
+  `module-universal/ds-probe-universal-google-play.apk`, then runs the feature-parity
+  check and three regression suites as release gates; only when those pass does it copy
+  the two APKs to `dist/deekseep-universal-v1.8.apk` and
+  `dist/deekseep-google-play-universal-v1.8.apk` and write `SHA256SUMS.txt`. The
+  `module-universal/` products exist before the gates run, so they remain available when
+  a gate stops the script.
 - See [docs/BUILDING.md](../docs/BUILDING.md) for requirements (JDK 17, Bash, Android
   SDK Platform 35+, Build Tools `aapt2`/`d8`/`zipalign`/`apksigner`).
 
