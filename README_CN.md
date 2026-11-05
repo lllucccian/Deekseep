@@ -7,7 +7,7 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 
 > **QQ 交流群：1106465300** — 欢迎进群反馈问题、交流使用心得！
 >
-> **Telegram 交流群：** [@Deekseepapp](https://t.me/Deekseepapp)
+> **Telegram 交流群：** [加入链接](https://t.me/+umw24KbNl3g4NzVl)
 
 ---
 
@@ -24,7 +24,7 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 
 **因此，我做出以下决定：**
 1. **本项目开源版即日起无限期停更**。后续我也**不打算再更新开源版**。
-2. **闭源版不再在 GitHub 仓库提供或更新**。因近期出现了大量滥用情况，如需获取闭源版本，请前往官方 **Telegram 交流群**（[@Deekseepapp](https://t.me/Deekseepapp)），切勿在 GitHub 提出索取要求或在第三方倒卖渠道购买。
+2. **闭源版不再在 GitHub 仓库提供或更新**。因近期出现了大量滥用情况，如需获取闭源版本，请前往官方 **Telegram 交流群**（[加入链接](https://t.me/+umw24KbNl3g4NzVl)），切勿在 GitHub 提出索取要求或在第三方倒卖渠道购买。
 
 感谢所有曾经给予鼓励、陪伴和真心支持本项目的每一位朋友。江湖路远，各位珍重。
 
@@ -69,4 +69,4 @@ DeepSeek 进程中，提供可选的模块设置入口和兼容层。本项目�
 
 **用户交流：** QQ 群 1106465300
 
-**Telegram：** [@Deekseepapp](https://t.me/Deekseepapp)
+**Telegram：** [加入链接](https://t.me/+umw24KbNl3g4NzVl)

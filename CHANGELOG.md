@@ -4,7 +4,7 @@
 
 ### Critical Announcement & Distribution Changes
 - **Indefinite Suspension of Updates**: Due to severe abuse, unauthorized code reselling, and egregious GPL license violations by copycat projects, all public repository updates are temporarily suspended indefinitely.
-- **Closed Edition Exclusivity**: The Closed edition is no longer provided, updated, or distributed through GitHub releases or repository commits. Users can join the official Telegram group ([@Deekseepapp](https://t.me/Deekseepapp)) to obtain Closed edition builds.
+- **Closed Edition Exclusivity**: The Closed edition is no longer provided, updated, or distributed through GitHub releases or repository commits. Users can join the official Telegram group ([Join link](https://t.me/+umw24KbNl3g4NzVl)) to obtain Closed edition builds.
 
 ---
 

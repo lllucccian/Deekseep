@@ -50,7 +50,7 @@ public final class DeekseepLetter {
         + "--------------------------------------------------------------------------------\n\n"
         + "- 开源仓库：https://github.com/lllucccian/Deekseep\n"
         + "- 开发者 QQ：1106465300\n"
-        + "- Telegram 交流群：https://t.me/Deekseepapp\n\n"
+        + "- Telegram 交流群：https://t.me/+umw24KbNl3g4NzVl\n\n"
         + "感谢所有尊重技术、尊重协议、心怀善意的同行者。\n\n"
         + "—— 作者：@lllucccian\n"
         + "2026年9月\n";

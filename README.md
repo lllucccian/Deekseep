@@ -9,7 +9,7 @@ DeepSeek.
 
 > **QQ Group: 1106465300** — Feedback and discussion welcome!
 >
-> **Telegram Group:** [@Deekseepapp](https://t.me/Deekseepapp)
+> **Telegram Group:** [Join link](https://t.me/+umw24KbNl3g4NzVl)
 
 ---
 
@@ -26,7 +26,7 @@ A developer's genuine passion and dedication should not become fuel for opportun
 
 **Effective Immediately:**
 1. **Public open-source repository updates are suspended indefinitely**, with no plans for future open-source releases.
-2. **The Closed edition will NO LONGER be updated or distributed via GitHub**. Due to rampant abuse, legitimate users must join the official **Telegram Community** ([@Deekseepapp](https://t.me/Deekseepapp)) to obtain Closed builds. Please do not request releases here.
+2. **The Closed edition will NO LONGER be updated or distributed via GitHub**. Due to rampant abuse, legitimate users must join the official **Telegram Community** ([Join link](https://t.me/+umw24KbNl3g4NzVl)) to obtain Closed builds. Please do not request releases here.
 
 Thank you to everyone who supported this project with sincerity and kindness along the way.
 
@@ -73,4 +73,4 @@ Licensed under [GPL-3.0-only](LICENSE).
 
 **User discussion:** QQ Group 1106465300
 
-**Telegram:** [@Deekseepapp](https://t.me/Deekseepapp)
+**Telegram:** [Join link](https://t.me/+umw24KbNl3g4NzVl)

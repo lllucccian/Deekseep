@@ -51,7 +51,7 @@ public final class DeekseepUi {
     private static final int CATEGORY_CLOUD = 6;
     private static final String REPOSITORY = "https://github.com/lllucccian/Deekseep";
     private static final String QQ_GROUP_URL = "https://qun.qq.com/universal-share/share?ac=1&authKey=FbzWCRfmPumvnJwdOWMefz5c5SQbWWzKD2Pe90Vz6K923ic8eQA9GX3EWc453AV1&busi_data=eyJncm91cENvZGUiOiIxMTA2NDY1MzAwIiwidG9rZW4iOiJTU1BPNGgwTXN4VFBra0ozZkpCMVo5RGtEWWtIS2hOVktjcis2dTI4NU9EZ2ZidkN2cTI5QUJSTWxiNktYK01OIiwidWluIjoiMzY5MTE4NjM1MyJ9&data=Cc4E1sQAT4lvdZkfiRyQjjj8f4YzEq2YqvcfeSbXP_-V9G-G8pQyBNh9D5GUeI7CEH9I6op7AAvZn78Ca-j6gw&svctype=4&tempid=h5_group_info";
-    private static final String TELEGRAM_GROUP_URL = "https://t.me/Deekseepapp";
+    private static final String TELEGRAM_GROUP_URL = "https://t.me/+umw24KbNl3g4NzVl";
 
     private static final class FeatureSearchEntry {
         final String title;
@@ -7119,7 +7119,7 @@ public final class DeekseepUi {
             + "四、项目仓库与联系方式：\n"
             + "- 开源仓库：https://github.com/lllucccian/Deekseep\n"
             + "- 开发者 QQ：1106465300\n"
-            + "- Telegram 交流群：https://t.me/Deekseepapp\n\n"
+            + "- Telegram 交流群：https://t.me/+umw24KbNl3g4NzVl\n\n"
             + "感谢一路走来所有理解我、支持我、真正尊重开源协议与原创劳动的每一位朋友。能与你们在代码的世界里相遇，是这段旅程中最珍贵的部分。\n\n"
             + "山高水长，江湖路远，后会有期。\n\n"
             + "—— 开发者 @lllucccian";

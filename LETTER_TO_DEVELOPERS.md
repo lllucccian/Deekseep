@@ -50,7 +50,7 @@ Deekseep 是基于 **GNU General Public License v3.0 (GPL-3.0)** 协议开源的
 
 - 开源仓库：https://github.com/lllucccian/Deekseep
 - 开发者 QQ：1106465300
-- Telegram 交流群：https://t.me/Deekseepapp
+- Telegram 交流群：https://t.me/+umw24KbNl3g4NzVl
 
 ---
 

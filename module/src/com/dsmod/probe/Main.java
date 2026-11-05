@@ -1743,7 +1743,7 @@ public class Main extends MainReflectionSupport implements IXposedHookLoadPackag
                                 + "- 开源仓库：https://github.com/lllucccian/Deekseep\n"
                                 + "- 作者：@lllucccian\n"
                                 + "- QQ：1106465300\n"
-                                + "- Telegram：https://t.me/Deekseepapp\n\n"
+                                + "- Telegram：https://t.me/+umw24KbNl3g4NzVl\n\n"
                                 + "本底包仅供学习交流，严禁倒卖。");
                         builder.setPositiveButton("我知道了", new android.content.DialogInterface.OnClickListener() {
                             @Override
